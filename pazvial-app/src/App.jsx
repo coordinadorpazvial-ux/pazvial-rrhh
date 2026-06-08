@@ -969,34 +969,52 @@ export default function App() {
   const [anticMotivo, setAnticMotivo] = useState("");
   const [anticMsg,    setAnticMsg]    = useState({tipo:"",txt:""});
 
-  // ── Firebase: cargar datos al iniciar ────────────────
+  // ── Firebase: cargar datos al iniciar y escuchar cambios en tiempo real ──
+  const firebaseInicializado = useRef(false);
+
   useEffect(() => {
     const [col, docId] = DB_DOC.split("/");
     const unsub = onSnapshot(doc(db, col, docId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        if (data.trabajadores)   setTrabajadores(data.trabajadores);
-        if (data.registros)      setRegistros(data.registros);
-        if (data.compensatorios) setComps(data.compensatorios);
-        if (data.solicitudes)    setSolicitudes(data.solicitudes);
-        if (data.notificaciones) setNotifs(data.notificaciones);
-        if (data.liquidaciones)  setLiquidaciones(data.liquidaciones);
-        if (data.anticipos)      setAnticipos(data.anticipos);
+        // Solo actualizar si los datos vienen de otro dispositivo
+        // (verificar que haya datos reales antes de cargar)
+        if (data.trabajadores && data.trabajadores.length > 0) {
+          setTrabajadores(data.trabajadores);
+        }
+        if (data.registros)      setRegistros(data.registros || []);
+        if (data.compensatorios) setComps(data.compensatorios || []);
+        if (data.solicitudes)    setSolicitudes(data.solicitudes || []);
+        if (data.notificaciones) setNotifs(data.notificaciones || []);
+        if (data.liquidaciones)  setLiquidaciones(data.liquidaciones || []);
+        if (data.anticipos)      setAnticipos(data.anticipos || []);
       }
+      // Marcar que Firebase ya cargó — ahora sí podemos guardar cambios
+      firebaseInicializado.current = true;
     });
     return () => unsub();
   }, []);
 
-  // ── Firebase: guardar cuando cambian los datos ────────
+  // ── Firebase: guardar SOLO cuando el usuario hace cambios ────────────
+  // (no guardar durante la carga inicial)
+  const primeraVez = useRef(true);
   useEffect(() => {
+    // Ignorar el primer render (carga inicial desde Firebase)
+    if (primeraVez.current) {
+      primeraVez.current = false;
+      return;
+    }
+    // Solo guardar si Firebase ya terminó de cargar
+    if (!firebaseInicializado.current) return;
+
     const timeout = setTimeout(() => {
       guardarEnFirebase({
-        trabajadores, registros, compensatorios,
-        solicitudes, notificaciones: notificaciones,
-        liquidaciones, anticipos,
+        trabajadores, registros,
+        compensatorios, solicitudes,
+        notificaciones, liquidaciones, anticipos,
         ultimaActualizacion: new Date().toISOString(),
       });
-    }, 1500); // debounce 1.5s para no saturar
+    }, 2000); // esperar 2s antes de guardar (debounce)
     return () => clearTimeout(timeout);
   }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos]);
 
