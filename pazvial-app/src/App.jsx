@@ -1612,14 +1612,71 @@ export default function App() {
       try {
         const data = JSON.parse(ev.target.result);
         if (!data.trabajadores || !data.registros) throw new Error("Formato inválido");
-        setTrabajadores(data.trabajadores);
-        setRegistros(data.registros);
-        setComps(data.compensatorios || []);
-        setSolicitudes(data.solicitudes || []);
-        setNotifs(data.notificaciones || []);
-        setLiquidaciones(data.liquidaciones || []);
-        setAnticipos(data.anticipos || []);
-        setImportMsg({ tipo:"ok", txt:"✅ Datos importados correctamente desde el backup." });
+
+        // ── Fusión inteligente: no reemplaza, combina sin duplicar ──
+
+        // TRABAJADORES: fusionar por RUT
+        setTrabajadores(prev => {
+          const resultado = [...prev];
+          (data.trabajadores || []).forEach(tImport => {
+            const existeIdx = resultado.findIndex(t =>
+              t.rut.replace(/[^0-9kK]/g,"").toLowerCase() ===
+              tImport.rut.replace(/[^0-9kK]/g,"").toLowerCase()
+            );
+            if (existeIdx >= 0) {
+              // Actualizar datos pero conservar el ID local
+              resultado[existeIdx] = { ...tImport, id: resultado[existeIdx].id };
+            } else {
+              // Agregar nuevo trabajador
+              resultado.push(tImport);
+            }
+          });
+          return resultado;
+        });
+
+        // REGISTROS: fusionar por ID — no duplicar
+        setRegistros(prev => {
+          const idsExistentes = new Set(prev.map(r => String(r.id)));
+          const nuevos = (data.registros || []).filter(r => !idsExistentes.has(String(r.id)));
+          return [...prev, ...nuevos];
+        });
+
+        // COMPENSATORIOS: fusionar por ID
+        setComps(prev => {
+          const idsExistentes = new Set(prev.map(c => String(c.id)));
+          const nuevos = (data.compensatorios || []).filter(c => !idsExistentes.has(String(c.id)));
+          return [...prev, ...nuevos];
+        });
+
+        // SOLICITUDES: fusionar por ID
+        setSolicitudes(prev => {
+          const idsExistentes = new Set(prev.map(s => String(s.id)));
+          const nuevos = (data.solicitudes || []).filter(s => !idsExistentes.has(String(s.id)));
+          return [...prev, ...nuevos];
+        });
+
+        // NOTIFICACIONES: fusionar por ID
+        setNotifs(prev => {
+          const idsExistentes = new Set(prev.map(n => String(n.id)));
+          const nuevos = (data.notificaciones || []).filter(n => !idsExistentes.has(String(n.id)));
+          return [...prev, ...nuevos];
+        });
+
+        // LIQUIDACIONES: fusionar por ID
+        setLiquidaciones(prev => {
+          const idsExistentes = new Set(prev.map(l => String(l.id)));
+          const nuevos = (data.liquidaciones || []).filter(l => !idsExistentes.has(String(l.id)));
+          return [...prev, ...nuevos];
+        });
+
+        // ANTICIPOS: fusionar por ID
+        setAnticipos(prev => {
+          const idsExistentes = new Set(prev.map(a => String(a.id)));
+          const nuevos = (data.anticipos || []).filter(a => !idsExistentes.has(String(a.id)));
+          return [...prev, ...nuevos];
+        });
+
+        setImportMsg({ tipo:"ok", txt:"✅ Datos importados y fusionados correctamente. No se duplicó ningún registro." });
       } catch {
         setImportMsg({ tipo:"err", txt:"❌ Archivo inválido. Verifica que sea un backup de Gestión de Personas Paz Vial SpA." });
       }
@@ -3511,9 +3568,8 @@ export default function App() {
                 <p style={{ color:"#aac4ff", fontSize:13, lineHeight:1.6 }}>
                   Restaura el sistema desde un archivo de backup previamente exportado.
                 </p>
-                <div style={{ background:"rgba(192,57,43,0.15)", border:"1px solid rgba(192,57,43,0.4)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#ffaaaa" }}>
-                  ⚠ <strong>Atención:</strong> Al importar, los datos actuales serán reemplazados completamente por los del backup. Esta acción no se puede deshacer.
-                </div>
+                <div style={{ background:"rgba(39,174,96,0.15)", border:"1px solid rgba(39,174,96,0.4)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#aaffcc" }}>
+                  ✅ <strong>Importación inteligente:</strong> Los datos del backup se fusionan con los datos actuales. No se duplican registros existentes. Si un trabajador ya existe (mismo RUT), sus datos se actualizan con los del backup.</div>
                 <input ref={importRef} type="file" accept=".json" onChange={importarDatos} style={{ display:"none" }} />
                 <button onClick={()=>importRef.current?.click()} style={{ ...S.btn, width:"100%", fontSize:14, padding:"13px 0", background:"#2980b9", color:"#fff" }}>
                   ⬆ Seleccionar archivo de Backup
