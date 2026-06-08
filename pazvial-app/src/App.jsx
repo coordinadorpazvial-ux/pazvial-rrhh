@@ -61,8 +61,14 @@ function autoFmtRut(raw) {
 }
 
 // Handler para inputs de RUT: filtra caracteres y formatea en tiempo real
+// Excepción: permite la palabra "Pruebas" para el perfil de prueba
 function handleRutInput(value, setter) {
-  // Solo permitir números y K
+  // Si está escribiendo "Pruebas" (perfil de prueba), permitirlo tal cual
+  if ("Pruebas".toLowerCase().startsWith(value.toLowerCase()) || value.toLowerCase() === "pruebas") {
+    setter(value);
+    return;
+  }
+  // Solo permitir números y K para RUTs normales
   const clean = value.replace(/[^0-9kK]/g,"").toUpperCase();
   setter(autoFmtRut(clean));
 }
