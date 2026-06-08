@@ -1,4 +1,30 @@
 import { useState, useEffect, useRef } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "firebase/firestore";
+
+// ── Firebase Config ───────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDiCG0Q1ODsAIRtxuTm0aQFamHYhmC7D9Y",
+  authDomain: "pazvial-rrhh.firebaseapp.com",
+  projectId: "pazvial-rrhh",
+  storageBucket: "pazvial-rrhh.firebasestorage.app",
+  messagingSenderId: "963899279162",
+  appId: "1:963899279162:web:f88802ede80baec38c3203"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+
+// ── Helpers Firebase ──────────────────────────────────────────────────────
+const DB_DOC = "pazvial/datos";
+
+async function guardarEnFirebase(datos) {
+  try {
+    const [col, docId] = DB_DOC.split("/");
+    await setDoc(doc(db, col, docId), datos);
+  } catch(e) {
+    console.error("Error guardando en Firebase:", e);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // CONSTANTES
@@ -942,6 +968,37 @@ export default function App() {
   const [anticMonto,  setAnticMonto]  = useState("");
   const [anticMotivo, setAnticMotivo] = useState("");
   const [anticMsg,    setAnticMsg]    = useState({tipo:"",txt:""});
+
+  // ── Firebase: cargar datos al iniciar ────────────────
+  useEffect(() => {
+    const [col, docId] = DB_DOC.split("/");
+    const unsub = onSnapshot(doc(db, col, docId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.trabajadores)   setTrabajadores(data.trabajadores);
+        if (data.registros)      setRegistros(data.registros);
+        if (data.compensatorios) setComps(data.compensatorios);
+        if (data.solicitudes)    setSolicitudes(data.solicitudes);
+        if (data.notificaciones) setNotifs(data.notificaciones);
+        if (data.liquidaciones)  setLiquidaciones(data.liquidaciones);
+        if (data.anticipos)      setAnticipos(data.anticipos);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // ── Firebase: guardar cuando cambian los datos ────────
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      guardarEnFirebase({
+        trabajadores, registros, compensatorios,
+        solicitudes, notificaciones: notificaciones,
+        liquidaciones, anticipos,
+        ultimaActualizacion: new Date().toISOString(),
+      });
+    }, 1500); // debounce 1.5s para no saturar
+    return () => clearTimeout(timeout);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos]);
 
   // ── Compensatorios: auto-generar ───────────────────────
   useEffect(() => {
