@@ -969,43 +969,46 @@ export default function App() {
   const [anticMotivo, setAnticMotivo] = useState("");
   const [anticMsg,    setAnticMsg]    = useState({tipo:"",txt:""});
 
-  // ── Firebase: cargar datos al iniciar y escuchar cambios en tiempo real ──
-  const firebaseInicializado = useRef(false);
+  // ── Firebase: estado de carga ─────────────────────────
+  const firebaseListo = useRef(false);
+  const cargandoDesdeFirebase = useRef(false);
 
+  // Cargar datos UNA sola vez al iniciar
   useEffect(() => {
     const [col, docId] = DB_DOC.split("/");
-    const unsub = onSnapshot(doc(db, col, docId), (snap) => {
+    cargandoDesdeFirebase.current = true;
+    getDoc(doc(db, col, docId)).then((snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        // Solo actualizar si los datos vienen de otro dispositivo
-        // (verificar que haya datos reales antes de cargar)
-        if (data.trabajadores && data.trabajadores.length > 0) {
-          setTrabajadores(data.trabajadores);
+        // Solo cargar si Firebase tiene datos reales (más trabajadores que los de prueba)
+        const tFirebase = data.trabajadores || [];
+        const tieneReales = tFirebase.some(t => !t.esDePrueba || t.id === 999);
+        if (tieneReales) {
+          setTrabajadores(tFirebase);
+          setRegistros(data.registros || []);
+          setComps(data.compensatorios || []);
+          setSolicitudes(data.solicitudes || []);
+          setNotifs(data.notificaciones || []);
+          setLiquidaciones(data.liquidaciones || []);
+          setAnticipos(data.anticipos || []);
         }
-        if (data.registros)      setRegistros(data.registros || []);
-        if (data.compensatorios) setComps(data.compensatorios || []);
-        if (data.solicitudes)    setSolicitudes(data.solicitudes || []);
-        if (data.notificaciones) setNotifs(data.notificaciones || []);
-        if (data.liquidaciones)  setLiquidaciones(data.liquidaciones || []);
-        if (data.anticipos)      setAnticipos(data.anticipos || []);
       }
-      // Marcar que Firebase ya cargó — ahora sí podemos guardar cambios
-      firebaseInicializado.current = true;
+    }).finally(() => {
+      cargandoDesdeFirebase.current = false;
+      firebaseListo.current = true;
     });
-    return () => unsub();
   }, []);
 
-  // ── Firebase: guardar SOLO cuando el usuario hace cambios ────────────
-  // (no guardar durante la carga inicial)
-  const primeraVez = useRef(true);
+  // ── Firebase: guardar cuando cambian los datos ────────
+  const renderCount = useRef(0);
   useEffect(() => {
-    // Ignorar el primer render (carga inicial desde Firebase)
-    if (primeraVez.current) {
-      primeraVez.current = false;
-      return;
-    }
-    // Solo guardar si Firebase ya terminó de cargar
-    if (!firebaseInicializado.current) return;
+    renderCount.current += 1;
+    // Ignorar los primeros renders (carga inicial)
+    if (renderCount.current <= 2) return;
+    // No guardar si estamos cargando desde Firebase
+    if (cargandoDesdeFirebase.current) return;
+    // No guardar si Firebase no está listo
+    if (!firebaseListo.current) return;
 
     const timeout = setTimeout(() => {
       guardarEnFirebase({
@@ -1014,7 +1017,7 @@ export default function App() {
         notificaciones, liquidaciones, anticipos,
         ultimaActualizacion: new Date().toISOString(),
       });
-    }, 2000); // esperar 2s antes de guardar (debounce)
+    }, 2000);
     return () => clearTimeout(timeout);
   }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos]);
 
