@@ -46,6 +46,27 @@ function fmtRut(r) {
   return c.slice(0,-1).replace(/\B(?=(\d{3})+(?!\d))/g,".") + "-" + c.slice(-1).toUpperCase();
 }
 
+// Formatea el RUT mientras el usuario escribe (solo acepta números y K)
+function autoFmtRut(raw) {
+  // Extraer solo dígitos y K/k
+  const clean = raw.replace(/[^0-9kK]/g,"").toUpperCase();
+  if (clean.length === 0) return "";
+  if (clean.length === 1) return clean;
+  // Separar cuerpo y dígito verificador
+  const body = clean.slice(0, -1);
+  const dv   = clean.slice(-1);
+  // Agregar puntos al cuerpo
+  const bodyFmt = body.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  return `${bodyFmt}-${dv}`;
+}
+
+// Handler para inputs de RUT: filtra caracteres y formatea en tiempo real
+function handleRutInput(value, setter) {
+  // Solo permitir números y K
+  const clean = value.replace(/[^0-9kK]/g,"").toUpperCase();
+  setter(autoFmtRut(clean));
+}
+
 function mesNombre(m) {
   return ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][m]||"";
 }
@@ -175,15 +196,17 @@ const fichaVacia = () => ({
   historialRemuneraciones:[], // [{id,desde,sueldo,colacion,movilizacion,gratificacion,motivo,registradoPor,registradoEn}]
 });
 
+const IDS_PRUEBA = new Set([1, 2, 3]); // IDs de trabajadores de ejemplo
+
 const T0 = [
-  { id:1, nombre:"Juan",   apellido:"Pérez",  apellidoM:"González", rut:"12.345.678-9", codigo:"PP01", activo:true, ficha:{ ...fichaVacia(), afp:"CAPITAL", prevision:"FONASA", sueldoPactado:"485100", colacion:44726, movilizacion:44726, gratificacion:false,
+  { id:1, nombre:"Juan",   apellido:"Pérez",  apellidoM:"González", rut:"12.345.678-9", codigo:"PP01", activo:true, esDePrueba:true, ficha:{ ...fichaVacia(), afp:"CAPITAL", prevision:"FONASA", sueldoPactado:"485100", colacion:44726, movilizacion:44726, gratificacion:false,
     historialRemuneraciones:[
       {id:1001,desde:"2025-01-01",sueldo:450000,colacion:40000,movilizacion:40000,gratificacion:false,motivo:"Sueldo inicial",registradoPor:"Administrador",registradoEn:"2025-01-01 08:00"},
       {id:1002,desde:"2026-01-01",sueldo:485100,colacion:44726,movilizacion:44726,gratificacion:false,motivo:"Ajuste anual",registradoPor:"Administrador",registradoEn:"2026-01-01 09:00"},
     ]
   } },
-  { id:2, nombre:"María",  apellido:"Pinto",  apellidoM:"Sánchez", rut:"13.456.789-0", codigo:"PP02", activo:true, ficha:{ ...fichaVacia(), afp:"HABITAT", prevision:"FONASA" } },
-  { id:3, nombre:"Carlos", apellido:"Rojas",  apellidoM:"Vega",    rut:"14.567.890-1", codigo:"PR01", activo:true, ficha:{ ...fichaVacia(), afp:"PROVIDA", prevision:"FONASA", sueldoPactado:"800000", colacion:87300, movilizacion:87300, gratificacion:true,
+  { id:2, nombre:"María",  apellido:"Pinto",  apellidoM:"Sánchez", rut:"13.456.789-0", codigo:"PP02", activo:true, esDePrueba:true, ficha:{ ...fichaVacia(), afp:"HABITAT", prevision:"FONASA" } },
+  { id:3, nombre:"Carlos", apellido:"Rojas",  apellidoM:"Vega",    rut:"14.567.890-1", codigo:"PR01", activo:true, esDePrueba:true, ficha:{ ...fichaVacia(), afp:"PROVIDA", prevision:"FONASA", sueldoPactado:"800000", colacion:87300, movilizacion:87300, gratificacion:true,
     historialRemuneraciones:[
       {id:1003,desde:"2024-03-01",sueldo:720000,colacion:80000,movilizacion:80000,gratificacion:true,motivo:"Sueldo inicial",registradoPor:"Administrador",registradoEn:"2024-03-01 08:00"},
       {id:1004,desde:"2025-06-01",sueldo:760000,colacion:85000,movilizacion:85000,gratificacion:true,motivo:"Promoción a supervisor",registradoPor:"Administrador",registradoEn:"2025-06-01 10:30"},
@@ -191,18 +214,79 @@ const T0 = [
     ]
   } },
   // Perfil de prueba
-  { id:999, nombre:"Administrador", apellido:"Pruebas", apellidoM:"", rut:"Pruebas", codigo:"Administrador", activo:true, ficha:fichaVacia() },
+  { id:999, nombre:"Administrador", apellido:"Pruebas", apellidoM:"", rut:"Pruebas", codigo:"Administrador", activo:true, esDePrueba:true, ficha:fichaVacia() },
 ];
 const R0 = [
-  { id:1, tId:1, fecha:"2026-06-02", entrada:"08:05", salida:"18:30", estado:"aprobado",  motivoRechazo:"" },
-  { id:2, tId:2, fecha:"2026-06-02", entrada:"08:00", salida:"14:00", estado:"pendiente", motivoRechazo:"" },
-  { id:3, tId:3, fecha:"2026-05-01", entrada:"09:00", salida:"17:00", estado:"aprobado",  motivoRechazo:"" },
-  { id:4, tId:1, fecha:"2026-06-01", entrada:"09:00", salida:"15:00", estado:"aprobado",  motivoRechazo:"" },
+  { id:1, tId:1, fecha:"2026-06-02", entrada:"08:05", salida:"18:30", estado:"aprobado",  motivoRechazo:"", esDePrueba:true },
+  { id:2, tId:2, fecha:"2026-06-02", entrada:"08:00", salida:"14:00", estado:"pendiente", motivoRechazo:"", esDePrueba:true },
+  { id:3, tId:3, fecha:"2026-05-01", entrada:"09:00", salida:"17:00", estado:"aprobado",  motivoRechazo:"", esDePrueba:true },
+  { id:4, tId:1, fecha:"2026-06-01", entrada:"09:00", salida:"15:00", estado:"aprobado",  motivoRechazo:"", esDePrueba:true },
 ];
 
 
 // ═══════════════════════════════════════════════════════════
 // COMPONENTE FICHA FORM — separado para evitar pérdida de foco
+// ═══════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════
+// SUB-COMPONENTES DE FICHA — definidos GLOBALMENTE
+// para que React no los re-monte en cada render
+// ═══════════════════════════════════════════════════════════
+const FichaLBL = ({children}) => (
+  <div style={{fontSize:10,color:"#FF6B00",fontWeight:"bold",letterSpacing:1.5,
+    textTransform:"uppercase",marginBottom:5}}>{children}</div>
+);
+
+const FichaSCard = ({children, style={}}) => (
+  <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
+    borderRadius:12,padding:"18px 20px",marginBottom:14,...style}}>
+    {children}
+  </div>
+);
+
+const FichaSecHdr = ({icono, titulo, color="#FF6B00"}) => (
+  <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",marginBottom:16,
+    background:"linear-gradient(90deg,rgba(255,107,0,0.18) 0%,transparent 100%)",
+    borderLeft:`3px solid ${color}`,borderRadius:"0 8px 8px 0"}}>
+    <span style={{fontSize:18}}>{icono}</span>
+    <span style={{color,fontWeight:"bold",fontSize:12,letterSpacing:2,textTransform:"uppercase"}}>{titulo}</span>
+  </div>
+);
+
+const FichaRow = ({children, cols="1fr 1fr"}) => (
+  <div style={{display:"grid",gridTemplateColumns:cols,gap:14,marginBottom:14}}>{children}</div>
+);
+
+// Estilos de input globales — no cambian entre renders
+const FI_EDIT = {
+  background:"rgba(255,255,255,0.1)",
+  border:"1px solid rgba(255,107,0,0.6)",
+  borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
+  fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box",
+  cursor:"text", caretColor:"#FF6B00",
+};
+const FI_READ = {
+  background:"rgba(0,0,0,0.25)",
+  border:"1px solid rgba(255,255,255,0.1)",
+  borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
+  fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box",
+  cursor:"default", caretColor:"#FF6B00",
+};
+const FS_EDIT = {
+  background:"rgba(255,255,255,0.1)",
+  border:"1px solid rgba(255,107,0,0.6)",
+  borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
+  fontFamily:"Georgia,serif", width:"100%", cursor:"pointer",
+};
+const FS_READ = {
+  background:"rgba(0,0,0,0.25)",
+  border:"1px solid rgba(255,255,255,0.1)",
+  borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
+  fontFamily:"Georgia,serif", width:"100%", cursor:"default",
+};
+
+// ═══════════════════════════════════════════════════════════
+// COMPONENTE FICHA FORM — con estado interno propio
 // ═══════════════════════════════════════════════════════════
 function FichaForm({
   fichaMode, fichaDraft, trabReal, fichaSelId,
@@ -211,76 +295,34 @@ function FichaForm({
   trabajadores, setTrabajadores,
   histNuevo, setHistNuevo, histMsg, setHistMsg,
   grabarNuevoTrabajador, grabarEdicionFicha, grabarNuevaRemuneracion,
-  generarCodigo, fmtRut, nowId, hoy, S,
+  generarCodigo, S,
 }) {
   const enEdicion = fichaMode === "nuevo" || fichaMode === "editar";
-  const val = (campo) => enEdicion ? (fichaDraft?.[campo] ?? "") : (trabReal?.ficha?.[campo] ?? "");
+
+  // Leer valor: del draft si edita, de la ficha real si ve
+  const val = (campo) => {
+    if (enEdicion) return fichaDraft?.[campo] ?? "";
+    if (campo === "nombre") return trabReal?.nombre ?? "";
+    if (campo === "apellido") return trabReal?.apellido ?? "";
+    if (campo === "apellidoM") return trabReal?.apellidoM ?? "";
+    if (campo === "rut") return trabReal?.rut ?? "";
+    return trabReal?.ficha?.[campo] ?? "";
+  };
+
   const setD = (campo, valor) => setFichaDraft(p => ({...p, [campo]: valor}));
 
-  const FI = {
-    background: enEdicion ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.25)",
-    border: enEdicion ? "1px solid rgba(255,107,0,0.6)" : "1px solid rgba(255,255,255,0.1)",
-    borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
-    fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box",
-    cursor: enEdicion ? "text" : "default",
-    caretColor:"#FF6B00",
+  const fi = enEdicion ? FI_EDIT : FI_READ;
+  const fs = enEdicion ? FS_EDIT : FS_READ;
+
+  const cancelar = () => {
+    setFichaMode("ver");
+    setFichaDraft(null);
+    setFichaGuardMsg({tipo:"",txt:""});
+    if (!fichaSelId) {
+      const p = trabajadores.filter(x => x.activo && x.id !== 999)[0];
+      if (p) setFichaSelId(p.id);
+    }
   };
-  const FS = {
-    background: enEdicion ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.25)",
-    border: enEdicion ? "1px solid rgba(255,107,0,0.6)" : "1px solid rgba(255,255,255,0.1)",
-    borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
-    fontFamily:"Georgia,serif", width:"100%", cursor: enEdicion ? "pointer" : "default",
-  };
-  const LBL = ({children}) => (
-    <div style={{fontSize:10,color:"#FF6B00",fontWeight:"bold",letterSpacing:1.5,
-      textTransform:"uppercase",marginBottom:5}}>{children}</div>
-  );
-  const SCard = ({children, style={}}) => (
-    <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
-      borderRadius:12,padding:"18px 20px",marginBottom:14,...style}}>
-      {children}
-    </div>
-  );
-  const SecHdr = ({icono, titulo, color="#FF6B00"}) => (
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",marginBottom:16,
-      background:`linear-gradient(90deg,rgba(255,107,0,0.18) 0%,transparent 100%)`,
-      borderLeft:`3px solid ${color}`,borderRadius:"0 8px 8px 0"}}>
-      <span style={{fontSize:18}}>{icono}</span>
-      <span style={{color,fontWeight:"bold",fontSize:12,letterSpacing:2,textTransform:"uppercase"}}>{titulo}</span>
-    </div>
-  );
-  const Row = ({children, cols="1fr 1fr"}) => (
-    <div style={{display:"grid",gridTemplateColumns:cols,gap:14,marginBottom:14}}>{children}</div>
-  );
-  const Inp = ({label, campo, placeholder, type="text", isNombre=false, isCampoDirecto=false, directoVal, directoOnChange}) => (
-    <div>
-      <LBL>{label}</LBL>
-      <input type={type} readOnly={!enEdicion}
-        style={FI}
-        value={isNombre
-          ? (enEdicion ? (fichaDraft?.[campo]||"") : (trabReal?.[campo]||""))
-          : isCampoDirecto ? directoVal
-          : val(campo)}
-        onChange={e => {
-          if (!enEdicion) return;
-          if (isNombre) setFichaDraft(p=>({...p,[campo]:e.target.value}));
-          else if (isCampoDirecto) directoOnChange(e.target.value);
-          else setD(campo, e.target.value);
-        }}
-        placeholder={enEdicion ? placeholder : ""}
-      />
-    </div>
-  );
-  const Sel = ({label, campo, opciones, span=false}) => (
-    <div style={span?{gridColumn:"1/-1"}:{}}>
-      <LBL>{label}</LBL>
-      <select disabled={!enEdicion} style={FS}
-        value={val(campo)} onChange={e=>enEdicion&&setD(campo,e.target.value)}>
-        <option value="">— Seleccionar —</option>
-        {opciones.map(o=><option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  );
 
   const btnGrabar = {
     background:"linear-gradient(135deg,#27ae60,#1e8449)",color:"#fff",
@@ -288,151 +330,271 @@ function FichaForm({
     fontWeight:"bold",fontSize:14,fontFamily:"Georgia,serif",
     boxShadow:"0 3px 12px rgba(39,174,96,0.4)",
   };
-  const btnCancelar = {
+  const btnCancel = {
     background:"rgba(255,255,255,0.07)",color:"#aac4ff",
     border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,
     padding:"12px 18px",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",
   };
 
-  const cancelar = () => {
-    setFichaMode("ver"); setFichaDraft(null); setFichaGuardMsg({tipo:"",txt:""});
-    if(!fichaSelId){ const p=trabajadores.filter(x=>x.activo&&x.id!==999)[0]; if(p) setFichaSelId(p.id); }
-  };
-
-  if(fichaMode==="ver" && !trabReal) return (
+  if (fichaMode === "ver" && !trabReal) return (
     <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
       borderRadius:14,padding:60,textAlign:"center",color:"#aac4ff"}}>
       <div style={{fontSize:48,marginBottom:16}}>🪪</div>
       <div style={{fontSize:16,marginBottom:8}}>Selecciona un trabajador</div>
-      <div style={{fontSize:13}}>o presiona <strong style={{color:"#FF6B00"}}>➕ Nueva Ficha</strong> para crear un nuevo registro</div>
+      <div style={{fontSize:13}}>o presiona <strong style={{color:"#FF6B00"}}>➕ Nueva Ficha</strong></div>
     </div>
   );
 
-  if(!enEdicion && !trabReal) return null;
+  if (!enEdicion && !trabReal) return null;
 
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
 
       {/* ── Columna Izquierda ── */}
       <div>
-        <SCard>
-          <SecHdr icono="👤" titulo="Identificación Personal"/>
-          <Row cols="1fr">
-            <Inp label="Nombres" campo="nombre" placeholder="Juan Carlos" isNombre/>
-          </Row>
-          <Row cols="1fr 1fr">
-            <Inp label="Apellido Paterno" campo="apellido" placeholder="Pérez" isNombre/>
-            <Inp label="Apellido Materno" campo="apellidoM" placeholder="González" isNombre/>
-          </Row>
-          <Row cols="1fr 1fr">
-            <Inp label="RUT" campo="rut" placeholder="12.345.678-9" isNombre/>
-            <Inp label="Cargo / Función" campo="cargo" placeholder="Ej: Operador Vial"/>
-          </Row>
-          <Row cols="1fr">
-            <Inp label="Dirección" campo="direccion" placeholder="Calle, número, ciudad"/>
-          </Row>
-          <Row cols="1fr 1fr">
-            <Inp label="Teléfono" campo="telefono" placeholder="+56 9 xxxx xxxx"/>
-            <Inp label="Correo Electrónico" campo="correo" placeholder="correo@dominio.cl" type="email"/>
-          </Row>
+        <FichaSCard>
+          <FichaSecHdr icono="👤" titulo="Identificación Personal"/>
+
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Nombres</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("nombre")}
+                onChange={e => enEdicion && setD("nombre", e.target.value)}
+                placeholder={enEdicion ? "Juan Carlos" : ""}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Apellido Paterno</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("apellido")}
+                onChange={e => enEdicion && setD("apellido", e.target.value)}
+                placeholder={enEdicion ? "Pérez" : ""}/>
+            </div>
+            <div>
+              <FichaLBL>Apellido Materno</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("apellidoM")}
+                onChange={e => enEdicion && setD("apellidoM", e.target.value)}
+                placeholder={enEdicion ? "González" : ""}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>RUT</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("rut")}
+                onChange={e => {
+                  if (!enEdicion) return;
+                  const clean = e.target.value.replace(/[^0-9kK]/g,"").toUpperCase();
+                  setD("rut", autoFmtRut(clean));
+                }}
+                placeholder={enEdicion ? "Escribe solo números y K" : ""}
+                maxLength={12}/>
+            </div>
+            <div>
+              <FichaLBL>Cargo / Función</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("cargo")}
+                onChange={e => enEdicion && setD("cargo", e.target.value)}
+                placeholder={enEdicion ? "Ej: Operador Vial" : ""}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Dirección</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("direccion")}
+                onChange={e => enEdicion && setD("direccion", e.target.value)}
+                placeholder={enEdicion ? "Calle, número, ciudad" : ""}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Teléfono</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("telefono")}
+                onChange={e => enEdicion && setD("telefono", e.target.value)}
+                placeholder={enEdicion ? "+56 9 xxxx xxxx" : ""}/>
+            </div>
+            <div>
+              <FichaLBL>Correo Electrónico</FichaLBL>
+              <input type="email" readOnly={!enEdicion} style={fi}
+                value={val("correo")}
+                onChange={e => enEdicion && setD("correo", e.target.value)}
+                placeholder={enEdicion ? "correo@dominio.cl" : ""}/>
+            </div>
+          </FichaRow>
+
           {enEdicion && (
-            <div style={{display:"flex",gap:10,marginTop:6}}>
-              <button onClick={fichaMode==="nuevo"?grabarNuevoTrabajador:grabarEdicionFicha} style={btnGrabar}>💾 Grabar</button>
-              <button onClick={cancelar} style={btnCancelar}>✗ Cancelar</button>
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button onClick={fichaMode==="nuevo" ? grabarNuevoTrabajador : grabarEdicionFicha} style={btnGrabar}>💾 Grabar</button>
+              <button onClick={cancelar} style={btnCancel}>✗ Cancelar</button>
             </div>
           )}
-        </SCard>
+        </FichaSCard>
 
-        <SCard>
-          <SecHdr icono="🚨" titulo="Contacto de Emergencia" color="#e74c3c"/>
-          <Row cols="1fr">
-            <Inp label="Nombre del Contacto" campo="contactoEmergencia" placeholder="Nombre completo"/>
-          </Row>
-          <Row cols="1fr">
-            <Inp label="Teléfono de Emergencia" campo="telefonoEmergencia" placeholder="+56 9 xxxx xxxx"/>
-          </Row>
-        </SCard>
+        <FichaSCard>
+          <FichaSecHdr icono="🚨" titulo="Contacto de Emergencia" color="#e74c3c"/>
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Nombre del Contacto</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("contactoEmergencia")}
+                onChange={e => enEdicion && setD("contactoEmergencia", e.target.value)}
+                placeholder={enEdicion ? "Nombre completo" : ""}/>
+            </div>
+          </FichaRow>
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Teléfono de Emergencia</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
+                value={val("telefonoEmergencia")}
+                onChange={e => enEdicion && setD("telefonoEmergencia", e.target.value)}
+                placeholder={enEdicion ? "+56 9 xxxx xxxx" : ""}/>
+            </div>
+          </FichaRow>
+        </FichaSCard>
       </div>
 
       {/* ── Columna Derecha ── */}
       <div>
-        <SCard>
-          <SecHdr icono="🏥" titulo="Datos Previsionales" color="#3498db"/>
-          <Row cols="1fr 1fr">
-            <Sel label="Previsión de Salud" campo="prevision"
-              opciones={["FONASA","ISAPRE Banmédica","ISAPRE Cruz Blanca","ISAPRE Consalud","ISAPRE Colmena","ISAPRE Vida Tres","ISAPRE Esencial","Otra ISAPRE"]}/>
-            <Sel label="AFP" campo="afp"
-              opciones={["CAPITAL","PROVIDA","HABITAT","CUPRUM","PLANVITAL","UNO","MODELO"]}/>
-          </Row>
-        </SCard>
-
-        <SCard>
-          <SecHdr icono="💼" titulo="Datos Contractuales" color="#27ae60"/>
-          <Row cols="1fr">
+        <FichaSCard>
+          <FichaSecHdr icono="🏥" titulo="Datos Previsionales" color="#3498db"/>
+          <FichaRow cols="1fr 1fr">
             <div>
-              <LBL>Sueldo Pactado (bruto mensual)</LBL>
-              <input readOnly={!enEdicion} style={FI}
+              <FichaLBL>Previsión de Salud</FichaLBL>
+              <select disabled={!enEdicion} style={fs}
+                value={val("prevision")}
+                onChange={e => enEdicion && setD("prevision", e.target.value)}>
+                <option value="">— Seleccionar —</option>
+                {["FONASA","ISAPRE Banmédica","ISAPRE Cruz Blanca","ISAPRE Consalud","ISAPRE Colmena","ISAPRE Vida Tres","ISAPRE Esencial","Otra ISAPRE"].map(o=>(
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <FichaLBL>AFP</FichaLBL>
+              <select disabled={!enEdicion} style={fs}
+                value={val("afp")}
+                onChange={e => enEdicion && setD("afp", e.target.value)}>
+                <option value="">— Seleccionar —</option>
+                {["CAPITAL","PROVIDA","HABITAT","CUPRUM","PLANVITAL","UNO","MODELO"].map(o=>(
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+          </FichaRow>
+        </FichaSCard>
+
+        <FichaSCard>
+          <FichaSecHdr icono="💼" titulo="Datos Contractuales" color="#27ae60"/>
+
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Sueldo Pactado (bruto mensual)</FichaLBL>
+              <input type="text" readOnly={!enEdicion} style={fi}
                 value={val("sueldoPactado")}
-                onChange={e=>enEdicion&&setD("sueldoPactado",e.target.value.replace(/\D/g,""))}
-                placeholder="Ej: 500000"/>
-              {val("sueldoPactado")&&(
+                onChange={e => enEdicion && setD("sueldoPactado", e.target.value.replace(/\D/g,""))}
+                placeholder={enEdicion ? "Ej: 500000" : ""}/>
+              {val("sueldoPactado") && (
                 <div style={{color:"#27ae60",fontSize:12,marginTop:4,fontWeight:"bold"}}>
                   {new Intl.NumberFormat("es-CL",{style:"currency",currency:"CLP"}).format(val("sueldoPactado"))}
                 </div>
               )}
             </div>
-          </Row>
-          <Row cols="1fr 1fr 1fr">
-            <Inp label="Colación ($)" campo="colacion" placeholder="0" type="number"/>
-            <Inp label="Movilización ($)" campo="movilizacion" placeholder="0" type="number"/>
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr 1fr">
             <div>
-              <LBL>Gratif. Legal</LBL>
+              <FichaLBL>Colación ($)</FichaLBL>
+              <input type="number" readOnly={!enEdicion} style={fi}
+                value={val("colacion")}
+                onChange={e => enEdicion && setD("colacion", e.target.value)}
+                placeholder="0"/>
+            </div>
+            <div>
+              <FichaLBL>Movilización ($)</FichaLBL>
+              <input type="number" readOnly={!enEdicion} style={fi}
+                value={val("movilizacion")}
+                onChange={e => enEdicion && setD("movilizacion", e.target.value)}
+                placeholder="0"/>
+            </div>
+            <div>
+              <FichaLBL>Gratif. Legal</FichaLBL>
               <div style={{display:"flex",alignItems:"center",gap:8,
                 background:enEdicion?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.25)",
                 border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,
                 padding:"9px 13px",height:41,boxSizing:"border-box"}}>
                 <input type="checkbox" disabled={!enEdicion}
-                  checked={enEdicion?!!fichaDraft?.gratificacion:!!trabReal?.ficha?.gratificacion}
-                  onChange={e=>enEdicion&&setD("gratificacion",e.target.checked)}
+                  checked={enEdicion ? !!fichaDraft?.gratificacion : !!trabReal?.ficha?.gratificacion}
+                  onChange={e => enEdicion && setD("gratificacion", e.target.checked)}
                   style={{width:15,height:15,accentColor:"#FF6B00",cursor:enEdicion?"pointer":"default"}}/>
                 <span style={{color:"#fff",fontSize:12}}>Mensual</span>
               </div>
             </div>
-          </Row>
-          <Row cols="1fr 1fr">
-            <Inp label="Fecha de Ingreso" campo="fechaIngreso" type="date" placeholder=""/>
-            <Inp label="Fecha de Salida" campo="fechaSalida" type="date" placeholder=""/>
-          </Row>
-          <Row cols="1fr">
-            <Sel label="Motivo de Salida" campo="motivoSalida" span
-              opciones={["Renuncia voluntaria","Desvinculación","Término de contrato","Jubilación","Fallecimiento","Otro"]}/>
-          </Row>
-          {val("fechaIngreso")&&(
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Fecha de Ingreso</FichaLBL>
+              <input type="date" readOnly={!enEdicion} style={fi}
+                value={val("fechaIngreso")}
+                onChange={e => enEdicion && setD("fechaIngreso", e.target.value)}/>
+            </div>
+            <div>
+              <FichaLBL>Fecha de Salida</FichaLBL>
+              <input type="date" readOnly={!enEdicion} style={fi}
+                value={val("fechaSalida")}
+                onChange={e => enEdicion && setD("fechaSalida", e.target.value)}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr">
+            <div>
+              <FichaLBL>Motivo de Salida</FichaLBL>
+              <select disabled={!enEdicion} style={fs}
+                value={val("motivoSalida")}
+                onChange={e => enEdicion && setD("motivoSalida", e.target.value)}>
+                <option value="">— Seleccionar —</option>
+                {["Renuncia voluntaria","Desvinculación","Término de contrato","Jubilación","Fallecimiento","Otro"].map(o=>(
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+            </div>
+          </FichaRow>
+
+          {val("fechaIngreso") && (
             <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid rgba(255,215,0,0.2)",
               borderRadius:8,padding:"10px 14px",fontSize:12,color:"#aac4ff"}}>
               ⏱ Antigüedad: <strong style={{color:"#FFD700"}}>{(()=>{
-                const ini=new Date(val("fechaIngreso"));
-                const fin=val("fechaSalida")?new Date(val("fechaSalida")):new Date();
-                const m=(fin.getFullYear()-ini.getFullYear())*12+(fin.getMonth()-ini.getMonth());
+                const ini = new Date(val("fechaIngreso"));
+                const fin = val("fechaSalida") ? new Date(val("fechaSalida")) : new Date();
+                const m = (fin.getFullYear()-ini.getFullYear())*12+(fin.getMonth()-ini.getMonth());
                 return `${Math.floor(m/12)} año(s) y ${m%12} mes(es)`;
               })()}</strong>
             </div>
           )}
-        </SCard>
+        </FichaSCard>
 
-        <SCard>
-          <SecHdr icono="📝" titulo="Observaciones" color="#8e44ad"/>
+        <FichaSCard>
+          <FichaSecHdr icono="📝" titulo="Observaciones" color="#8e44ad"/>
           <textarea readOnly={!enEdicion}
-            style={{...FI,minHeight:80,resize:"vertical",lineHeight:1.6}}
+            style={{...fi,minHeight:80,resize:"vertical",lineHeight:1.6}}
             value={val("observaciones")}
-            onChange={e=>enEdicion&&setD("observaciones",e.target.value)}
-            placeholder={enEdicion?"Notas adicionales sobre el trabajador...":""}/>
-        </SCard>
+            onChange={e => enEdicion && setD("observaciones", e.target.value)}
+            placeholder={enEdicion ? "Notas adicionales..." : ""}/>
+        </FichaSCard>
 
-        {/* Historial Remuneraciones — solo en modo ver */}
+        {/* Historial Remuneraciones — solo modo ver */}
         {fichaMode==="ver" && trabReal && (
-          <SCard style={{border:"1px solid rgba(255,215,0,0.2)"}}>
-            <SecHdr icono="💰" titulo="Historial de Remuneraciones" color="#FFD700"/>
+          <FichaSCard style={{border:"1px solid rgba(255,215,0,0.2)"}}>
+            <FichaSecHdr icono="💰" titulo="Historial de Remuneraciones" color="#FFD700"/>
             {(trabReal.ficha?.historialRemuneraciones||[]).length===0 ? (
               <div style={{color:"#aac4ff",fontSize:13,textAlign:"center",padding:"12px 0"}}>
                 Sin registros. Agrega el primero abajo.
@@ -472,30 +634,27 @@ function FichaForm({
                           <td style={{padding:"7px 9px",color:"#aac4ff"}}>${Number(h.movilizacion).toLocaleString("es-CL")}</td>
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
-                          <td style={{padding:"7px 9px",color:"#7a99cc",fontSize:10,whiteSpace:"nowrap"}}>
-                            {h.registradoEn}
-                          </td>
+                          <td style={{padding:"7px 9px",color:"#7a99cc",fontSize:10}}>{h.registradoEn}</td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
               </div>
             )}
-            {/* Formulario nuevo registro */}
             <div style={{background:"rgba(255,215,0,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:10,padding:"14px 16px"}}>
               <div style={{color:"#FFD700",fontWeight:"bold",fontSize:12,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>
                 ➕ Registrar Incremento / Ajuste
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
                 <div>
-                  <LBL>Vigente desde</LBL>
-                  <input type="date" style={FI}
+                  <FichaLBL>Vigente desde</FichaLBL>
+                  <input type="date" style={FI_EDIT}
                     value={histNuevo.desde}
                     onChange={e=>setHistNuevo(p=>({...p,desde:e.target.value}))}/>
                 </div>
                 <div>
-                  <LBL>Nuevo Sueldo Base ($)</LBL>
-                  <input type="number" style={FI}
+                  <FichaLBL>Nuevo Sueldo Base ($)</FichaLBL>
+                  <input type="number" style={FI_EDIT}
                     value={histNuevo.sueldo}
                     onChange={e=>setHistNuevo(p=>({...p,sueldo:e.target.value}))}
                     placeholder="Ej: 550000"/>
@@ -506,22 +665,20 @@ function FichaForm({
                   )}
                 </div>
                 <div>
-                  <LBL>Colación ($)</LBL>
-                  <input type="number" style={FI}
+                  <FichaLBL>Colación ($)</FichaLBL>
+                  <input type="number" style={FI_EDIT}
                     value={histNuevo.colacion}
-                    onChange={e=>setHistNuevo(p=>({...p,colacion:e.target.value}))}
-                    placeholder={String(trabReal.ficha?.colacion||0)}/>
+                    onChange={e=>setHistNuevo(p=>({...p,colacion:e.target.value}))}/>
                 </div>
                 <div>
-                  <LBL>Movilización ($)</LBL>
-                  <input type="number" style={FI}
+                  <FichaLBL>Movilización ($)</FichaLBL>
+                  <input type="number" style={FI_EDIT}
                     value={histNuevo.movilizacion}
-                    onChange={e=>setHistNuevo(p=>({...p,movilizacion:e.target.value}))}
-                    placeholder={String(trabReal.ficha?.movilizacion||0)}/>
+                    onChange={e=>setHistNuevo(p=>({...p,movilizacion:e.target.value}))}/>
                 </div>
                 <div style={{gridColumn:"1/-1"}}>
-                  <LBL>Motivo del Cambio</LBL>
-                  <select style={FS}
+                  <FichaLBL>Motivo del Cambio</FichaLBL>
+                  <select style={FS_EDIT}
                     value={histNuevo.motivo}
                     onChange={e=>setHistNuevo(p=>({...p,motivo:e.target.value}))}>
                     <option value="">— Seleccionar —</option>
@@ -554,7 +711,7 @@ function FichaForm({
                 </div>
               )}
             </div>
-          </SCard>
+          </FichaSCard>
         )}
 
         {/* Botones pie */}
@@ -582,10 +739,17 @@ function FichaForm({
         )}
         {enEdicion && (
           <div style={{display:"flex",gap:10}}>
-            <button onClick={fichaMode==="nuevo"?grabarNuevoTrabajador:grabarEdicionFicha} style={{...btnGrabar,flex:1,padding:"13px 0",fontSize:15}}>
+            <button onClick={fichaMode==="nuevo"?grabarNuevoTrabajador:grabarEdicionFicha}
+              style={{flex:1,background:"linear-gradient(135deg,#27ae60,#1e8449)",color:"#fff",
+                border:"none",borderRadius:8,padding:"13px 0",cursor:"pointer",
+                fontWeight:"bold",fontSize:15,fontFamily:"Georgia,serif",
+                boxShadow:"0 3px 12px rgba(39,174,96,0.4)"}}>
               💾 Grabar
             </button>
-            <button onClick={cancelar} style={{...btnCancelar,padding:"13px 20px"}}>
+            <button onClick={cancelar}
+              style={{background:"rgba(255,255,255,0.07)",color:"#aac4ff",
+                border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,
+                padding:"13px 20px",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif"}}>
               ✗ Cancelar
             </button>
           </div>
@@ -594,6 +758,7 @@ function FichaForm({
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // LOGO
@@ -1125,14 +1290,26 @@ export default function App() {
 
   // ── LIMPIAR DATOS FICTICIOS ──────────────────────────
   function limpiarDatosFicticios() {
-    // Conserva solo el perfil de prueba (id 999) y elimina trabajadores ficticios de prueba
-    setTrabajadores([{ id:999, nombre:"Administrador", apellido:"Pruebas", apellidoM:"", rut:"Pruebas", codigo:"Administrador", activo:true, ficha:fichaVacia() }]);
-    setRegistros([]);
-    setComps([]);
-    setSolicitudes([]);
-    setNotifs([]);
-    setLiquidaciones([]);
-    setAnticipos([]);
+    // Conservar trabajadores reales (no marcados como prueba)
+    // y el perfil de prueba id=999
+    setTrabajadores(p => {
+      const reales = p.filter(t => !t.esDePrueba || t.id === 999);
+      // Si no quedan reales, dejar solo el perfil de prueba
+      return reales.length > 0 ? reales :
+        [{ id:999, nombre:"Administrador", apellido:"Pruebas", apellidoM:"", rut:"Pruebas", codigo:"Administrador", activo:true, esDePrueba:true, ficha:fichaVacia() }];
+    });
+    // Borrar solo registros de asistencia de trabajadores de prueba
+    setRegistros(p => p.filter(r => !r.esDePrueba && !IDS_PRUEBA.has(r.tId)));
+    // Borrar compensatorios de trabajadores de prueba
+    setComps(p => p.filter(c => !IDS_PRUEBA.has(c.tId)));
+    // Borrar solicitudes de trabajadores de prueba
+    setSolicitudes(p => p.filter(s => !IDS_PRUEBA.has(s.tId)));
+    // Borrar notificaciones de trabajadores de prueba
+    setNotifs(p => p.filter(n => !IDS_PRUEBA.has(n.tId)));
+    // Borrar liquidaciones de trabajadores de prueba
+    setLiquidaciones(p => p.filter(l => !IDS_PRUEBA.has(l.tId)));
+    // Borrar anticipos de trabajadores de prueba
+    setAnticipos(p => p.filter(a => !IDS_PRUEBA.has(a.tId)));
     setConfirmarLimpiar(false);
   }
 
@@ -1634,7 +1811,10 @@ export default function App() {
             <input style={S.input} value={lCodigo} onChange={e=>setLCodigo(e.target.value.toUpperCase())} placeholder="Ej: PP01" onKeyDown={e=>e.key==="Enter"&&loginTrabajador()} />
             <div style={{ marginTop:12 }}>
               <label style={S.lbl}>RUT</label>
-              <input style={S.input} value={lRut} onChange={e=>setLRut(e.target.value)} placeholder="Ej: 12.345.678-9" onKeyDown={e=>e.key==="Enter"&&loginTrabajador()} />
+              <input style={S.input} value={lRut}
+                onChange={e => handleRutInput(e.target.value, setLRut)}
+                placeholder="Ej: 12345678K (sin puntos ni guión)"
+                onKeyDown={e=>e.key==="Enter"&&loginTrabajador()} />
             </div>
             <MsgBox m={{ tipo:"err", txt:lError }} />
             <button onClick={loginTrabajador} style={{ ...S.btn, width:"100%", marginTop:14 }}>Ingresar</button>
@@ -1991,7 +2171,9 @@ export default function App() {
                             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
                               <div>
                                 <label style={S.lbl}>Tu RUT</label>
-                                <input style={S.input} value={firmaRut} onChange={e=>setFirmaRut(e.target.value)} placeholder="12.345.678-9" />
+                                <input style={S.input} value={firmaRut}
+                                onChange={e=>handleRutInput(e.target.value, setFirmaRut)}
+                                placeholder="Ingresa tu RUT (sin puntos ni guión)" />
                               </div>
                               <div>
                                 <label style={S.lbl}>Tu Código</label>
@@ -2172,8 +2354,8 @@ export default function App() {
           <div style={{ ...S.card, maxWidth:420, width:"100%", border:"2px solid #c0392b" }}>
             <h3 style={{ color:"#c0392b", marginTop:0 }}>⚠️ Confirmar Limpieza</h3>
             <p style={{ color:"#fff", fontSize:13, lineHeight:1.7 }}>
-              Esta acción eliminará <strong>todos los trabajadores, registros, compensatorios, solicitudes, liquidaciones y anticipos</strong> de prueba.<br/><br/>
-              Solo se conservará el perfil de prueba (Administrador / Pruebas).<br/><br/>
+              Esta acción eliminará los <strong>3 trabajadores de ejemplo</strong> (Juan Pérez, María Pinto, Carlos Rojas) y todos sus registros asociados.<br/><br/>
+              <strong style={{color:"#aaffcc"}}>✅ Los trabajadores reales que hayas ingresado NO se eliminarán.</strong><br/><br/>
               <strong style={{color:"#ffaaaa"}}>Esta acción no se puede deshacer. ¿Deseas continuar?</strong>
             </p>
             <div style={{ display:"flex", gap:10 }}>
