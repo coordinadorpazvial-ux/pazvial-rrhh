@@ -270,7 +270,7 @@ const FichaLBL = ({children}) => (
 );
 
 const FichaSCard = ({children, style={}}) => (
-  <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
+  <div style={{background:"rgba(8,6,3,0.5)",border:"1px solid rgba(255,255,255,0.08)",
     borderRadius:12,padding:"18px 20px",marginBottom:14,...style}}>
     {children}
   </div>
@@ -291,7 +291,7 @@ const FichaRow = ({children, cols="1fr 1fr"}) => (
 
 // Estilos de input globales — no cambian entre renders
 const FI_EDIT = {
-  background:"rgba(255,255,255,0.1)",
+  background:"rgba(30,26,15,0.8)",
   border:"1px solid rgba(255,107,0,0.6)",
   borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
   fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box",
@@ -305,7 +305,7 @@ const FI_READ = {
   cursor:"default", caretColor:"#FF6B00",
 };
 const FS_EDIT = {
-  background:"rgba(255,255,255,0.1)",
+  background:"rgba(30,26,15,0.8)",
   border:"1px solid rgba(255,107,0,0.6)",
   borderRadius:7, padding:"9px 13px", color:"#ffffff", fontSize:13,
   fontFamily:"Georgia,serif", width:"100%", cursor:"pointer",
@@ -363,14 +363,14 @@ function FichaForm({
     boxShadow:"0 3px 12px rgba(39,174,96,0.4)",
   };
   const btnCancel = {
-    background:"rgba(255,255,255,0.07)",color:"#aac4ff",
+    background:"rgba(20,18,10,0.85)",color:"#9A8A6A",
     border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,
     padding:"12px 18px",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif",
   };
 
   if (fichaMode === "ver" && !trabReal) return (
-    <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
-      borderRadius:14,padding:60,textAlign:"center",color:"#aac4ff"}}>
+    <div style={{background:"rgba(8,6,3,0.5)",border:"1px solid rgba(255,255,255,0.08)",
+      borderRadius:14,padding:60,textAlign:"center",color:"#9A8A6A"}}>
       <div style={{fontSize:48,marginBottom:16}}>🪪</div>
       <div style={{fontSize:16,marginBottom:8}}>Selecciona un trabajador</div>
       <div style={{fontSize:13}}>o presiona <strong style={{color:"#FF6B00"}}>➕ Nueva Ficha</strong></div>
@@ -603,8 +603,8 @@ function FichaForm({
 
           {val("fechaIngreso") && (
             <div style={{background:"rgba(255,215,0,0.06)",border:"1px solid rgba(255,215,0,0.2)",
-              borderRadius:8,padding:"10px 14px",fontSize:12,color:"#aac4ff"}}>
-              ⏱ Antigüedad: <strong style={{color:"#FFD700"}}>{(()=>{
+              borderRadius:8,padding:"10px 14px",fontSize:12,color:"#9A8A6A"}}>
+              ⏱ Antigüedad: <strong style={{color:"#C9A84C"}}>{(()=>{
                 const ini = new Date(val("fechaIngreso"));
                 const fin = val("fechaSalida") ? new Date(val("fechaSalida")) : new Date();
                 const m = (fin.getFullYear()-ini.getFullYear())*12+(fin.getMonth()-ini.getMonth());
@@ -628,7 +628,7 @@ function FichaForm({
           <FichaSCard style={{border:"1px solid rgba(255,215,0,0.2)"}}>
             <FichaSecHdr icono="💰" titulo="Historial de Remuneraciones" color="#FFD700"/>
             {(trabReal.ficha?.historialRemuneraciones||[]).length===0 ? (
-              <div style={{color:"#aac4ff",fontSize:13,textAlign:"center",padding:"12px 0"}}>
+              <div style={{color:"#9A8A6A",fontSize:13,textAlign:"center",padding:"12px 0"}}>
                 Sin registros. Agrega el primero abajo.
               </div>
             ) : (
@@ -637,8 +637,8 @@ function FichaForm({
                   <thead>
                     <tr>
                       {["Desde","Sueldo","Colación","Moviliz.","Gratif.","Motivo","Registrado"].map(h=>(
-                        <th key={h} style={{background:"rgba(0,0,0,0.3)",padding:"7px 9px",
-                          textAlign:"left",color:"#FFD700",fontSize:10,textTransform:"uppercase",
+                        <th key={h} style={{background:"rgba(5,4,2,0.6)",padding:"7px 9px",
+                          textAlign:"left",color:"#C9A84C",fontSize:10,textTransform:"uppercase",
                           letterSpacing:1,borderBottom:"1px solid rgba(255,215,0,0.2)"}}>
                           {h}
                         </th>
@@ -654,7 +654,7 @@ function FichaForm({
                           borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                           <td style={{padding:"7px 9px",fontWeight:idx===0?"bold":"normal",whiteSpace:"nowrap"}}>
                             {h.desde}
-                            {idx===0&&<span style={{background:"rgba(255,215,0,0.25)",color:"#FFD700",
+                            {idx===0&&<span style={{background:"rgba(255,215,0,0.25)",color:"#C9A84C",
                               fontSize:9,fontWeight:"bold",padding:"1px 5px",borderRadius:4,marginLeft:5}}>
                               VIGENTE
                             </span>}
@@ -662,11 +662,11 @@ function FichaForm({
                           <td style={{padding:"7px 9px",color:idx===0?"#FFD700":"#fff",fontWeight:idx===0?"bold":"normal"}}>
                             ${Number(h.sueldo).toLocaleString("es-CL")}
                           </td>
-                          <td style={{padding:"7px 9px",color:"#aac4ff"}}>${Number(h.colacion).toLocaleString("es-CL")}</td>
-                          <td style={{padding:"7px 9px",color:"#aac4ff"}}>${Number(h.movilizacion).toLocaleString("es-CL")}</td>
+                          <td style={{padding:"7px 9px",color:"#9A8A6A"}}>${Number(h.colacion).toLocaleString("es-CL")}</td>
+                          <td style={{padding:"7px 9px",color:"#9A8A6A"}}>${Number(h.movilizacion).toLocaleString("es-CL")}</td>
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
-                          <td style={{padding:"7px 9px",color:"#7a99cc",fontSize:10}}>{h.registradoEn}</td>
+                          <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{h.registradoEn}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -674,7 +674,7 @@ function FichaForm({
               </div>
             )}
             <div style={{background:"rgba(255,215,0,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:10,padding:"14px 16px"}}>
-              <div style={{color:"#FFD700",fontWeight:"bold",fontSize:12,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>
+              <div style={{color:"#C9A84C",fontWeight:"bold",fontSize:12,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>
                 ➕ Registrar Incremento / Ajuste
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -762,7 +762,7 @@ function FichaForm({
             </button>
             <button
               onClick={()=>setTrabajadores(p=>p.map(x=>x.id===trabReal.id?{...x,activo:!x.activo}:x))}
-              style={{background:"rgba(255,255,255,0.07)",color:"#aac4ff",
+              style={{background:"rgba(20,18,10,0.85)",color:"#9A8A6A",
                 border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,
                 padding:"12px 20px",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}}>
               {trabReal.activo?"Desactivar":"Activar"}
@@ -779,7 +779,7 @@ function FichaForm({
               💾 Grabar
             </button>
             <button onClick={cancelar}
-              style={{background:"rgba(255,255,255,0.07)",color:"#aac4ff",
+              style={{background:"rgba(20,18,10,0.85)",color:"#9A8A6A",
                 border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,
                 padding:"13px 20px",cursor:"pointer",fontSize:13,fontFamily:"Georgia,serif"}}>
               ✗ Cancelar
@@ -807,25 +807,36 @@ function Logo({ size=48 }) {
 // ═══════════════════════════════════════════════════════════
 // ESTILOS GLOBALES
 // ═══════════════════════════════════════════════════════════
+// ── Paleta Negro y Dorado ────────────────────────────────────────────────
+const ORO     = "#C9A84C";   // dorado elegante
+const ORO_L   = "#E8C97A";   // dorado claro
+const ORO_D   = "#8B6914";   // dorado oscuro
+const NEGRO   = "#0A0A0A";   // negro profundo
+const NEGRO2  = "#141414";   // negro suave
+const NEGRO3  = "#1C1C1C";   // negro card
+const GRIS1   = "#2A2A2A";   // gris oscuro
+const GRIS2   = "#3D3D3D";   // gris medio
+const BLANCO  = "#F5F0E8";   // blanco cálido
+
 const S = {
-  app:   { minHeight:"100vh", background:"linear-gradient(135deg,#001a4d 0%,#003082 50%,#0052cc 100%)", fontFamily:"Georgia,serif", color:"#fff" },
-  hdr:   { background:"rgba(0,0,0,0.38)", backdropFilter:"blur(12px)", borderBottom:"2px solid #FFD700", padding:"10px 20px", display:"flex", alignItems:"center", gap:12, justifyContent:"space-between" },
-  card:  { background:"rgba(255,255,255,0.07)", backdropFilter:"blur(8px)", border:"1px solid rgba(255,215,0,0.2)", borderRadius:14, padding:20, marginBottom:16 },
-  input: { background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,215,0,0.4)", borderRadius:8, padding:"9px 13px", color:"#fff", fontSize:14, fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box" },
-  sel:   { background:"rgba(0,20,60,0.85)", border:"1px solid rgba(255,215,0,0.4)", borderRadius:8, padding:"8px 12px", color:"#fff", fontSize:13, fontFamily:"Georgia,serif", cursor:"pointer" },
-  lbl:   { fontSize:11, color:"#aac4ff", marginBottom:4, display:"block", textTransform:"uppercase", letterSpacing:1 },
-  btn:   { background:"#FFD700", color:"#001a4d", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:"bold", cursor:"pointer", fontSize:13, fontFamily:"Georgia,serif" },
-  btnS:  { background:"rgba(255,255,255,0.1)", color:"#fff", border:"1px solid rgba(255,255,255,0.3)", borderRadius:8, padding:"8px 14px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
-  btnD:  { background:"#c0392b", color:"#fff", border:"none", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
-  btnG:  { background:"#27ae60", color:"#fff", border:"none", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
-  btnB:  { background:"#2980b9", color:"#fff", border:"none", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
-  tab:   a => ({ background:a?"#FFD700":"rgba(255,255,255,0.08)", color:a?"#001a4d":"#aac4ff", border:"none", borderRadius:"8px 8px 0 0", padding:"9px 16px", cursor:"pointer", fontWeight:a?"bold":"normal", fontFamily:"Georgia,serif", fontSize:12 }),
+  app:   { minHeight:"100vh", background:`linear-gradient(160deg,${NEGRO} 0%,#0F0F0F 40%,#161208 100%)`, fontFamily:"'Georgia',serif", color:BLANCO },
+  hdr:   { background:"rgba(5,5,5,0.95)", backdropFilter:"blur(20px)", borderBottom:`1px solid ${ORO}`, padding:"10px 24px", display:"flex", alignItems:"center", gap:12, justifyContent:"space-between", boxShadow:`0 2px 20px rgba(201,168,76,0.15)` },
+  card:  { background:`rgba(20,18,10,0.85)`, backdropFilter:"blur(12px)", border:`1px solid rgba(201,168,76,0.18)`, borderRadius:14, padding:20, marginBottom:16, boxShadow:"0 4px 24px rgba(0,0,0,0.4)" },
+  input: { background:"rgba(18,15,8,0.7)", border:`1px solid rgba(201,168,76,0.35)`, borderRadius:8, padding:"9px 13px", color:BLANCO, fontSize:14, fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box" },
+  sel:   { background:NEGRO2, border:`1px solid rgba(201,168,76,0.35)`, borderRadius:8, padding:"8px 12px", color:BLANCO, fontSize:13, fontFamily:"Georgia,serif", cursor:"pointer" },
+  lbl:   { fontSize:11, color:"#9A8A6A", marginBottom:4, display:"block", textTransform:"uppercase", letterSpacing:1.5 },
+  btn:   { background:`linear-gradient(135deg,${ORO},${ORO_D})`, color:NEGRO, border:"none", borderRadius:8, padding:"10px 20px", fontWeight:"bold", cursor:"pointer", fontSize:13, fontFamily:"Georgia,serif", boxShadow:`0 2px 12px rgba(201,168,76,0.3)` },
+  btnS:  { background:"rgba(18,15,8,0.7)", color:BLANCO, border:`1px solid rgba(201,168,76,0.25)`, borderRadius:8, padding:"8px 14px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
+  btnD:  { background:"#7B1F1F", color:"#FFCCCC", border:"1px solid #c0392b", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
+  btnG:  { background:"#1A4A2A", color:"#AAFFCC", border:"1px solid #27ae60", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
+  btnB:  { background:"#1A2E4A", color:"#AAD4FF", border:"1px solid #2980b9", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
+  tab:   a => ({ background:a?`linear-gradient(135deg,${ORO},${ORO_D})`:NEGRO2, color:a?NEGRO:"#9A8A6A", border:a?"none":`1px solid rgba(201,168,76,0.15)`, borderRadius:"8px 8px 0 0", padding:"9px 16px", cursor:"pointer", fontWeight:a?"bold":"normal", fontFamily:"Georgia,serif", fontSize:12, boxShadow:a?`0 -2px 8px rgba(201,168,76,0.2)`:"none" }),
   bdg:   c => ({ background:c, borderRadius:10, padding:"2px 9px", fontSize:11, fontWeight:"bold", display:"inline-block" }),
-  th:    { background:"rgba(0,0,0,0.3)", padding:"9px 11px", textAlign:"left", color:"#FFD700", fontSize:11, textTransform:"uppercase", letterSpacing:1, borderBottom:"1px solid rgba(255,215,0,0.3)" },
-  td:    { padding:"9px 11px", borderBottom:"1px solid rgba(255,255,255,0.07)", verticalAlign:"middle", fontSize:13 },
-  err:   { background:"rgba(192,57,43,0.3)", border:"1px solid #c0392b", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#ffaaaa" },
-  ok:    { background:"rgba(39,174,96,0.3)", border:"1px solid #27ae60", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#aaffcc" },
-  notif: { background:"rgba(255,152,0,0.2)", border:"1px solid #ff9800", borderRadius:8, padding:"10px 14px", marginBottom:8, fontSize:13 },
+  th:    { background:NEGRO2, padding:"9px 11px", textAlign:"left", color:ORO, fontSize:11, textTransform:"uppercase", letterSpacing:1.5, borderBottom:`1px solid rgba(201,168,76,0.25)` },
+  td:    { padding:"9px 11px", borderBottom:`1px solid rgba(201,168,76,0.08)`, verticalAlign:"middle", fontSize:13, color:BLANCO },
+  err:   { background:"rgba(120,30,30,0.4)", border:"1px solid #c0392b", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#FFAAAA" },
+  ok:    { background:"rgba(20,60,35,0.5)", border:"1px solid #27ae60", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#AAFFCC" },
+  notif: { background:"rgba(100,70,10,0.3)", border:`1px solid ${ORO_D}`, borderRadius:8, padding:"10px 14px", marginBottom:8, fontSize:13 },
   tbl:   { width:"100%", borderCollapse:"collapse", fontSize:13 },
 };
 
@@ -872,6 +883,10 @@ export default function App() {
   // ── Dashboard filtros ──────────────────────────────────
   const [dMes,  setDMes]  = useState(new Date().getMonth());
   const [dAnio, setDAnio] = useState(new Date().getFullYear());
+
+  // ── Calendario ─────────────────────────────────────────
+  const [calMes,  setCalMes]  = useState(new Date().getMonth());
+  const [calAnio, setCalAnio] = useState(new Date().getFullYear());
 
   // ── Solicitud trabajador ───────────────────────────────
   const [solTipo,       setSolTipo]       = useState("permiso");
@@ -1067,29 +1082,76 @@ export default function App() {
     else setAError("Contraseña incorrecta.");
   }
 
-  function registrarMarca() {
+  // Paso 1: mostrar modal de confirmación
+  function solicitarConfirmacionMarca() {
     setMarcaMsg({ tipo:"", txt:"" });
     const fechaHoy = hoy();
     const hora     = horaActual();
     const regHoy   = registros.find(r => r.tId === trabActivo.id && r.fecha === fechaHoy);
-    const [hh, mm] = hora.split(":").map(Number);
-    const esAnticipada = hh < 8; // antes de las 08:00
 
+    // Validaciones previas
     if (tipoMarca === "entrada") {
       if (regHoy) { setMarcaMsg({ tipo:"err", txt:"Ya tiene registro de entrada hoy." }); return; }
-      const estadoInicial = esAnticipada ? "pendiente_entrada" : "pendiente";
-      setRegistros(p => [...p, { id:nowId(), tId:trabActivo.id, fecha:fechaHoy, entrada:hora, salida:null, estado:estadoInicial, motivoRechazo:"", entradaAnticipada: esAnticipada }]);
-      if (esAnticipada) {
-        setMarcaMsg({ tipo:"ok", txt:`⚠️ Entrada registrada a las ${hora}. Por ser antes de las 08:00, quedará pendiente de validación por el administrador.` });
-      } else {
-        setMarcaMsg({ tipo:"ok", txt:`✅ Entrada registrada a las ${hora}` });
-      }
     } else {
       if (!regHoy)       { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
       if (regHoy.salida) { setMarcaMsg({ tipo:"err", txt:"Ya tiene salida registrada hoy." }); return; }
-      setRegistros(p => p.map(r => r.id===regHoy.id ? {...r, salida:hora} : r));
-      setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}` });
     }
+    // Mostrar modal de confirmación con hora actual
+    setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaHoy });
+  }
+
+  // Paso 2: confirmar y registrar
+  function confirmarMarca() {
+    if (!marcaConfirm) return;
+    const { tipo, hora, fecha } = marcaConfirm;
+    const regHoy = registros.find(r => r.tId === trabActivo.id && r.fecha === fecha);
+    const [hh] = hora.split(":").map(Number);
+    const esAnticipada = hh < 8;
+
+    setMarcaConfirm(null);
+    setMarcaGuardando(true);
+    setSyncEstado("guardando");
+
+    let nuevosRegistros;
+    if (tipo === "entrada") {
+      const estadoInicial = esAnticipada ? "pendiente_entrada" : "pendiente";
+      const nuevoReg = { id:nowId(), tId:trabActivo.id, fecha, entrada:hora, salida:null, estado:estadoInicial, motivoRechazo:"", entradaAnticipada: esAnticipada };
+      nuevosRegistros = [...registros, nuevoReg];
+    } else {
+      nuevosRegistros = registros.map(r => r.id===regHoy.id ? {...r, salida:hora} : r);
+    }
+
+    setRegistros(nuevosRegistros);
+
+    // Guardar inmediatamente en Firebase con reintento
+    const intentarGuardar = async (intentos = 0) => {
+      try {
+        await guardarEnFirebase({
+          trabajadores, registros: nuevosRegistros,
+          compensatorios, solicitudes,
+          notificaciones, liquidaciones, anticipos,
+          ultimaActualizacion: new Date().toISOString(),
+        });
+        setSyncEstado("ok");
+        setMarcaGuardando(false);
+        if (tipo === "entrada") {
+          setMarcaMsg({ tipo:"ok", txt: esAnticipada
+            ? `⚠️ Entrada registrada a las ${hora}. Pendiente de validación por el administrador.`
+            : `✅ Entrada registrada y guardada a las ${hora}` });
+        } else {
+          setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada y guardada a las ${hora}` });
+        }
+      } catch(e) {
+        if (intentos < 3) {
+          setTimeout(() => intentarGuardar(intentos + 1), 3000);
+        } else {
+          setSyncEstado("error");
+          setMarcaGuardando(false);
+          setMarcaMsg({ tipo:"err", txt:"⚠️ Registro guardado localmente. Hubo un problema de conexión — se sincronizará automáticamente." });
+        }
+      }
+    };
+    intentarGuardar();
   }
 
   // ── Solicitud permiso/vacaciones ──────────────────────
@@ -1807,8 +1869,8 @@ export default function App() {
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           <Logo size={40} />
           <div>
-            <div style={{ fontSize:15, fontWeight:"bold", color:"#FF6B00", letterSpacing:1 }}>{titulo}</div>
-            <div style={{ fontSize:10, color:"#aac4ff", letterSpacing:2, textTransform:"uppercase" }}>{sub}</div>
+            <div style={{ fontSize:15, fontWeight:"bold", color:"#C9A84C", letterSpacing:1.5, textTransform:"uppercase" }}>{titulo}</div>
+            <div style={{ fontSize:10, color:"#9A8A6A", letterSpacing:2, textTransform:"uppercase" }}>{sub}</div>
           </div>
         </div>
         {onBack && <button onClick={onBack} style={S.btnS}>{backLabel}</button>}
@@ -1874,8 +1936,10 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   if (vista==="portada") return (
     <div style={{ minHeight:"100vh", fontFamily:"Georgia,serif", color:"#fff", position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"absolute", inset:0, backgroundImage:`url("https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1600&q=80")`, backgroundSize:"cover", backgroundPosition:"center", filter:"brightness(0.35) saturate(1.1)", zIndex:0 }} />
-      <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg,rgba(0,10,40,0.75) 0%,rgba(0,30,80,0.85) 60%,rgba(0,5,20,0.97) 100%)", zIndex:1 }} />
+      <div style={{ position:"absolute", inset:0, backgroundImage:`url("https://images.unsplash.com/photo-1545558014-8692077e9b5c?w=1920&q=90")`, backgroundSize:"cover", backgroundPosition:"center 40%", filter:"brightness(0.25) saturate(0.8) contrast(1.1)", zIndex:0 }} />
+      <div style={{ position:"absolute", inset:0, background:"linear-gradient(180deg,rgba(5,4,2,0.7) 0%,rgba(10,8,3,0.82) 50%,rgba(5,4,1,0.97) 100%)", zIndex:1 }} />
+      {/* Línea dorada decorativa superior */}
+      <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,transparent,#C9A84C,transparent)`, zIndex:2 }} />
       <div style={{ position:"relative", zIndex:2, display:"flex", flexDirection:"column", minHeight:"100vh" }}>
         {/* Fecha discreta arriba centrada */}
         <div style={{ textAlign:"center", padding:"16px 28px 0" }}>
@@ -1889,11 +1953,12 @@ export default function App() {
             <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
               <Logo size={200} />
             </div>
-            <h1 style={{ margin:"0 0 4px", fontSize:"clamp(20px,4vw,36px)", fontWeight:"bold", letterSpacing:4, color:"#fff", textTransform:"uppercase", textShadow:"0 2px 20px rgba(0,0,0,0.8)", lineHeight:1.15 }}>
+            <h1 style={{ margin:"0 0 4px", fontSize:"clamp(20px,4vw,36px)", fontWeight:"bold", letterSpacing:6, color:"#F5F0E8", textTransform:"uppercase", textShadow:"0 2px 30px rgba(201,168,76,0.4)", lineHeight:1.15 }}>
               Gestión de Personas
             </h1>
-            <div style={{ width:56, height:3, background:"#FF6B00", margin:"14px auto 0", borderRadius:2 }} />
-            <p style={{ color:"rgba(180,210,255,0.75)", fontSize:13, marginTop:16, letterSpacing:1 }}>
+            <div style={{ width:80, height:1, background:"linear-gradient(90deg,transparent,#C9A84C,transparent)", margin:"14px auto 4px" }} />
+            <div style={{ width:40, height:2, background:"#C9A84C", margin:"4px auto 0", borderRadius:1 }} />
+            <p style={{ color:"rgba(201,168,76,0.7)", fontSize:12, marginTop:18, letterSpacing:3, textTransform:"uppercase" }}>
               Seleccione su perfil para continuar
             </p>
           </div>
@@ -1902,15 +1967,24 @@ export default function App() {
               { label:"Trabajador", sub:"Registrar entrada / salida", icon:"👷", action:()=>setVista("trabLogin"), gold:false },
               { label:"Administrador", sub:"Gestión y reportes", icon:"🔐", action:()=>setVista("adminLogin"), gold:true },
             ].map(b => (
-              <button key={b.label} onClick={b.action} style={{ background: b.gold?"rgba(255,215,0,0.12)":"rgba(255,255,255,0.07)", backdropFilter:"blur(16px)", border:`1px solid rgba(255,215,0,${b.gold?0.7:0.4})`, borderRadius:16, padding:"26px 14px", cursor:"pointer", textAlign:"center", transition:"all 0.2s" }}>
-                <div style={{ fontSize:42, marginBottom:8 }}>{b.icon}</div>
-                <div style={{ color:"#FFD700", fontWeight:"bold", fontSize:16, fontFamily:"Georgia,serif" }}>{b.label}</div>
-                <div style={{ color:"rgba(180,210,255,0.65)", fontSize:11, marginTop:5 }}>{b.sub}</div>
+              <button key={b.label} onClick={b.action} style={{
+                background: b.gold
+                  ? "linear-gradient(135deg,rgba(201,168,76,0.15),rgba(139,105,20,0.1))"
+                  : "rgba(20,18,10,0.7)",
+                backdropFilter:"blur(20px)",
+                border: b.gold ? "1px solid rgba(201,168,76,0.6)" : "1px solid rgba(201,168,76,0.2)",
+                borderRadius:16, padding:"28px 16px", cursor:"pointer", textAlign:"center",
+                transition:"all 0.25s",
+                boxShadow: b.gold ? "0 8px 32px rgba(201,168,76,0.2)" : "0 4px 16px rgba(0,0,0,0.4)"
+              }}>
+                <div style={{ fontSize:42, marginBottom:10 }}>{b.icon}</div>
+                <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16, fontFamily:"Georgia,serif", letterSpacing:1 }}>{b.label}</div>
+                <div style={{ color:"rgba(201,168,76,0.5)", fontSize:11, marginTop:6, letterSpacing:0.5 }}>{b.sub}</div>
               </button>
             ))}
           </div>
         </div>
-        <div style={{ textAlign:"center", paddingBottom:20, color:"rgba(255,255,255,0.2)", fontSize:11, letterSpacing:2, textTransform:"uppercase" }}>
+        <div style={{ textAlign:"center", paddingBottom:20, color:"rgba(201,168,76,0.3)", fontSize:10, letterSpacing:3, textTransform:"uppercase" }}>
           Sistema de Gestión de Personas © Paz Vial SpA
         </div>
       </div>
@@ -1926,7 +2000,7 @@ export default function App() {
       <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 70px)", padding:20 }}>
         <div style={{ width:"100%", maxWidth:360 }}>
           <div style={S.card}>
-            <h3 style={{ color:"#FFD700", marginTop:0, textAlign:"center" }}>🔐 Acceso Restringido</h3>
+            <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>🔐 Acceso Restringido</h3>
             <label style={S.lbl}>Contraseña</label>
             <input type="password" style={S.input} value={aPass} onChange={e=>setAPass(e.target.value)} onKeyDown={e=>e.key==="Enter"&&loginAdmin()} placeholder="Contraseña de administrador" />
             <MsgBox m={{ tipo:"err", txt:aError }} />
@@ -1947,7 +2021,7 @@ export default function App() {
         <div style={{ width:"100%", maxWidth:380 }}>
           <div style={S.card}>
             <div style={{ textAlign:"center", marginBottom:18 }}><Logo size={52} /></div>
-            <h3 style={{ color:"#FFD700", marginTop:0, textAlign:"center" }}>Identificación</h3>
+            <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>Identificación</h3>
             <label style={S.lbl}>Código de trabajador</label>
             <input style={S.input} value={lCodigo} onChange={e=>setLCodigo(e.target.value.toUpperCase())} placeholder="Ej: PP01" onKeyDown={e=>e.key==="Enter"&&loginTrabajador()} />
             <div style={{ marginTop:12 }}>
@@ -2002,11 +2076,11 @@ export default function App() {
         {/* Bienvenida */}
         <div style={{ background:"rgba(255,215,0,0.1)", borderBottom:"1px solid rgba(255,215,0,0.25)", padding:"10px 20px", display:"flex", alignItems:"center", gap:10 }}>
           <span style={{ fontSize:22 }}>👋</span>
-          <span style={{ color:"#FFD700", fontWeight:"bold", fontSize:15 }}>
+          <span style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>
             Bienvenido/a, {nombreCompleto(trabActivo)}
           </span>
-          <span style={{ color:"#aac4ff", fontSize:12, marginLeft:8 }}>Código: {trabActivo.codigo}</span>
-          <span style={{ color:"#aac4ff", fontSize:12 }}> — RUT: {trabActivo.rut}</span>
+          <span style={{ color:"#9A8A6A", fontSize:12, marginLeft:8 }}>Código: {trabActivo.codigo}</span>
+          <span style={{ color:"#9A8A6A", fontSize:12 }}> — RUT: {trabActivo.rut}</span>
           {noLeidas>0 && <span style={{ marginLeft:"auto", ...S.bdg("#e67e22") }}>🔔 {noLeidas} nuevo{noLeidas>1?"s":""}</span>}
         </div>
 
@@ -2020,11 +2094,74 @@ export default function App() {
           {/* ── TAB: MARCAR ──────────────────────────────── */}
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
+
+              {/* Modal de confirmación */}
+              {marcaConfirm && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+                  <div style={{ background:"linear-gradient(135deg,#001a4d,#003082)",
+                    border:`3px solid ${marcaConfirm.tipo==="entrada"?"#27ae60":"#e74c3c"}`,
+                    borderRadius:20, padding:32, maxWidth:380, width:"100%", textAlign:"center" }}>
+                    <div style={{ fontSize:56, marginBottom:16 }}>
+                      {marcaConfirm.tipo==="entrada"?"🟢":"🔴"}
+                    </div>
+                    <div style={{ color:"#fff", fontSize:18, fontWeight:"bold", marginBottom:8 }}>
+                      Confirmar {marcaConfirm.tipo==="entrada"?"Entrada":"Salida"}
+                    </div>
+                    <div style={{ color:"#9A8A6A", fontSize:14, marginBottom:6 }}>
+                      {new Date().toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long"})}
+                    </div>
+                    <div style={{ color:"#C9A84C", fontSize:48, fontWeight:"bold",
+                      letterSpacing:4, margin:"16px 0" }}>
+                      {marcaConfirm.hora}
+                    </div>
+                    <div style={{ color:"#9A8A6A", fontSize:13, marginBottom:24 }}>
+                      {marcaConfirm.tipo==="entrada"
+                        ? "¿Confirmas el registro de tu entrada a esta hora?"
+                        : "¿Confirmas el registro de tu salida a esta hora?"}
+                    </div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <button onClick={()=>setMarcaConfirm(null)}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#fff",
+                          border:"1px solid rgba(255,255,255,0.3)", borderRadius:10,
+                          padding:"14px 0", cursor:"pointer", fontSize:15, fontFamily:"Georgia,serif" }}>
+                        ✗ Cancelar
+                      </button>
+                      <button onClick={confirmarMarca}
+                        style={{ flex:2,
+                          background: marcaConfirm.tipo==="entrada"
+                            ? "linear-gradient(135deg,#27ae60,#1e8449)"
+                            : "linear-gradient(135deg,#e74c3c,#c0392b)",
+                          color:"#fff", border:"none", borderRadius:10,
+                          padding:"14px 0", cursor:"pointer", fontSize:15,
+                          fontWeight:"bold", fontFamily:"Georgia,serif",
+                          boxShadow:`0 4px 15px ${marcaConfirm.tipo==="entrada"?"rgba(39,174,96,0.4)":"rgba(231,76,60,0.4)"}` }}>
+                        ✓ Sí, Confirmar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Indicador de sincronización */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end",
+                marginTop:12, marginBottom:4, paddingRight:4 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11,
+                  color: syncEstado==="ok"?"#27ae60":syncEstado==="guardando"?"#FFD700":"#e74c3c" }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%",
+                    background: syncEstado==="ok"?"#27ae60":syncEstado==="guardando"?"#FFD700":"#e74c3c",
+                    animation: syncEstado==="guardando"?"pulse 1s infinite":"none" }}/>
+                  {syncEstado==="ok"?"✓ Sincronizado con la nube":
+                   syncEstado==="guardando"?"Guardando...":
+                   "⚠ Error de conexión — reintentando"}
+                </div>
+              </div>
+
               <div style={{ textAlign:"center", margin:"20px 0 16px" }}>
-                <div style={{ fontSize:44, fontWeight:"bold", color:"#FFD700", letterSpacing:3 }}>
+                <div style={{ fontSize:44, fontWeight:"bold", color:"#C9A84C", letterSpacing:3 }}>
                   {new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}
                 </div>
-                <div style={{ color:"#aac4ff", fontSize:13 }}>
+                <div style={{ color:"#9A8A6A", fontSize:13 }}>
                   {new Date().toLocaleDateString("es-CL",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
                 </div>
                 {esEspecial(hoy()) && (
@@ -2033,21 +2170,67 @@ export default function App() {
                   </div>
                 )}
               </div>
+
               <div style={S.card}>
                 <div style={{ display:"flex", gap:8, marginBottom:18 }}>
                   {["entrada","salida"].map(t => (
-                    <button key={t} onClick={()=>setTipoMarca(t)} style={{ ...S.tab(tipoMarca===t), flex:1, fontSize:14, padding:"11px 0", borderRadius:10 }}>
+                    <button key={t} onClick={()=>setTipoMarca(t)}
+                      style={{ ...S.tab(tipoMarca===t), flex:1, fontSize:14, padding:"11px 0", borderRadius:10 }}>
                       {t==="entrada"?"🟢 Entrada":"🔴 Salida"}
                     </button>
                   ))}
                 </div>
-                <button onClick={registrarMarca} style={{ ...S.btn, width:"100%", fontSize:15, padding:"13px 0" }}>
-                  {tipoMarca==="entrada"?"🟢 Registrar Entrada":"🔴 Registrar Salida"}
+                <button
+                  onClick={solicitarConfirmacionMarca}
+                  disabled={marcaGuardando}
+                  style={{ ...S.btn, width:"100%", fontSize:15, padding:"14px 0",
+                    background: marcaGuardando ? "#555" :
+                      tipoMarca==="entrada"
+                        ? "linear-gradient(135deg,#27ae60,#1e8449)"
+                        : "linear-gradient(135deg,#e74c3c,#c0392b)",
+                    color:"#fff", opacity: marcaGuardando ? 0.7 : 1,
+                    boxShadow: tipoMarca==="entrada"
+                      ? "0 4px 15px rgba(39,174,96,0.4)"
+                      : "0 4px 15px rgba(231,76,60,0.4)" }}>
+                  {marcaGuardando ? "⏳ Guardando registro..."
+                    : tipoMarca==="entrada" ? "🟢 Registrar Entrada"
+                    : "🔴 Registrar Salida"}
                 </button>
                 <MsgBox m={marcaMsg} />
               </div>
-              <div style={{ ...S.card, fontSize:12, color:"#aac4ff" }}>
-                <div style={{ color:"#FFD700", fontWeight:"bold", marginBottom:6 }}>📋 Jornada Laboral</div>
+
+              {/* Estado del registro de hoy */}
+              {(()=>{
+                const regHoy = registros.find(r=>r.tId===trabActivo.id&&r.fecha===hoy());
+                if(!regHoy) return (
+                  <div style={{ ...S.card, background:"rgba(255,152,0,0.1)",
+                    border:"1px solid rgba(255,152,0,0.3)", textAlign:"center", fontSize:13, color:"#ffddaa" }}>
+                    ⏳ Aún no has registrado tu entrada hoy
+                  </div>
+                );
+                if(regHoy && !regHoy.salida) return (
+                  <div style={{ ...S.card, background:"rgba(39,174,96,0.1)",
+                    border:"1px solid rgba(39,174,96,0.3)", fontSize:13 }}>
+                    <div style={{ color:"#27ae60", fontWeight:"bold", marginBottom:4 }}>
+                      ✅ Entrada registrada hoy
+                    </div>
+                    <div style={{ color:"#9A8A6A" }}>Hora de entrada: <strong style={{color:"#fff"}}>{regHoy.entrada}</strong></div>
+                    <div style={{ color:"#ffddaa", marginTop:4 }}>Recuerda registrar tu salida al terminar</div>
+                  </div>
+                );
+                if(regHoy && regHoy.salida) return (
+                  <div style={{ ...S.card, background:"rgba(39,174,96,0.1)",
+                    border:"1px solid rgba(39,174,96,0.3)", fontSize:13 }}>
+                    <div style={{ color:"#27ae60", fontWeight:"bold", marginBottom:4 }}>
+                      ✅ Jornada completada hoy
+                    </div>
+                    <div style={{ color:"#9A8A6A" }}>Entrada: <strong style={{color:"#fff"}}>{regHoy.entrada}</strong> — Salida: <strong style={{color:"#fff"}}>{regHoy.salida}</strong></div>
+                  </div>
+                );
+              })()}
+
+              <div style={{ ...S.card, fontSize:12, color:"#9A8A6A" }}>
+                <div style={{ color:"#C9A84C", fontWeight:"bold", marginBottom:6 }}>📋 Jornada Laboral</div>
                 <div>• Lunes a Jueves: 08:00 — 18:00</div>
                 <div>• Viernes: 08:00 — 14:00</div>
                 <div style={{ color:"#ffddaa", marginTop:6 }}>• Salidas posteriores = horas extraordinarias</div>
@@ -2069,14 +2252,14 @@ export default function App() {
                   <div key={x.lbl} style={{ ...S.card, textAlign:"center", borderColor:x.c+"55", padding:"16px 10px" }}>
                     <div style={{ fontSize:28 }}>{x.icon}</div>
                     <div style={{ fontSize:26, fontWeight:"bold", color:x.c, margin:"4px 0" }}>{x.val}</div>
-                    <div style={{ color:"#aac4ff", fontSize:11 }}>{x.lbl} ({mesNombre(mesActual)})</div>
+                    <div style={{ color:"#9A8A6A", fontSize:11 }}>{x.lbl} ({mesNombre(mesActual)})</div>
                   </div>
                 ))}
               </div>
 
               {/* Historial de registros */}
               <div style={S.card}>
-                <h4 style={{ color:"#FFD700", marginTop:0 }}>Historial de Asistencia</h4>
+                <h4 style={{ color:"#C9A84C", marginTop:0 }}>Historial de Asistencia</h4>
                 <div style={{ overflowX:"auto" }}>
                   <table style={S.tbl}>
                     <thead><tr>
@@ -2112,7 +2295,7 @@ export default function App() {
           {tabTrab==="solicitud" && (
             <div style={{ marginTop:16 }}>
               <div style={S.card}>
-                <h4 style={{ color:"#FFD700", marginTop:0 }}>📝 Nueva Solicitud</h4>
+                <h4 style={{ color:"#C9A84C", marginTop:0 }}>📝 Nueva Solicitud</h4>
                 <div style={{ marginBottom:12 }}>
                   <label style={S.lbl}>Tipo</label>
                   <select style={{...S.sel, width:"100%"}} value={solTipo} onChange={e=>setSolTipo(e.target.value)}>
@@ -2147,9 +2330,9 @@ export default function App() {
 
               {/* Mis solicitudes */}
               <div style={S.card}>
-                <h4 style={{ color:"#FFD700", marginTop:0 }}>Mis Solicitudes</h4>
+                <h4 style={{ color:"#C9A84C", marginTop:0 }}>Mis Solicitudes</h4>
                 {misSolicitudes.length===0 ? (
-                  <div style={{ color:"#aac4ff", textAlign:"center", padding:24 }}>No hay solicitudes registradas</div>
+                  <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay solicitudes registradas</div>
                 ) : (
                   <table style={S.tbl}>
                     <thead><tr>{["Tipo","Fechas","Motivo","Estado","Respuesta"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
@@ -2158,7 +2341,7 @@ export default function App() {
                         <tr key={s.id}>
                           <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
                           <td style={S.td}>{s.fechaDesde}{s.fechaHasta!==s.fechaDesde?` → ${s.fechaHasta}`:""}</td>
-                          <td style={{...S.td, color:"#aac4ff", fontSize:12}}>{s.motivo||"—"}</td>
+                          <td style={{...S.td, color:"#9A8A6A", fontSize:12}}>{s.motivo||"—"}</td>
                           <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
                             {s.estado==="aprobado"?"✓ Aprobado":s.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
                           </span></td>
@@ -2177,11 +2360,11 @@ export default function App() {
             <div style={{ marginTop:16 }}>
               <div style={S.card}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-                  <h4 style={{ color:"#FFD700", margin:0 }}>🔔 Notificaciones</h4>
+                  <h4 style={{ color:"#C9A84C", margin:0 }}>🔔 Notificaciones</h4>
                   {noLeidas>0 && <button onClick={()=>marcarLeidas(trabActivo.id)} style={S.btnS}>Marcar todas como leídas</button>}
                 </div>
                 {misNotifs.length===0 ? (
-                  <div style={{ color:"#aac4ff", textAlign:"center", padding:30 }}>Sin notificaciones</div>
+                  <div style={{ color:"#9A8A6A", textAlign:"center", padding:30 }}>Sin notificaciones</div>
                 ) : (
                   [...misNotifs].reverse().map(n => (
                     <div key={n.id} style={{ ...S.notif, opacity:n.leida?0.55:1, borderColor:n.leida?"rgba(255,255,255,0.15)":"#ff9800", background:n.leida?"rgba(255,255,255,0.04)":"rgba(255,152,0,0.18)" }}>
@@ -2189,7 +2372,7 @@ export default function App() {
                         <span style={{ fontSize:14 }}>{n.msg}</span>
                         {!n.leida && <span style={{ ...S.bdg("#ff9800"), marginLeft:8, flexShrink:0 }}>Nuevo</span>}
                       </div>
-                      <div style={{ color:"#aac4ff", fontSize:11, marginTop:4 }}>{n.fecha}</div>
+                      <div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{n.fecha}</div>
                     </div>
                   ))
                 )}
@@ -2201,7 +2384,7 @@ export default function App() {
           {tabTrab==="anticipos" && (
             <div style={{ marginTop:16, maxWidth:520, margin:"16px auto 0" }}>
               <div style={S.card}>
-                <h4 style={{ color:"#FFD700", marginTop:0 }}>🏦 Solicitar Anticipo de Remuneración</h4>
+                <h4 style={{ color:"#C9A84C", marginTop:0 }}>🏦 Solicitar Anticipo de Remuneración</h4>
                 <div style={{ marginBottom:12 }}>
                   <label style={S.lbl}>Monto solicitado ($)</label>
                   <input style={S.input} type="number" value={anticMonto}
@@ -2225,19 +2408,19 @@ export default function App() {
                 {anticMsg.txt && <div style={anticMsg.tipo==="err"?S.err:S.ok}>{anticMsg.txt}</div>}
               </div>
               <div style={S.card}>
-                <h4 style={{ color:"#aac4ff", marginTop:0 }}>Mis Solicitudes de Anticipo</h4>
+                <h4 style={{ color:"#9A8A6A", marginTop:0 }}>Mis Solicitudes de Anticipo</h4>
                 {anticipos.filter(a=>a.tId===trabActivo.id).length===0
-                  ? <div style={{ color:"#aac4ff", textAlign:"center", padding:24 }}>Sin solicitudes</div>
+                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>Sin solicitudes</div>
                   : <table style={S.tbl}><thead><tr>
                       {["Mes","Monto","Motivo","Estado","Respuesta"].map(h=><th key={h} style={S.th}>{h}</th>)}
                     </tr></thead><tbody>
                     {[...anticipos.filter(a=>a.tId===trabActivo.id)].reverse().map(a=>(
                       <tr key={a.id}>
                         <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
-                        <td style={{ ...S.td, color:"#FFD700", fontWeight:"bold" }}>
+                        <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>
                           ${Number(a.monto).toLocaleString("es-CL")}
                         </td>
-                        <td style={{ ...S.td, color:"#aac4ff", fontSize:12 }}>{a.motivo||"—"}</td>
+                        <td style={{ ...S.td, color:"#9A8A6A", fontSize:12 }}>{a.motivo||"—"}</td>
                         <td style={S.td}><span style={S.bdg(a.estado==="aprobado"?"#27ae60":a.estado==="rechazado"?"#c0392b":"#e67e22")}>
                           {a.estado==="aprobado"?"✓ Aprobado":a.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
                         </span></td>
@@ -2255,7 +2438,7 @@ export default function App() {
             <div style={{ marginTop:16 }}>
               {firmaMsg.txt && <div style={{ ...firmaMsg.tipo==="err"?S.err:S.ok, marginBottom:12 }}>{firmaMsg.txt}</div>}
               {liquidaciones.filter(l=>l.tId===trabActivo.id).length===0
-                ? <div style={{ ...S.card, textAlign:"center", color:"#aac4ff", padding:40 }}>
+                ? <div style={{ ...S.card, textAlign:"center", color:"#9A8A6A", padding:40 }}>
                     No tienes liquidaciones disponibles aún.
                   </div>
                 : [...liquidaciones.filter(l=>l.tId===trabActivo.id)].reverse().map(liq=>{
@@ -2265,10 +2448,10 @@ export default function App() {
                         {/* Encabezado */}
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10, marginBottom:14 }}>
                           <div>
-                            <div style={{ color:"#FFD700", fontWeight:"bold", fontSize:16 }}>
+                            <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16 }}>
                               Liquidación {mesNombre(liq.mes)} {liq.anio}
                             </div>
-                            <div style={{ color:"#aac4ff", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${d.alcanceLiquido.toLocaleString("es-CL")}</strong></div>
+                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${d.alcanceLiquido.toLocaleString("es-CL")}</strong></div>
                           </div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
@@ -2280,18 +2463,18 @@ export default function App() {
                         </div>
                         {/* Detalle */}
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
-                          <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"10px 14px" }}>
-                            <div style={{ color:"#aac4ff", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
+                          <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
+                            <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${d.sueldoBase.toLocaleString("es-CL")}</span></div>
                             {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${d.valorHHExtra.toLocaleString("es-CL")}</span></div>}
                             {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${d.gratif.toLocaleString("es-CL")}</span></div>}
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${d.totalImponible.toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${d.colacion.toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${d.movilizacion.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#FFD700" }}><span>TOTAL HABERES</span><span>${d.totalHaberes.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#C9A84C" }}><span>TOTAL HABERES</span><span>${d.totalHaberes.toLocaleString("es-CL")}</span></div>
                           </div>
-                          <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"10px 14px" }}>
-                            <div style={{ color:"#aac4ff", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
+                          <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
+                            <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${d.prevision_monto.toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${d.salud_monto.toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${d.totalDescLegales.toLocaleString("es-CL")}</span></div>
@@ -2308,7 +2491,7 @@ export default function App() {
                         {/* Modal firma */}
                         {firmaLiqId===liq.id && (
                           <div style={{ background:"rgba(0,0,0,0.5)", border:"1px solid rgba(255,215,0,0.4)", borderRadius:10, padding:16, marginTop:12 }}>
-                            <div style={{ color:"#FFD700", fontWeight:"bold", marginBottom:10 }}>✍ Firmar Liquidación Electrónicamente</div>
+                            <div style={{ color:"#C9A84C", fontWeight:"bold", marginBottom:10 }}>✍ Firmar Liquidación Electrónicamente</div>
                             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
                               <div>
                                 <label style={S.lbl}>Tu RUT</label>
@@ -2342,8 +2525,8 @@ export default function App() {
                 <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
                   <Logo size={48} />
                   <div>
-                    <h2 style={{ color:"#FFD700", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
-                    <div style={{ color:"#aac4ff", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Trabajador — Gestión de Personas Paz Vial SpA</div>
+                    <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
+                    <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Trabajador — Gestión de Personas Paz Vial SpA</div>
                   </div>
                 </div>
 
@@ -2360,9 +2543,12 @@ export default function App() {
                   {
                     icon:"🕐", titulo:"2. Registrar Entrada y Salida",
                     items:[
-                      "En la pestaña Marcar Asistencia, selecciona Entrada al comenzar tu jornada y Salida al terminarla.",
-                      "Pulsa el botón correspondiente. El sistema registrará la hora exacta en ese momento.",
+                      "En la pestaña Marcar Asistencia, selecciona el tipo de marca: Entrada o Salida.",
+                      "Presiona el botón correspondiente. Aparecerá una pantalla de confirmación con la hora exacta del momento.",
+                      "Lee la hora que muestra el sistema y presiona '✓ Sí, Confirmar' para registrar, o '✗ Cancelar' si no es el momento correcto.",
                       "Solo puedes registrar una entrada y una salida por día.",
+                      "Debajo del botón verás el estado de tu registro del día: si aún no has marcado entrada, si ya marcaste entrada y falta la salida, o si la jornada está completa.",
+                      "El indicador de sincronización muestra si el registro se guardó en la nube: 🟢 Sincronizado, 🟡 Guardando o 🔴 Error de conexión (el sistema reintenta automáticamente).",
                       "Si trabajas en domingo o feriado, el sistema lo indicará y generará automáticamente un Día Compensatorio.",
                     ]
                   },
@@ -2416,12 +2602,12 @@ export default function App() {
                   <div key={sec.titulo} style={{ marginBottom:24 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                       <span style={{ fontSize:24 }}>{sec.icon}</span>
-                      <h3 style={{ color:"#FFD700", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
+                      <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
                     </div>
                     <div style={{ paddingLeft:34 }}>
                       {sec.items.map((item, i) => (
                         <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
-                          <span style={{ color:"#FFD700", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
+                          <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
                           <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
                         </div>
                       ))}
@@ -2430,8 +2616,8 @@ export default function App() {
                 ))}
 
                 <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
-                  <div style={{ color:"#FFD700", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
-                  <div style={{ color:"#aac4ff", fontSize:12, lineHeight:1.7 }}>
+                  <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
+                  <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
                     Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
                   </div>
                 </div>
@@ -2456,6 +2642,7 @@ export default function App() {
     { k:"nomina",       l:"👥 Nómina" },
     { k:"liquidaciones",l:"💰 Liquidaciones" },
     { k:"compensat",    l:"📅 Compensatorios" },
+    { k:"calendario",   l:"🗓 Calendario" },
     { k:"dashboard",    l:"📊 Dashboard" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
@@ -2468,8 +2655,8 @@ export default function App() {
         onBack={()=>setVista("portada")} backLabel="🚪 Cerrar sesión" />
 
       {/* Barra de acciones admin */}
-      <div style={{ background:"rgba(0,0,0,0.2)", borderBottom:"1px solid rgba(255,255,255,0.08)", padding:"6px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <span style={{ color:"#aac4ff", fontSize:11, marginRight:"auto" }}>
+      <div style={{ background:"rgba(8,6,3,0.5)", borderBottom:"1px solid rgba(255,255,255,0.08)", padding:"6px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <span style={{ color:"#9A8A6A", fontSize:11, marginRight:"auto" }}>
           {new Date().toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
         </span>
         <button
@@ -2543,7 +2730,7 @@ export default function App() {
                   return (
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
-                      <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{t?.codigo}</td>
+                      <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>{r.fecha}</td>
                       <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{r.entrada}</td>
                       <td style={S.td}>
@@ -2560,12 +2747,12 @@ export default function App() {
 
             {/* ── Horas Extraordinarias ── */}
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
+              <h3 style={{ color:"#C9A84C", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
                 {regConExtraPendiente.length>0 && <span style={S.bdg("#e67e22")}>{regConExtraPendiente.length}</span>}
                 ⏱ Horas Extraordinarias Pendientes
               </h3>
               {regConExtraPendiente.length===0 ? (
-                <div style={{color:"#aac4ff",textAlign:"center",padding:24}}>✅ Sin horas extra pendientes</div>
+                <div style={{color:"#9A8A6A",textAlign:"center",padding:24}}>✅ Sin horas extra pendientes</div>
               ) : (
                 <table style={S.tbl}><thead><tr>
                   {["Trabajador","Código","Fecha","Entrada","Salida","H. Extra","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}
@@ -2576,11 +2763,11 @@ export default function App() {
                   return (
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
-                      <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{t?.codigo}</td>
+                      <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>{r.fecha}</td>
                       <td style={S.td}>{r.entrada}</td>
                       <td style={S.td}>{r.salida}</td>
-                      <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{h.extra}h</td>
+                      <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{h.extra}h</td>
                       <td style={S.td}>
                         <div style={{display:"flex",gap:6}}>
                           <button onClick={()=>aprobarExtra(r.id)} style={S.btnG}>✓ Aprobar</button>
@@ -2596,12 +2783,12 @@ export default function App() {
 
             {/* ── Solicitudes Permisos y Vacaciones ── */}
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
+              <h3 style={{ color:"#C9A84C", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
                 {solPendientes.length>0 && <span style={S.bdg("#3498db")}>{solPendientes.length}</span>}
                 📝 Permisos y Vacaciones Pendientes
               </h3>
               {solPendientes.length===0 ? (
-                <div style={{color:"#aac4ff",textAlign:"center",padding:24}}>✅ Sin solicitudes pendientes</div>
+                <div style={{color:"#9A8A6A",textAlign:"center",padding:24}}>✅ Sin solicitudes pendientes</div>
               ) : (
                 <table style={S.tbl}><thead><tr>
                   {["Trabajador","Tipo","Desde","Hasta","Motivo","Acción"].map(h=><th key={h} style={S.th}>{h}</th>)}
@@ -2610,11 +2797,11 @@ export default function App() {
                   const t=trabajadores.find(x=>x.id===s.tId);
                   return (
                     <tr key={s.id}>
-                      <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#FFD700",fontSize:11}}>({t?.codigo})</span></td>
+                      <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                       <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
                       <td style={S.td}>{s.fechaDesde}</td>
                       <td style={S.td}>{s.fechaHasta!==s.fechaDesde?s.fechaHasta:"—"}</td>
-                      <td style={{...S.td,color:"#aac4ff",fontSize:12}}>{s.motivo||"—"}</td>
+                      <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{s.motivo||"—"}</td>
                       <td style={S.td}>
                         <div style={{display:"flex",gap:6}}>
                           <button onClick={()=>aprobarSolicitud(s.id)} style={S.btnG}>✓ Aprobar</button>
@@ -2630,12 +2817,12 @@ export default function App() {
 
             {/* ── Anticipos ── */}
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
+              <h3 style={{ color:"#C9A84C", marginTop:0, display:"flex", alignItems:"center", gap:10 }}>
                 {anticipos.filter(a=>a.estado==="pendiente").length>0 && <span style={S.bdg("#8e44ad")}>{anticipos.filter(a=>a.estado==="pendiente").length}</span>}
                 🏦 Anticipos de Remuneración Pendientes
               </h3>
               {anticipos.filter(a=>a.estado==="pendiente").length===0 ? (
-                <div style={{color:"#aac4ff",textAlign:"center",padding:24}}>✅ Sin anticipos pendientes</div>
+                <div style={{color:"#9A8A6A",textAlign:"center",padding:24}}>✅ Sin anticipos pendientes</div>
               ) : (
                 <table style={S.tbl}><thead><tr>
                   {["Trabajador","Mes","Monto","Motivo","Acción"].map(h=><th key={h} style={S.th}>{h}</th>)}
@@ -2644,10 +2831,10 @@ export default function App() {
                   const t=trabajadores.find(x=>x.id===a.tId);
                   return (
                     <tr key={a.id}>
-                      <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#FFD700",fontSize:11}}>({t?.codigo})</span></td>
+                      <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                       <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
-                      <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>${Number(a.monto).toLocaleString("es-CL")}</td>
-                      <td style={{...S.td,color:"#aac4ff",fontSize:12}}>{a.motivo||"—"}</td>
+                      <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>${Number(a.monto).toLocaleString("es-CL")}</td>
+                      <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{a.motivo||"—"}</td>
                       <td style={S.td}>
                         <div style={{display:"flex",gap:6}}>
                           <button onClick={()=>aprobarAnticipo(a.id)} style={S.btnG}>✓ Aprobar</button>
@@ -2663,10 +2850,10 @@ export default function App() {
 
             {/* ── Historial reciente resuelto ── */}
             <div style={S.card}>
-              <h4 style={{color:"#aac4ff",marginTop:0}}>📋 Historial reciente resuelto</h4>
+              <h4 style={{color:"#9A8A6A",marginTop:0}}>📋 Historial reciente resuelto</h4>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,fontSize:12}}>
                 <div>
-                  <div style={{color:"#aac4ff",marginBottom:6,fontWeight:"bold"}}>H. Extra resueltas</div>
+                  <div style={{color:"#9A8A6A",marginBottom:6,fontWeight:"bold"}}>H. Extra resueltas</div>
                   {[...registros.filter(r=>r.salida&&(r.estado==="aprobado"||r.estado==="rechazado")&&calcularHoras(r.entrada,r.salida,r.fecha).extra>0)].reverse().slice(0,5).map(r=>{
                     const t=trabajadores.find(x=>x.id===r.tId);
                     const h=calcularHoras(r.entrada,r.salida,r.fecha);
@@ -2674,14 +2861,14 @@ export default function App() {
                   })}
                 </div>
                 <div>
-                  <div style={{color:"#aac4ff",marginBottom:6,fontWeight:"bold"}}>Solicitudes resueltas</div>
+                  <div style={{color:"#9A8A6A",marginBottom:6,fontWeight:"bold"}}>Solicitudes resueltas</div>
                   {[...solicitudes.filter(s=>s.estado!=="pendiente")].reverse().slice(0,5).map(s=>{
                     const t=trabajadores.find(x=>x.id===s.tId);
                     return <div key={s.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} {s.tipo} <span style={S.bdg(s.estado==="aprobado"?"#27ae60":"#c0392b")}>{s.estado==="aprobado"?"✓":"✗"}</span></div>;
                   })}
                 </div>
                 <div>
-                  <div style={{color:"#aac4ff",marginBottom:6,fontWeight:"bold"}}>Anticipos resueltos</div>
+                  <div style={{color:"#9A8A6A",marginBottom:6,fontWeight:"bold"}}>Anticipos resueltos</div>
                   {[...anticipos.filter(a=>a.estado!=="pendiente")].reverse().slice(0,5).map(a=>{
                     const t=trabajadores.find(x=>x.id===a.tId);
                     return <div key={a.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} ${Number(a.monto).toLocaleString("es-CL")} <span style={S.bdg(a.estado==="aprobado"?"#27ae60":"#c0392b")}>{a.estado==="aprobado"?"✓":"✗"}</span></div>;
@@ -2699,8 +2886,8 @@ export default function App() {
                 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
                   <div style={{...S.card,maxWidth:460,width:"100%",border:"2px solid #e67e22"}}>
                     <h3 style={{color:"#e67e22",marginTop:0}}>⏰ Entrada Anticipada — Validar</h3>
-                    <div style={{background:"rgba(255,255,255,0.05)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}>
-                      <div><strong style={{color:"#FFD700"}}>{nombreCompleto(trab)}</strong> <span style={{color:"#aac4ff"}}>({trab.codigo})</span></div>
+                    <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}>
+                      <div><strong style={{color:"#C9A84C"}}>{nombreCompleto(trab)}</strong> <span style={{color:"#9A8A6A"}}>({trab.codigo})</span></div>
                       <div style={{marginTop:4}}>Fecha: <strong>{reg.fecha}</strong> | Hora marcada: <strong style={{color:"#e67e22"}}>{reg.entrada}</strong></div>
                     </div>
                     <div style={{marginBottom:14}}>
@@ -2708,7 +2895,7 @@ export default function App() {
                       <input type="time" style={S.input}
                         value={entradaAnticModal.horaCorregida || "08:00"}
                         onChange={e => setEntradaAnticModal(p => ({...p, horaCorregida: e.target.value}))} />
-                      <div style={{color:"#aac4ff",fontSize:11,marginTop:4}}>
+                      <div style={{color:"#9A8A6A",fontSize:11,marginTop:4}}>
                         Si aprueba se mantiene {reg.entrada}. Si corrige se registra la hora indicada.
                       </div>
                     </div>
@@ -2749,7 +2936,7 @@ export default function App() {
             {/* ── Subtab: VER REGISTROS ── */}
             {subTabAsist==="ver" && (
               <div style={S.card}>
-                <h3 style={{color:"#FFD700",marginTop:0}}>📋 Registros de Asistencia</h3>
+                <h3 style={{color:"#C9A84C",marginTop:0}}>📋 Registros de Asistencia</h3>
                 {/* Filtros */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
                   <div>
@@ -2798,7 +2985,7 @@ export default function App() {
                           return (
                             <tr key={r.id} style={{background:editando?"rgba(41,128,185,0.15)":esp?"rgba(142,68,173,0.09)":"transparent"}}>
                               <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
-                              <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{t?.codigo}</td>
+                              <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                               <td style={S.td}>
                                 {editando
                                   ? <input type="date" style={{...S.input,padding:"4px 8px",fontSize:12,width:130}} value={regEditFecha} onChange={e=>setRegEditFecha(e.target.value)}/>
@@ -2851,8 +3038,8 @@ export default function App() {
             {/* ── Subtab: MANUAL ── */}
             {subTabAsist==="manual" && (
               <div style={S.card}>
-                <h3 style={{color:"#FFD700",marginTop:0}}>✏️ Ingresar Registro Manual</h3>
-                <p style={{color:"#aac4ff",fontSize:12,marginTop:0,marginBottom:16}}>
+                <h3 style={{color:"#C9A84C",marginTop:0}}>✏️ Ingresar Registro Manual</h3>
+                <p style={{color:"#9A8A6A",fontSize:12,marginTop:0,marginBottom:16}}>
                   Usa esta opción cuando un trabajador haya olvidado marcar. Los registros manuales quedan con etiqueta <span style={S.bdg("#2980b9")}>Manual</span>.
                 </p>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -2869,12 +3056,12 @@ export default function App() {
                     <label style={S.lbl}>Fecha</label>
                     <input type="date" style={S.input} value={regManFecha} onChange={e=>setRegManFecha(e.target.value)}/>
                   </div>
-                  <div style={{background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#aac4ff"}}>
+                  <div style={{background:"rgba(12,10,5,0.6)",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#9A8A6A"}}>
                     {regManFecha&&(
                       <>
                         <div>📅 {new Date(regManFecha+"T12:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
                         {esEspecial(regManFecha)&&<div style={{color:"#e67e22",marginTop:4}}>⚠️ {esDomingo(regManFecha)?"Domingo":"Feriado"} — generará día compensatorio</div>}
-                        {esViernes(regManFecha)&&!esEspecial(regManFecha)&&<div style={{color:"#aac4ff",marginTop:4}}>Viernes — jornada hasta 14:00</div>}
+                        {esViernes(regManFecha)&&!esEspecial(regManFecha)&&<div style={{color:"#9A8A6A",marginTop:4}}>Viernes — jornada hasta 14:00</div>}
                       </>
                     )}
                   </div>
@@ -2888,8 +3075,8 @@ export default function App() {
                   </div>
                 </div>
                 {regManTrabId&&regManFecha&&regManEntrada&&regManSalida&&(
-                  <div style={{background:"rgba(255,255,255,0.05)",borderRadius:8,padding:"12px 16px",marginTop:14,fontSize:12}}>
-                    <div style={{color:"#aac4ff",fontWeight:"bold",marginBottom:6}}>Preview:</div>
+                  <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"12px 16px",marginTop:14,fontSize:12}}>
+                    <div style={{color:"#9A8A6A",fontWeight:"bold",marginBottom:6}}>Preview:</div>
                     {(()=>{
                       const hc=calcularHoras(regManEntrada,regManSalida,regManFecha);
                       return <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
@@ -2908,7 +3095,7 @@ export default function App() {
                 {/* Registros recientes del trabajador seleccionado */}
                 {regManTrabId&&(
                   <div style={{marginTop:20}}>
-                    <h4 style={{color:"#aac4ff",marginBottom:10}}>
+                    <h4 style={{color:"#9A8A6A",marginBottom:10}}>
                       Registros recientes — {nombreCompleto(trabajadores.find(t=>t.id===Number(regManTrabId)))}
                     </h4>
                     <div style={{overflowX:"auto"}}>
@@ -2941,7 +3128,7 @@ export default function App() {
             {/* ── Subtab: HOJA MENSUAL ── */}
             {subTabAsist==="hoja" && (
               <div style={S.card}>
-                <h3 style={{color:"#FFD700",marginTop:0}}>📄 Hoja de Asistencia Mensual</h3>
+                <h3 style={{color:"#C9A84C",marginTop:0}}>📄 Hoja de Asistencia Mensual</h3>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:12,alignItems:"end",marginBottom:16}}>
                   <div>
                     <label style={S.lbl}>Trabajador</label>
@@ -2983,7 +3170,7 @@ export default function App() {
                     return (
                       <div key={t.id} style={{...S.card,marginTop:12,padding:14}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
-                          <span style={{color:"#FF6B00",fontWeight:"bold"}}>{nombreCompleto(t)} <span style={{color:"#aac4ff",fontSize:12}}>({t.codigo})</span></span>
+                          <span style={{color:"#FF6B00",fontWeight:"bold"}}>{nombreCompleto(t)} <span style={{color:"#9A8A6A",fontSize:12}}>({t.codigo})</span></span>
                           <div style={{display:"flex",gap:16,fontSize:12}}>
                             <span>📆 <strong style={{color:"#27ae60"}}>{regsDelMes.length}</strong> días</span>
                             <span>⏱ <strong style={{color:totalExt>0?"#FFD700":"#aaa"}}>{totalExt>0?totalExt.toFixed(1)+"h extra":"sin extra"}</strong></span>
@@ -3004,12 +3191,12 @@ export default function App() {
                                 return (
                                   <tr key={fecha} style={{background:bgC}}>
                                     <td style={{...S.td,fontWeight:"bold",textAlign:"center"}}>{i+1}</td>
-                                    <td style={{...S.td,color:"#aac4ff",textAlign:"center"}}>{dias[diaN]}</td>
+                                    <td style={{...S.td,color:"#9A8A6A",textAlign:"center"}}>{dias[diaN]}</td>
                                     <td style={{...S.td,textAlign:"center",color:reg?.entradaAnticipada?"#e67e22":"inherit"}}>{reg?reg.entrada:"—"}</td>
                                     <td style={{...S.td,textAlign:"center"}}>{reg&&reg.salida?reg.salida:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h?"#27ae60":"#aaa"}}>{h?`${h.normales}h`:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h&&h.extra>0?"#FFD700":"#aaa",fontWeight:h&&h.extra>0?"bold":"normal"}}>{h&&h.extra>0?`${h.extra}h`:"—"}</td>
-                                    <td style={{...S.td,fontSize:10,color:"#aac4ff"}}>{esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":reg?.entradaAnticipada?"⏰ Ant.":""}</td>
+                                    <td style={{...S.td,fontSize:10,color:"#9A8A6A"}}>{esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":reg?.entradaAnticipada?"⏰ Ant.":""}</td>
                                   </tr>
                                 );
                               })}
@@ -3075,7 +3262,7 @@ export default function App() {
             {subTabNomina==="lista" && (
               <div style={S.card}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
-                  <h3 style={{color:"#FFD700",margin:0}}>👥 Nómina de Trabajadores</h3>
+                  <h3 style={{color:"#C9A84C",margin:0}}>👥 Nómina de Trabajadores</h3>
                   <button
                     onClick={()=>{
                       setSubTabNomina("fichas");
@@ -3098,10 +3285,10 @@ export default function App() {
                     <tbody>
                       {trabajadores.filter(t=>t.id!==999).map(t=>(
                         <tr key={t.id} style={{opacity:t.activo?1:0.5}}>
-                          <td style={{...S.td,color:"#FFD700",fontWeight:"bold",fontSize:14}}>{t.codigo}</td>
+                          <td style={{...S.td,color:"#C9A84C",fontWeight:"bold",fontSize:14}}>{t.codigo}</td>
                           <td style={{...S.td,fontWeight:"bold"}}>{nombreCompleto(t)}</td>
                           <td style={S.td}>{t.rut}</td>
-                          <td style={{...S.td,color:"#aac4ff",fontSize:12}}>{t.ficha?.cargo||"—"}</td>
+                          <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{t.ficha?.cargo||"—"}</td>
                           <td style={S.td}>{t.ficha?.afp||"—"}</td>
                           <td style={S.td}>{t.ficha?.prevision||"—"}</td>
                           <td style={{...S.td,fontSize:12}}>{t.ficha?.fechaIngreso||"—"}</td>
@@ -3148,8 +3335,8 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
-                <div style={{marginTop:10,color:"#aac4ff",fontSize:12,textAlign:"right"}}>
-                  Total activos: <strong style={{color:"#FFD700"}}>{trabajadores.filter(t=>t.activo&&t.id!==999).length}</strong> trabajadores
+                <div style={{marginTop:10,color:"#9A8A6A",fontSize:12,textAlign:"right"}}>
+                  Total activos: <strong style={{color:"#C9A84C"}}>{trabajadores.filter(t=>t.activo&&t.id!==999).length}</strong> trabajadores
                 </div>
               </div>
             )}
@@ -3162,7 +3349,7 @@ export default function App() {
 
                 {/* ════ LISTA LATERAL ════ */}
                 <div style={{width:200,flexShrink:0}}>
-                  <div style={{background:"rgba(0,0,0,0.2)",border:"1px solid rgba(255,255,255,0.08)",
+                  <div style={{background:"rgba(8,6,3,0.5)",border:"1px solid rgba(255,255,255,0.08)",
                     borderRadius:12,padding:14,position:"sticky",top:10}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                       <span style={{color:"#FF6B00",fontWeight:"bold",fontSize:11,textTransform:"uppercase",letterSpacing:1.5}}>Personal</span>
@@ -3188,8 +3375,8 @@ export default function App() {
                           borderRadius:8,padding:"10px 12px",cursor:"pointer",marginBottom:6,fontFamily:"Georgia,serif",transition:"all 0.15s"}}>
                         <div style={{color:t.id===fichaSelId&&fichaMode!=="nuevo"?"#FF6B00":"#FFD700",fontWeight:"bold",fontSize:11,letterSpacing:1}}>{t.codigo}</div>
                         <div style={{color:"#fff",fontSize:12,marginTop:2,fontWeight:"bold"}}>{t.nombre} {t.apellido}</div>
-                        {t.apellidoM&&<div style={{color:"#aac4ff",fontSize:11}}>{t.apellidoM}</div>}
-                        <div style={{color:"#7a99cc",fontSize:10,marginTop:2}}>{t.rut}</div>
+                        {t.apellidoM&&<div style={{color:"#9A8A6A",fontSize:11}}>{t.apellidoM}</div>}
+                        <div style={{color:"#7A6A4A",fontSize:10,marginTop:2}}>{t.rut}</div>
                         {t.ficha?.fechaSalida&&(
                           <div style={{background:"rgba(192,57,43,0.3)",color:"#ffaaaa",fontSize:9,
                             fontWeight:"bold",padding:"1px 6px",borderRadius:4,marginTop:3,display:"inline-block"}}>
@@ -3200,7 +3387,7 @@ export default function App() {
                     ))}
                     {fichaMode==="nuevo"&&(
                       <div style={{background:"rgba(255,215,0,0.08)",border:"1px dashed rgba(255,215,0,0.4)",
-                        borderRadius:8,padding:"10px 12px",fontSize:11,color:"#FFD700",marginTop:6}}>
+                        borderRadius:8,padding:"10px 12px",fontSize:11,color:"#C9A84C",marginTop:6}}>
                         ✏️ Nueva ficha en proceso...
                       </div>
                     )}
@@ -3224,10 +3411,10 @@ export default function App() {
                       <div>
                         {fichaMode==="nuevo"?(
                           <>
-                            <div style={{color:"#FFD700",fontWeight:"bold",fontSize:18}}>✏️ Nueva Ficha de Trabajador</div>
+                            <div style={{color:"#C9A84C",fontWeight:"bold",fontSize:18}}>✏️ Nueva Ficha de Trabajador</div>
                             {fichaDraft?.apellido&&(
-                              <div style={{color:"#aac4ff",fontSize:12,marginTop:3}}>
-                                Código que se asignará: <strong style={{color:"#FFD700",fontSize:14}}>
+                              <div style={{color:"#9A8A6A",fontSize:12,marginTop:3}}>
+                                Código que se asignará: <strong style={{color:"#C9A84C",fontSize:14}}>
                                   {generarCodigo(fichaDraft.apellido,trabajadores.filter(t=>t.id!==999))}
                                 </strong>
                               </div>
@@ -3236,7 +3423,7 @@ export default function App() {
                         ):fichaMode==="editar"?(
                           <>
                             <div style={{color:"#3498db",fontWeight:"bold",fontSize:18}}>✏️ Editando Ficha</div>
-                            <div style={{color:"#aac4ff",fontSize:12,marginTop:3}}>
+                            <div style={{color:"#9A8A6A",fontSize:12,marginTop:3}}>
                               {[fichaDraft?.nombre,fichaDraft?.apellido,fichaDraft?.apellidoM].filter(Boolean).join(" ")}
                             </div>
                           </>
@@ -3245,10 +3432,10 @@ export default function App() {
                           return <>
                             <div style={{color:"#FF6B00",fontWeight:"bold",fontSize:20}}>{tr.nombre} {tr.apellido} {tr.apellidoM}</div>
                             <div style={{display:"flex",gap:12,marginTop:4,flexWrap:"wrap",fontSize:12}}>
-                              <span style={{color:"#aac4ff"}}>Código: <strong style={{color:"#FFD700"}}>{tr.codigo}</strong></span>
-                              <span style={{color:"#aac4ff"}}>RUT: <strong style={{color:"#fff"}}>{tr.rut}</strong></span>
-                              {tr.ficha?.cargo&&<span style={{color:"#aac4ff"}}>Cargo: <strong style={{color:"#fff"}}>{tr.ficha.cargo}</strong></span>}
-                              {tr.ficha?.fechaIngreso&&<span style={{color:"#aac4ff"}}>Desde: <strong style={{color:"#fff"}}>{tr.ficha.fechaIngreso}</strong></span>}
+                              <span style={{color:"#9A8A6A"}}>Código: <strong style={{color:"#C9A84C"}}>{tr.codigo}</strong></span>
+                              <span style={{color:"#9A8A6A"}}>RUT: <strong style={{color:"#fff"}}>{tr.rut}</strong></span>
+                              {tr.ficha?.cargo&&<span style={{color:"#9A8A6A"}}>Cargo: <strong style={{color:"#fff"}}>{tr.ficha.cargo}</strong></span>}
+                              {tr.ficha?.fechaIngreso&&<span style={{color:"#9A8A6A"}}>Desde: <strong style={{color:"#fff"}}>{tr.ficha.fechaIngreso}</strong></span>}
                             </div>
                           </>;
                         })():null}
@@ -3279,7 +3466,7 @@ export default function App() {
                               💾 Grabar
                             </button>
                             <button onClick={()=>{setFichaMode("ver");setFichaDraft(null);setFichaGuardMsg({tipo:"",txt:""});if(!fichaSelId){const p=trabajadores.filter(x=>x.activo&&x.id!==999)[0];if(p)setFichaSelId(p.id);}}}
-                              style={{background:"rgba(255,255,255,0.08)",color:"#aac4ff",border:"1px solid rgba(255,255,255,0.2)",
+                              style={{background:"rgba(22,20,12,0.8)",color:"#9A8A6A",border:"1px solid rgba(255,255,255,0.2)",
                                 borderRadius:8,padding:"10px 16px",cursor:"pointer",fontSize:12,fontFamily:"Georgia,serif"}}>
                               ✗ Cancelar
                             </button>
@@ -3334,7 +3521,7 @@ export default function App() {
           <div style={{ marginTop:4 }}>
             {/* Generador */}
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0 }}>💰 Generar Liquidación de Sueldo</h3>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>💰 Generar Liquidación de Sueldo</h3>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr auto", gap:12, alignItems:"end", marginBottom:16 }}>
                 <div>
                   <label style={S.lbl}>Trabajador</label>
@@ -3363,13 +3550,13 @@ export default function App() {
 
               {/* Preview liquidación */}
               {liqPreview && (
-                <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:12, padding:18, marginTop:12, border:"1px solid rgba(255,215,0,0.3)" }}>
+                <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:12, padding:18, marginTop:12, border:"1px solid rgba(255,215,0,0.3)" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:10 }}>
                     <div>
-                      <div style={{ color:"#FFD700", fontWeight:"bold", fontSize:15 }}>
+                      <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>
                         Vista Previa — {liqPreview.nombre}
                       </div>
-                      <div style={{ color:"#aac4ff", fontSize:12 }}>
+                      <div style={{ color:"#9A8A6A", fontSize:12 }}>
                         {mesNombre(liqPreview.mes)} {liqPreview.anio} · {liqPreview.diasTrab} días trabajados · {liqPreview.horasExtra}h extra
                       </div>
                     </div>
@@ -3379,8 +3566,8 @@ export default function App() {
                     </div>
                   </div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, fontSize:12 }}>
-                    <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"10px 14px" }}>
-                      <div style={{ color:"#aac4ff", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
+                    <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
+                      <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
                         ["Sueldo Base", liqPreview.sueldoBase],
                         ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+liqPreview.horasExtra+"h)", liqPreview.valorHHExtra]]:[]),
@@ -3396,8 +3583,8 @@ export default function App() {
                         </div>
                       ))}
                     </div>
-                    <div style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"10px 14px" }}>
-                      <div style={{ color:"#aac4ff", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
+                    <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
+                      <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
                       {[
                         [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
                         ["Salud (7%)", liqPreview.salud_monto],
@@ -3423,9 +3610,9 @@ export default function App() {
 
             {/* Historial liquidaciones */}
             <div style={S.card}>
-              <h3 style={{ color:"#aac4ff", marginTop:0 }}>Historial de Liquidaciones Enviadas</h3>
+              <h3 style={{ color:"#9A8A6A", marginTop:0 }}>Historial de Liquidaciones Enviadas</h3>
               {liquidaciones.length===0
-                ? <div style={{ color:"#aac4ff", textAlign:"center", padding:30 }}>Sin liquidaciones generadas</div>
+                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:30 }}>Sin liquidaciones generadas</div>
                 : <div style={{ overflowX:"auto" }}>
                     <table style={S.tbl}>
                       <thead><tr>{["Trabajador","Período","Total Haberes","Descuentos","Alcance Líquido","Estado","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
@@ -3435,9 +3622,9 @@ export default function App() {
                           const t=trabajadores.find(x=>x.id===liq.tId);
                           return(
                             <tr key={liq.id}>
-                              <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#FFD700",fontSize:11}}>({t?.codigo})</span></td>
+                              <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                               <td style={S.td}>{mesNombre(liq.mes)} {liq.anio}</td>
-                              <td style={{ ...S.td, color:"#FFD700" }}>${d.totalHaberes.toLocaleString("es-CL")}</td>
+                              <td style={{ ...S.td, color:"#C9A84C" }}>${d.totalHaberes.toLocaleString("es-CL")}</td>
                               <td style={{ ...S.td, color:"#e74c3c" }}>${d.totalDescuentos.toLocaleString("es-CL")}</td>
                               <td style={{ ...S.td, color:"#27ae60", fontWeight:"bold" }}>${d.alcanceLiquido.toLocaleString("es-CL")}</td>
                               <td style={S.td}>
@@ -3462,9 +3649,9 @@ export default function App() {
         {tabAdmin==="compensat" && (
           <div>
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0 }}>📅 Días Compensatorios</h3>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>📅 Días Compensatorios</h3>
               {compensatorios.length===0 ? (
-                <div style={{ color:"#aac4ff", textAlign:"center", padding:36 }}>No hay días compensatorios</div>
+                <div style={{ color:"#9A8A6A", textAlign:"center", padding:36 }}>No hay días compensatorios</div>
               ) : (
                 <div style={{ overflowX:"auto" }}>
                   <table style={S.tbl}>
@@ -3474,7 +3661,7 @@ export default function App() {
                         const t=trabajadores.find(x=>x.id===c.tId);
                         return (
                           <tr key={c.id}>
-                            <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#FFD700",fontSize:11}}>({t?.codigo})</span></td>
+                            <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                             <td style={S.td}>{c.fecha}</td>
                             <td style={S.td}><span style={S.bdg(esDomingo(c.fecha)?"#8e44ad":"#c0392b")}>{esDomingo(c.fecha)?"Dom":"Feriado"}</span></td>
                             <td style={S.td}>
@@ -3500,7 +3687,7 @@ export default function App() {
             </div>
             {/* Resumen */}
             <div style={S.card}>
-              <h4 style={{ color:"#aac4ff", marginTop:0 }}>Resumen por Trabajador</h4>
+              <h4 style={{ color:"#9A8A6A", marginTop:0 }}>Resumen por Trabajador</h4>
               <table style={S.tbl}>
                 <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
@@ -3508,7 +3695,7 @@ export default function App() {
                     const cs=compensatorios.filter(c=>c.tId===t.id);
                     return(
                       <tr key={t.id}>
-                        <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#FFD700"}}>({t.codigo})</span></td>
+                        <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#C9A84C"}}>({t.codigo})</span></td>
                         <td style={S.td}>{cs.length}</td>
                         <td style={{...S.td,color:"#27ae60"}}>{cs.filter(c=>c.estado==="tomado").length}</td>
                         <td style={{...S.td,color:"#3498db"}}>{cs.filter(c=>c.estado==="pagado").length}</td>
@@ -3519,6 +3706,207 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ── TAB: CALENDARIO ────────────────────────────── */}
+        {tabAdmin==="calendario" && (
+          <div style={{marginTop:4}}>
+            <div style={{...S.card, marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+                <h3 style={{color:"#C9A84C",margin:0}}>🗓 Calendario de Vacaciones y Permisos</h3>
+                <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                  <button onClick={()=>{
+                    const d = new Date(calAnio, calMes-1, 1);
+                    setCalMes(d.getMonth()); setCalAnio(d.getFullYear());
+                  }} style={{...S.btnS, padding:"6px 14px", fontSize:16}}>‹</button>
+                  <span style={{color:"#C9A84C",fontWeight:"bold",fontSize:16,minWidth:160,textAlign:"center"}}>
+                    {mesNombre(calMes)} {calAnio}
+                  </span>
+                  <button onClick={()=>{
+                    const d = new Date(calAnio, calMes+1, 1);
+                    setCalMes(d.getMonth()); setCalAnio(d.getFullYear());
+                  }} style={{...S.btnS, padding:"6px 14px", fontSize:16}}>›</button>
+                  <button onClick={()=>{setCalMes(new Date().getMonth());setCalAnio(new Date().getFullYear());}}
+                    style={{...S.btn, padding:"6px 14px", fontSize:12}}>Hoy</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Leyenda de colores por trabajador */}
+            {(()=>{
+              const trabActivos = trabajadores.filter(t=>t.activo&&t.id!==999);
+              const COLORES = ["#C9A84C","#3498db","#27ae60","#9b59b6","#e67e22","#e74c3c","#1abc9c","#f39c12","#2ecc71","#e91e63"];
+
+              // Obtener solicitudes aprobadas del mes
+              const diasEnMes = new Date(calAnio, calMes+1, 0).getDate();
+              const primerDia = new Date(calAnio, calMes, 1).getDay(); // 0=Dom
+
+              // Para cada trabajador, qué días tiene vacaciones/permiso aprobados
+              const getEventosTrab = (tId) => {
+                const sols = solicitudes.filter(s =>
+                  s.tId === tId && s.estado === "aprobado"
+                );
+                const diasMarcados = new Set();
+                sols.forEach(s => {
+                  const desde = new Date(s.fechaDesde+"T12:00:00");
+                  const hasta = new Date(s.fechaHasta+"T12:00:00");
+                  for(let d = new Date(desde); d <= hasta; d.setDate(d.getDate()+1)) {
+                    if(d.getMonth()===calMes && d.getFullYear()===calAnio) {
+                      diasMarcados.add(d.getDate());
+                    }
+                  }
+                });
+                return diasMarcados;
+              };
+
+              const eventosPorTrab = {};
+              trabActivos.forEach((t,i) => {
+                eventosPorTrab[t.id] = {
+                  dias: getEventosTrab(t.id),
+                  color: COLORES[i % COLORES.length],
+                  nombre: `${t.nombre} ${t.apellido}`,
+                  codigo: t.codigo,
+                };
+              });
+
+              return (
+                <div>
+                  {/* Leyenda */}
+                  <div style={{...S.card, display:"flex", flexWrap:"wrap", gap:10, padding:"12px 16px", marginBottom:14}}>
+                    {trabActivos.map((t,i) => (
+                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:12,height:12,borderRadius:3,background:COLORES[i%COLORES.length],flexShrink:0}}/>
+                        <span style={{color:"#9A8A6A",fontSize:12}}>{t.nombre} {t.apellido}</span>
+                        <span style={{color:"rgba(201,168,76,0.5)",fontSize:11}}>({t.codigo})</span>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
+                      <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,100,100,0.4)",flexShrink:0}}/>
+                      <span style={{color:"#9A8A6A",fontSize:12}}>Feriado</span>
+                      <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
+                      <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
+                    </div>
+                  </div>
+
+                  {/* Grilla del calendario */}
+                  <div style={S.card}>
+                    {/* Cabeceras días semana */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+                      {["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(d=>(
+                        <div key={d} style={{textAlign:"center",fontSize:11,fontWeight:"bold",
+                          color:"#C9A84C",padding:"6px 0",letterSpacing:1,textTransform:"uppercase"}}>
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Días */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+                      {/* Celdas vacías al inicio */}
+                      {Array.from({length:primerDia},(_,i)=>(
+                        <div key={`v${i}`} style={{minHeight:80,borderRadius:6,background:"rgba(5,4,2,0.3)"}}/>
+                      ))}
+
+                      {/* Días del mes */}
+                      {Array.from({length:diasEnMes},(_,i)=>{
+                        const dia = i+1;
+                        const fechaStr = `${calAnio}-${String(calMes+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+                        const diaSem = new Date(fechaStr+"T12:00:00").getDay();
+                        const esFinSem = diaSem===0||diaSem===6;
+                        const esFer = esFeriado(fechaStr);
+                        const esHoy = fechaStr===hoy();
+
+                        // Quién tiene eventos este día
+                        const eventosHoy = trabActivos
+                          .filter(t => eventosPorTrab[t.id]?.dias.has(dia))
+                          .map((t,idx) => ({
+                            nombre: t.nombre+" "+t.apellido,
+                            codigo: t.codigo,
+                            color: eventosPorTrab[t.id].color,
+                          }));
+
+                        return (
+                          <div key={dia} style={{
+                            minHeight:80, borderRadius:6, padding:"6px 4px",
+                            background: esHoy
+                              ? "rgba(201,168,76,0.12)"
+                              : esFer
+                                ? "rgba(180,30,30,0.08)"
+                                : esFinSem
+                                  ? "rgba(5,4,2,0.5)"
+                                  : "rgba(12,10,6,0.6)",
+                            border: esHoy
+                              ? "1.5px solid rgba(201,168,76,0.5)"
+                              : esFer
+                                ? "1px solid rgba(180,30,30,0.2)"
+                                : "1px solid rgba(201,168,76,0.06)",
+                            position:"relative",
+                          }}>
+                            {/* Número del día */}
+                            <div style={{
+                              fontSize:13, fontWeight: esHoy?"bold":"normal",
+                              color: esHoy?"#C9A84C":esFer?"#e74c3c":esFinSem?"rgba(154,138,106,0.5)":"#9A8A6A",
+                              marginBottom:4, textAlign:"right", paddingRight:2,
+                            }}>
+                              {dia}
+                              {esFer&&<span style={{fontSize:9,display:"block",color:"rgba(231,76,60,0.7)"}}>Fer.</span>}
+                            </div>
+
+                            {/* Eventos del día */}
+                            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                              {eventosHoy.map((ev,idx)=>(
+                                <div key={idx} title={`${ev.nombre} (${ev.codigo})`}
+                                  style={{
+                                    background:ev.color,
+                                    borderRadius:3, padding:"2px 4px",
+                                    fontSize:9, color:"#000",
+                                    fontWeight:"bold", overflow:"hidden",
+                                    whiteSpace:"nowrap", textOverflow:"ellipsis",
+                                    boxShadow:`0 1px 4px ${ev.color}44`,
+                                  }}>
+                                  {ev.codigo}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Resumen del mes */}
+                  {trabActivos.some(t=>eventosPorTrab[t.id]?.dias.size>0) && (
+                    <div style={S.card}>
+                      <div style={{color:"#C9A84C",fontWeight:"bold",marginBottom:12,fontSize:13,textTransform:"uppercase",letterSpacing:1}}>
+                        Resumen — {mesNombre(calMes)} {calAnio}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:8}}>
+                        {trabActivos.filter(t=>eventosPorTrab[t.id]?.dias.size>0).map((t,i)=>(
+                          <div key={t.id} style={{
+                            background:"rgba(12,10,6,0.6)",
+                            border:`1px solid ${COLORES[i%COLORES.length]}33`,
+                            borderLeft:`3px solid ${COLORES[i%COLORES.length]}`,
+                            borderRadius:8, padding:"10px 14px",
+                          }}>
+                            <div style={{fontWeight:"bold",fontSize:13,color:COLORES[i%COLORES.length]}}>{t.nombre} {t.apellido}</div>
+                            <div style={{color:"#9A8A6A",fontSize:12,marginTop:4}}>
+                              {eventosPorTrab[t.id].dias.size} día(s) de ausencia aprobada
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!trabActivos.some(t=>eventosPorTrab[t.id]?.dias.size>0) && (
+                    <div style={{...S.card,textAlign:"center",color:"#9A8A6A",padding:32}}>
+                      ✅ Sin vacaciones ni permisos aprobados para {mesNombre(calMes)} {calAnio}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -3539,7 +3927,7 @@ export default function App() {
                   {[2024,2025,2026].map(a=><option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
-              <div style={{ marginLeft:"auto", color:"#FFD700", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
+              <div style={{ marginLeft:"auto", color:"#C9A84C", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
             </div>
 
             {/* KPIs */}
@@ -3555,14 +3943,14 @@ export default function App() {
                   <div style={{ fontSize:28 }}>{x.icon}</div>
                   <div style={{ fontSize:28, fontWeight:"bold", color:x.c, margin:"4px 0" }}>{x.val}</div>
                   <div style={{ color:"#fff", fontSize:12, fontWeight:"bold" }}>{x.lbl}</div>
-                  <div style={{ color:"#7a99cc", fontSize:11, marginTop:2 }}>{x.sub}</div>
+                  <div style={{ color:"#7A6A4A", fontSize:11, marginTop:2 }}>{x.sub}</div>
                 </div>
               ))}
             </div>
 
             {/* Tabla detalle */}
             <div style={S.card}>
-              <h3 style={{ color:"#FFD700", marginTop:0 }}>Detalle por Trabajador — {mesNombre(dMes)} {dAnio}</h3>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — {mesNombre(dMes)} {dAnio}</h3>
               <div style={{ overflowX:"auto" }}>
                 <table style={S.tbl}>
                   <thead><tr>{["Trabajador","Cód","Días Háb","Días Trab","Asistencia","Ausencias","Dom/Fer","H. Extra","C. Pend","C. Tom","C. Pag"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
@@ -3570,15 +3958,15 @@ export default function App() {
                     {dashData.map(d=>(
                       <tr key={d.id}>
                         <td style={S.td}>{d.nombre}</td>
-                        <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{d.codigo}</td>
-                        <td style={{...S.td,color:"#aac4ff"}}>{d.habilMes}</td>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{d.codigo}</td>
+                        <td style={{...S.td,color:"#9A8A6A"}}>{d.habilMes}</td>
                         <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{d.diasTrab}</td>
                         <td style={S.td}>
                           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                            <div style={{ flex:1, background:"rgba(255,255,255,0.1)", borderRadius:4, height:6, minWidth:50 }}>
+                            <div style={{ flex:1, background:"rgba(30,26,15,0.8)", borderRadius:4, height:6, minWidth:50 }}>
                               <div style={{ width:`${d.pct}%`, background:d.pct>=90?"#27ae60":d.pct>=70?"#f39c12":"#c0392b", height:"100%", borderRadius:4 }} />
                             </div>
-                            <span style={{ fontSize:11, color:"#aac4ff" }}>{d.pct}%</span>
+                            <span style={{ fontSize:11, color:"#9A8A6A" }}>{d.pct}%</span>
                           </div>
                         </td>
                         <td style={{...S.td,color:d.ausencias>0?"#e74c3c":"#27ae60",fontWeight:d.ausencias>0?"bold":"normal"}}>{d.ausencias>0?`⚠ ${d.ausencias}`:"✓ 0"}</td>
@@ -3593,12 +3981,12 @@ export default function App() {
                   {dashData.length>0&&(
                     <tfoot>
                       <tr style={{ background:"rgba(255,215,0,0.08)", borderTop:"2px solid rgba(255,215,0,0.3)" }}>
-                        <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}} colSpan={3}>TOTALES</td>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}} colSpan={3}>TOTALES</td>
                         <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.diasTrab,0)}</td>
                         <td style={S.td}>—</td>
                         <td style={{...S.td,color:"#e74c3c",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.ausencias,0)}</td>
                         <td style={{...S.td,color:"#8e44ad",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.diasEsp,0)}</td>
-                        <td style={{...S.td,color:"#FFD700",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+parseFloat(d.extra),0).toFixed(1)}h</td>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+parseFloat(d.extra),0).toFixed(1)}h</td>
                         <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compPend,0)}</td>
                         <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compTom,0)}</td>
                         <td style={{...S.td,color:"#3498db",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compPag,0)}</td>
@@ -3617,15 +4005,15 @@ export default function App() {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
               {/* EXPORTAR */}
               <div style={S.card}>
-                <h3 style={{ color:"#FFD700", marginTop:0 }}>💾 Exportar Datos</h3>
-                <p style={{ color:"#aac4ff", fontSize:13, lineHeight:1.6 }}>
-                  Descarga un archivo <strong style={{color:"#FFD700"}}>JSON</strong> con toda la información del sistema:
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>💾 Exportar Datos</h3>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                  Descarga un archivo <strong style={{color:"#C9A84C"}}>JSON</strong> con toda la información del sistema:
                   trabajadores, registros de asistencia, compensatorios, solicitudes y notificaciones.
                 </p>
-                <p style={{ color:"#aac4ff", fontSize:13, lineHeight:1.6 }}>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
                   Guarda este archivo en un lugar seguro. Úsalo para restaurar los datos en caso de falla.
                 </p>
-                <div style={{ background:"rgba(255,215,0,0.08)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#aac4ff" }}>
+                <div style={{ background:"rgba(255,215,0,0.08)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#9A8A6A" }}>
                   <div>📋 Trabajadores: <strong style={{color:"#fff"}}>{trabajadores.filter(t=>t.id!==999).length}</strong></div>
                   <div>📆 Registros: <strong style={{color:"#fff"}}>{registros.length}</strong></div>
                   <div>📅 Compensatorios: <strong style={{color:"#fff"}}>{compensatorios.length}</strong></div>
@@ -3635,15 +4023,15 @@ export default function App() {
                 <button onClick={exportarDatos} style={{ ...S.btn, width:"100%", fontSize:14, padding:"13px 0" }}>
                   ⬇ Descargar Backup JSON
                 </button>
-                <div style={{ color:"#aac4ff", fontSize:11, marginTop:10, textAlign:"center" }}>
+                <div style={{ color:"#9A8A6A", fontSize:11, marginTop:10, textAlign:"center" }}>
                   Archivo: pazvial-rrhh-backup-{hoy()}.json
                 </div>
               </div>
 
               {/* IMPORTAR */}
               <div style={S.card}>
-                <h3 style={{ color:"#FFD700", marginTop:0 }}>📂 Importar Datos</h3>
-                <p style={{ color:"#aac4ff", fontSize:13, lineHeight:1.6 }}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📂 Importar Datos</h3>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
                   Restaura el sistema desde un archivo de backup previamente exportado.
                 </p>
                 <div style={{ background:"rgba(39,174,96,0.15)", border:"1px solid rgba(39,174,96,0.4)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#aaffcc" }}>
@@ -3653,7 +4041,7 @@ export default function App() {
                   ⬆ Seleccionar archivo de Backup
                 </button>
                 <MsgBox m={importMsg} />
-                <div style={{ color:"#aac4ff", fontSize:11, marginTop:10, textAlign:"center" }}>
+                <div style={{ color:"#9A8A6A", fontSize:11, marginTop:10, textAlign:"center" }}>
                   Solo archivos .json exportados desde este sistema
                 </div>
               </div>
@@ -3668,8 +4056,8 @@ export default function App() {
               <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
                 <Logo size={48} />
                 <div>
-                  <h2 style={{ color:"#FFD700", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
-                  <div style={{ color:"#aac4ff", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Administrador — Gestión de Personas Paz Vial SpA</div>
+                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
+                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Administrador — Gestión de Personas Paz Vial SpA</div>
                 </div>
               </div>
 
@@ -3794,7 +4182,19 @@ export default function App() {
                   ]
                 },
                 {
-                  icon:"📄", titulo:"8. Módulo: Hoja de Asistencia Mensual",
+                  icon:"🗓", titulo:"8. Módulo: Calendario",
+                  items:[
+                    "Vista mensual que muestra visualmente quién tiene vacaciones o permisos aprobados en cada día del mes.",
+                    "Navega entre meses con las flechas ‹ › o vuelve al mes actual con el botón 'Hoy'.",
+                    "Cada trabajador tiene un color único asignado automáticamente. Los días con ausencias muestran el código del trabajador en su color.",
+                    "El día de hoy aparece resaltado en dorado. Los feriados en rojo y los fines de semana en gris oscuro.",
+                    "La leyenda superior muestra el color y nombre de cada trabajador para identificarlos fácilmente.",
+                    "Al pie del calendario aparece un resumen con los trabajadores que tienen días aprobados en el mes y cuántos días.",
+                    "Solo muestra vacaciones y permisos en estado Aprobado — las solicitudes pendientes no aparecen en el calendario.",
+                  ]
+                },
+                {
+                  icon:"📄", titulo:"9. Módulo: Hoja de Asistencia Mensual",
                   items:[
                     "Genera un documento PDF con el registro diario de asistencia de uno o todos los trabajadores activos.",
                     "Selecciona trabajador (opcional), mes y año, luego haz clic en 'Generar PDF'.",
@@ -3807,7 +4207,7 @@ export default function App() {
                   ]
                 },
                 {
-                  icon:"💾", titulo:"9. Módulo: Exportar / Importar",
+                  icon:"💾", titulo:"10. Módulo: Exportar / Importar",
                   items:[
                     "Exportar: descarga un archivo JSON con todos los datos del sistema (trabajadores, registros, compensatorios, solicitudes y notificaciones). Guárdalo en un lugar seguro.",
                     "El nombre del archivo incluye la fecha del día: pazvial-rrhh-backup-AAAA-MM-DD.json.",
@@ -3817,7 +4217,7 @@ export default function App() {
                   ]
                 },
                 {
-                  icon:"💡", titulo:"10. Buenas Prácticas de Administración",
+                  icon:"💡", titulo:"11. Buenas Prácticas de Administración",
                   items:[
                     "Revisa diariamente las horas extraordinarias y solicitudes pendientes para dar respuesta oportuna a los trabajadores.",
                     "Siempre indica un motivo claro y constructivo al rechazar una solicitud o horas extra, ya que el trabajador lo leerá.",
@@ -3830,12 +4230,12 @@ export default function App() {
                 <div key={sec.titulo} style={{ marginBottom:24 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
                     <span style={{ fontSize:24 }}>{sec.icon}</span>
-                    <h3 style={{ color:"#FFD700", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
+                    <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
                   </div>
                   <div style={{ paddingLeft:34 }}>
                     {sec.items.map((item, i) => (
                       <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
-                        <span style={{ color:"#FFD700", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
+                        <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
                         <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
                       </div>
                     ))}
@@ -3844,15 +4244,15 @@ export default function App() {
               ))}
 
               <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
-                <div style={{ color:"#FFD700", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
+                <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                  <div style={{ background:"rgba(0,0,0,0.2)", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ color:"#aac4ff", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Acceso Administrador</div>
-                    <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#FFD700"}}>Negra2026</strong></div>
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Acceso Administrador</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#C9A84C"}}>Negra2026</strong></div>
                   </div>
-                  <div style={{ background:"rgba(0,0,0,0.2)", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ color:"#aac4ff", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba (Trabajador)</div>
-                    <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#FFD700"}}>Administrador</strong> · RUT: <strong style={{color:"#FFD700"}}>Pruebas</strong></div>
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba (Trabajador)</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
                   </div>
                 </div>
               </div>
