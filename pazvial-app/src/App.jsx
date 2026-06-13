@@ -1088,6 +1088,30 @@ export default function App() {
     if (nuevos.length) setComps(p => [...p, ...nuevos]);
   }, [registros]);
 
+  // ── Re-sincronizar trabActivo cuando Firebase actualiza la lista ──────
+  // Evita que un trabajador con sesión abierta quede con un ID desactualizado
+  useEffect(() => {
+    if (!trabActivo) return;
+    // Buscar por ID exacto primero
+    const mismoId = trabajadores.find(x => x.id === trabActivo.id && x.activo);
+    if (mismoId) {
+      // Actualizar datos (nombre, cargo, etc.) sin cambiar la sesión
+      if (JSON.stringify(mismoId) !== JSON.stringify(trabActivo)) {
+        setTrabActivo({ ...mismoId });
+      }
+      return;
+    }
+    // Si no existe el ID, buscar por código (el trabajador fue recreado)
+    const porCodigo = trabajadores.find(x =>
+      x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() && x.activo
+    );
+    if (porCodigo) {
+      // Sesión recuperada con el ID correcto — el trabajador no notará nada
+      setTrabActivo({ ...porCodigo });
+    }
+    // Si tampoco existe por código, la sesión quedará inválida y confirmarMarca lo detectará
+  }, [trabajadores]);
+
   // ── Notif helper ──────────────────────────────────────
   function pushNotif(tId, msg) {
     setNotifs(p => [...p, { id:nowId(), tId, msg, leida:false, fecha: hoy() }]);
@@ -1108,9 +1132,11 @@ export default function App() {
       if (t.rut.toLowerCase() === "pruebas") return lRut.trim().toLowerCase() === "pruebas";
       return t.rut.replace(/[^0-9kK]/g,"").toLowerCase() === lRut.replace(/[^0-9kK]/g,"").toLowerCase();
     };
+    // Buscar siempre desde la lista vigente en memoria (ya sincronizada con Firebase)
     const t = trabajadores.find(x => codigoOk(x) && rutOk(x) && x.activo);
     if (!t) { setLError("Código o RUT incorrecto."); return; }
-    setTrabActivo(t);
+    // Guardar snapshot actualizado del trabajador al momento del login
+    setTrabActivo({ ...t });
     setVista("trab");
     setTabTrab("marcar");
     setLCodigo(""); setLRut("");
@@ -1127,7 +1153,15 @@ export default function App() {
     setMarcaMsg({ tipo:"", txt:"" });
     const fechaHoy = hoy();
     const hora     = horaActual();
-    const regHoy   = registros.find(r => r.tId === trabActivo.id && r.fecha === fechaHoy);
+
+    // Verificar que el trabajador logueado sigue siendo válido en el sistema actual
+    const trabVigente = trabajadores.find(x => x.id === trabActivo.id && x.activo);
+    const idReal = trabVigente ? trabVigente.id
+      : trabajadores.find(x =>
+          x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() && x.activo
+        )?.id;
+
+    const regHoy = registros.find(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
 
     // Validaciones previas
     if (tipoMarca === "entrada") {
@@ -1144,7 +1178,31 @@ export default function App() {
   function confirmarMarca() {
     if (!marcaConfirm) return;
     const { tipo, hora, fecha } = marcaConfirm;
-    const regHoy = registros.find(r => r.tId === trabActivo.id && r.fecha === fecha);
+
+    // ── Validación de identidad: verificar que trabActivo.id sigue vigente ──
+    // Evita el bug donde el trabajador tiene una sesión con un ID antiguo
+    // (puede ocurrir si se importó un backup o se recreó el trabajador)
+    const trabVigente = trabajadores.find(x => x.id === trabActivo.id && x.activo);
+    if (!trabVigente) {
+      // Intentar recuperar por código+rut (el trabajador existe pero con otro ID)
+      const trabPorCodigo = trabajadores.find(x =>
+        x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() &&
+        x.rut.replace(/[^0-9kK]/g,"").toLowerCase() === (trabActivo.rut||"").replace(/[^0-9kK]/g,"").toLowerCase() &&
+        x.activo
+      );
+      if (trabPorCodigo) {
+        // El trabajador existe con un ID distinto — actualizar sesión automáticamente
+        setTrabActivo({ ...trabPorCodigo });
+        setMarcaConfirm(null);
+        setMarcaMsg({ tipo:"err", txt:"⚠️ Tu sesión fue actualizada automáticamente. Por favor intenta marcar de nuevo." });
+      } else {
+        setMarcaConfirm(null);
+        setMarcaMsg({ tipo:"err", txt:"❌ No se encontró tu perfil en el sistema. Cierra sesión e ingresa nuevamente." });
+      }
+      return;
+    }
+
+    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
     const [hh] = hora.split(":").map(Number);
     const esAnticipada = hh < 8;
 
@@ -1155,7 +1213,8 @@ export default function App() {
     let nuevosRegistros;
     if (tipo === "entrada") {
       const estadoInicial = esAnticipada ? "pendiente_entrada" : "pendiente";
-      const nuevoReg = { id:nowId(), tId:trabActivo.id, fecha, entrada:hora, salida:null, estado:estadoInicial, motivoRechazo:"", entradaAnticipada: esAnticipada };
+      // Usar trabVigente.id (ID real y actual del trabajador en Firebase)
+      const nuevoReg = { id:nowId(), tId:trabVigente.id, fecha, entrada:hora, salida:null, estado:estadoInicial, motivoRechazo:"", entradaAnticipada: esAnticipada };
       nuevosRegistros = [...registros, nuevoReg];
     } else {
       nuevosRegistros = registros.map(r => r.id===regHoy.id ? {...r, salida:hora} : r);
