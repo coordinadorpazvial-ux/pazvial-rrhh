@@ -3178,7 +3178,18 @@ export default function App() {
                                     <button onClick={cancelarEdicion} style={S.btnD}>✗</button>
                                   </div>
                                 ) : (
-                                  <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
+                                  <div style={{display:"flex",gap:4}}>
+                                    <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
+                                    <button
+                                      onClick={()=>{
+                                        if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
+                                          setRegistros(p=>p.filter(x=>x.id!==r.id));
+                                        }
+                                      }}
+                                      style={{...S.btnD,fontSize:11,padding:"4px 10px"}}
+                                      title="Eliminar registro"
+                                    >🗑️</button>
+                                  </div>
                                 )}
                               </td>
                             </tr>
