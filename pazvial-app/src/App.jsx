@@ -956,6 +956,11 @@ export default function App() {
   // ── Confirmar limpiar datos ficticios ──────────────────
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
 
+  // ── Modal confirmación de marca (entrada/salida) ───────
+  const [marcaConfirm,   setMarcaConfirm]   = useState(null);   // {tipo, hora, fecha} | null
+  const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
+  const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
+
   // ── Liquidaciones ──────────────────────────────────────
   const [liquidaciones, setLiquidaciones] = useState([]);
   // {id, tId, mes, anio, datos:{...}, estado:"borrador"|"enviada"|"firmada",
