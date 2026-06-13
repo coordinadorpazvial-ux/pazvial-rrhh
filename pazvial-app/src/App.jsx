@@ -841,6 +841,41 @@ const S = {
 };
 
 // ═══════════════════════════════════════════════════════════
+// MODAL MOTIVO RECHAZO — definido GLOBALMENTE para que React
+// no lo re-monte en cada render (evita pérdida de foco)
+// ═══════════════════════════════════════════════════════════
+function ModalMotivo({ motivoModal, setMotivoModal, onConfirmar }) {
+  if (!motivoModal) return null;
+  const mot = motivoModal.motivo || "";
+  const setMot = (v) => setMotivoModal(p => ({...p, motivo: v}));
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ ...S.card, maxWidth:440, width:"100%", border:"2px solid #e74c3c" }}>
+        <h3 style={{ color:"#e74c3c", marginTop:0 }}>❌ Motivo del Rechazo</h3>
+        <label style={S.lbl}>Indica el motivo (requerido)</label>
+        <textarea
+          style={{ ...S.input, minHeight:90, resize:"vertical" }}
+          value={mot}
+          onChange={e => setMot(e.target.value)}
+          placeholder="Escribe el motivo del rechazo..."
+          autoFocus
+        />
+        <div style={{ display:"flex", gap:10, marginTop:14 }}>
+          <button
+            onClick={() => onConfirmar(mot)}
+            style={S.btnD}
+            disabled={!mot.trim()}
+          >
+            Confirmar Rechazo
+          </button>
+          <button onClick={() => setMotivoModal(null)} style={S.btnS}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP PRINCIPAL
 // ═══════════════════════════════════════════════════════════
 export default function App() {
@@ -1888,53 +1923,7 @@ export default function App() {
     return <div style={m.tipo==="err" ? S.err : S.ok}>{m.txt}</div>;
   }
 
-  // ── Modal motivo rechazo ──────────────────────────────
-  // motivoModalTexto se gestiona en el estado principal
-  function ModalMotivo() {
-    if (!motivoModal) return null;
-    const mot = motivoModal.motivo || "";
-    const setMot = (v) => setMotivoModal(p => ({...p, motivo: v}));
-    return (
-      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-        <div style={{ ...S.card, maxWidth:440, width:"100%", border:"2px solid #e74c3c" }}>
-          <h3 style={{ color:"#e74c3c", marginTop:0 }}>❌ Motivo del Rechazo</h3>
-          <label style={S.lbl}>Indica el motivo (requerido)</label>
-          <textarea
-            style={{ ...S.input, minHeight:90, resize:"vertical" }}
-            value={mot}
-            onChange={e => setMot(e.target.value)}
-            placeholder="Escribe el motivo del rechazo..."
-          />
-          <div style={{ display:"flex", gap:10, marginTop:14 }}>
-            <button
-              onClick={() => {
-                if (motivoModal.tipo==="extra") {
-                  setRegistros(p => p.map(r => r.id===motivoModal.id ? {...r, estado:"rechazado", motivoRechazo:mot} : r));
-                  const r = registros.find(x => x.id===motivoModal.id);
-                  if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
-                } else if (motivoModal.tipo==="anticipo") {
-                  rechazarAnticipo(motivoModal.id, mot);
-                } else {
-                  setSolicitudes(p => p.map(s => s.id===motivoModal.id ? {...s, estado:"rechazado", motivoRechazo:mot} : s));
-                  const s = solicitudes.find(x => x.id===motivoModal.id);
-                  if (s) {
-                    const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-                    pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${s.fechaDesde} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
-                  }
-                }
-                setMotivoModal(null);
-              }}
-              style={S.btnD}
-              disabled={!mot.trim()}
-            >
-              Confirmar Rechazo
-            </button>
-            <button onClick={() => setMotivoModal(null)} style={S.btnS}>Cancelar</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // ModalMotivo se define globalmente (ver más abajo) para evitar re-montaje en cada render
 
   // ═══════════════════════════════════════════════════════
   // VISTA: PORTADA
@@ -2655,7 +2644,27 @@ export default function App() {
 
   return (
     <div style={S.app}>
-      <ModalMotivo />
+      <ModalMotivo
+        motivoModal={motivoModal}
+        setMotivoModal={setMotivoModal}
+        onConfirmar={(mot) => {
+          if (motivoModal.tipo==="extra") {
+            setRegistros(p => p.map(r => r.id===motivoModal.id ? {...r, estado:"rechazado", motivoRechazo:mot} : r));
+            const r = registros.find(x => x.id===motivoModal.id);
+            if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
+          } else if (motivoModal.tipo==="anticipo") {
+            rechazarAnticipo(motivoModal.id, mot);
+          } else {
+            setSolicitudes(p => p.map(s => s.id===motivoModal.id ? {...s, estado:"rechazado", motivoRechazo:mot} : s));
+            const s = solicitudes.find(x => x.id===motivoModal.id);
+            if (s) {
+              const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
+              pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${s.fechaDesde} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
+            }
+          }
+          setMotivoModal(null);
+        }}
+      />
       <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub="Panel de Administración"
         onBack={()=>setVista("portada")} backLabel="🚪 Cerrar sesión" />
 
