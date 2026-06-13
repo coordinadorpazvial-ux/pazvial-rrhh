@@ -20,9 +20,38 @@ const DB_DOC = "pazvial/datos";
 async function guardarEnFirebase(datos) {
   try {
     const [col, docId] = DB_DOC.split("/");
+
+    // Leer el estado actual de Firebase antes de guardar
+    // Esto evita sobreescribir registros creados por otros usuarios (ej: trabajadores marcando)
+    const snap = await getDoc(doc(db, col, docId));
+    if (snap.exists()) {
+      const remoto = snap.data();
+
+      // Merge de registros: conservar cualquier registro remoto que no esté en local
+      const idsLocales = new Set((datos.registros || []).map(r => r.id));
+      const registrosRemotos = (remoto.registros || []).filter(r => !idsLocales.has(r.id));
+      datos = { ...datos, registros: [...datos.registros, ...registrosRemotos] };
+
+      // Merge de solicitudes
+      const idsSolicLocal = new Set((datos.solicitudes || []).map(s => s.id));
+      const solicRemotas = (remoto.solicitudes || []).filter(s => !idsSolicLocal.has(s.id));
+      datos = { ...datos, solicitudes: [...datos.solicitudes, ...solicRemotas] };
+
+      // Merge de notificaciones
+      const idsNotifLocal = new Set((datos.notificaciones || []).map(n => n.id));
+      const notifsRemotas = (remoto.notificaciones || []).filter(n => !idsNotifLocal.has(n.id));
+      datos = { ...datos, notificaciones: [...datos.notificaciones, ...notifsRemotas] };
+
+      // Merge de anticipos
+      const idsAntLocal = new Set((datos.anticipos || []).map(a => a.id));
+      const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
+      datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
+    }
+
     await setDoc(doc(db, col, docId), datos);
   } catch(e) {
     console.error("Error guardando en Firebase:", e);
+    throw e; // Re-lanzar para que el reintento funcione
   }
 }
 
@@ -945,6 +974,7 @@ export default function App() {
   const [filtroRegTrab, setFiltroRegTrab] = useState("");
   const [filtroRegMes,  setFiltroRegMes]  = useState("");
   const [filtroRegAnio, setFiltroRegAnio] = useState(String(new Date().getFullYear()));
+  const [regOrden,      setRegOrden]      = useState("desc"); // "asc" | "desc"
 
   // ── Hoja de asistencia mensual ─────────────────────────
   const [hojaAsistMes,    setHojaAsistMes]    = useState(new Date().getMonth());
@@ -1033,7 +1063,9 @@ export default function App() {
     const style = document.createElement('style');
     style.id = 'pazvial-time-fix';
     style.textContent = `
-      input[type="time"]::-webkit-datetime-edit-ampm-field { display: none; }
+      input[type="time"]::-webkit-datetime-edit-ampm-field { display: none !important; width: 0 !important; }
+      input[type="time"]::-webkit-datetime-edit-hour-field,
+      input[type="time"]::-webkit-datetime-edit-minute-field { color: #F5F0E8; }
       input[type="time"] { -webkit-appearance: none; }
       input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
     `;
@@ -1083,13 +1115,34 @@ export default function App() {
     // No guardar si Firebase no está listo
     if (!firebaseListo.current) return;
 
-    const timeout = setTimeout(() => {
-      guardarEnFirebase({
-        trabajadores, registros,
-        compensatorios, solicitudes,
-        notificaciones, liquidaciones, anticipos,
-        ultimaActualizacion: new Date().toISOString(),
-      });
+    const timeout = setTimeout(async () => {
+      try {
+        const datosAGuardar = {
+          trabajadores, registros,
+          compensatorios, solicitudes,
+          notificaciones, liquidaciones, anticipos,
+          ultimaActualizacion: new Date().toISOString(),
+        };
+        // guardarEnFirebase ahora hace merge con Firebase antes de escribir
+        // y devuelve los datos finales (con registros remotos incluidos)
+        await guardarEnFirebase(datosAGuardar);
+
+        // Después del merge, re-leer Firebase para actualizar el estado local
+        // Esto asegura que el admin vea los registros que hicieron los trabajadores
+        const [col, docId] = "pazvial/datos".split("/");
+        const snap = await getDoc(doc(db, col, docId));
+        if (snap.exists()) {
+          const d = snap.data();
+          cargandoDesdeFirebase.current = true;
+          setRegistros(d.registros || []);
+          setSolicitudes(d.solicitudes || []);
+          setNotifs(d.notificaciones || []);
+          setAnticipos(d.anticipos || []);
+          setTimeout(() => { cargandoDesdeFirebase.current = false; }, 500);
+        }
+      } catch(e) {
+        console.error("Error en auto-guardado:", e);
+      }
     }, 2000);
     return () => clearTimeout(timeout);
   }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos]);
@@ -3029,7 +3082,7 @@ export default function App() {
               <div style={S.card}>
                 <h3 style={{color:"#C9A84C",marginTop:0}}>📋 Registros de Asistencia</h3>
                 {/* Filtros */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:14}}>
                   <div>
                     <label style={S.lbl}>Trabajador</label>
                     <select style={{...S.sel,width:"100%"}} value={filtroRegTrab} onChange={e=>setFiltroRegTrab(e.target.value)}>
@@ -3053,6 +3106,13 @@ export default function App() {
                       {[2024,2025,2026,2027].map(a=><option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label style={S.lbl}>Orden por fecha</label>
+                    <select style={{...S.sel,width:"100%"}} value={regOrden} onChange={e=>setRegOrden(e.target.value)}>
+                      <option value="desc">↓ Más reciente primero</option>
+                      <option value="asc">↑ Más antiguo primero</option>
+                    </select>
+                  </div>
                 </div>
                 {regEditMsg.txt && <div style={regEditMsg.tipo==="err"?S.err:S.ok}>{regEditMsg.txt}</div>}
                 <div style={{overflowX:"auto"}}>
@@ -3061,13 +3121,17 @@ export default function App() {
                       {["Trabajador","Código","Fecha","Entrada","Salida","H. Extra","Estado","Tipo","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {[...registros].reverse()
+                      {[...registros]
                         .filter(r=>{
                           if(filtroRegTrab && r.tId!==Number(filtroRegTrab)) return false;
                           if(filtroRegMes!=="" && new Date(r.fecha+"T12:00:00").getMonth()!==Number(filtroRegMes)) return false;
                           if(filtroRegAnio && new Date(r.fecha+"T12:00:00").getFullYear()!==Number(filtroRegAnio)) return false;
                           return true;
                         })
+                        .sort((a,b)=> regOrden==="asc"
+                          ? a.fecha.localeCompare(b.fecha) || a.entrada.localeCompare(b.entrada)
+                          : b.fecha.localeCompare(a.fecha) || b.entrada.localeCompare(a.entrada)
+                        )
                         .map(r=>{
                           const t=trabajadores.find(x=>x.id===r.tId);
                           const h=r.salida?calcularHoras(r.entrada,r.salida,r.fecha):null;
@@ -3158,11 +3222,11 @@ export default function App() {
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Entrada</label>
-                    <input type="time" step="60" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)}/>
+                    <input type="time" step="60" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)} placeholder="HH:MM"/>
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Salida <span style={{color:"#aaa",fontWeight:"normal"}}>(opcional)</span></label>
-                    <input type="time" step="60" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)}/>
+                    <input type="time" step="60" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)} placeholder="HH:MM"/>
                   </div>
                 </div>
                 {regManTrabId&&regManFecha&&regManEntrada&&regManSalida&&(
