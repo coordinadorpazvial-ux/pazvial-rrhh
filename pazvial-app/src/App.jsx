@@ -1028,6 +1028,24 @@ export default function App() {
   const firebaseListo = useRef(false);
   const cargandoDesdeFirebase = useRef(false);
 
+  // ── Estilos globales: forzar formato 24h en inputs de tiempo ─────────
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.id = 'pazvial-time-fix';
+    style.textContent = `
+      input[type="time"]::-webkit-datetime-edit-ampm-field { display: none; }
+      input[type="time"] { -webkit-appearance: none; }
+      input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+    `;
+    if (!document.getElementById('pazvial-time-fix')) {
+      document.head.appendChild(style);
+    }
+    return () => {
+      const el = document.getElementById('pazvial-time-fix');
+      if (el) el.remove();
+    };
+  }, []);
+
   // Cargar datos UNA sola vez al iniciar
   useEffect(() => {
     const [col, docId] = DB_DOC.split("/");
@@ -2965,7 +2983,7 @@ export default function App() {
                     </div>
                     <div style={{marginBottom:14}}>
                       <label style={S.lbl}>Hora corregida (si rechaza)</label>
-                      <input type="time" style={S.input}
+                      <input type="time" step="60" style={S.input}
                         value={entradaAnticModal.horaCorregida || "08:00"}
                         onChange={e => setEntradaAnticModal(p => ({...p, horaCorregida: e.target.value}))} />
                       <div style={{color:"#9A8A6A",fontSize:11,marginTop:4}}>
@@ -3066,12 +3084,12 @@ export default function App() {
                               </td>
                               <td style={S.td}>
                                 {editando
-                                  ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>
+                                  ? <input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>
                                   : <span style={{color:r.entradaAnticipada?"#e67e22":"inherit"}}>{r.entrada}</span>}
                               </td>
                               <td style={S.td}>
                                 {editando
-                                  ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
+                                  ? <input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
                                   : r.salida||<span style={{color:"#aaa"}}>—</span>}
                               </td>
                               <td style={{...S.td,color:h?.extra>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
@@ -3140,11 +3158,11 @@ export default function App() {
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Entrada</label>
-                    <input type="time" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)}/>
+                    <input type="time" step="60" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)}/>
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Salida <span style={{color:"#aaa",fontWeight:"normal"}}>(opcional)</span></label>
-                    <input type="time" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)}/>
+                    <input type="time" step="60" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)}/>
                   </div>
                 </div>
                 {regManTrabId&&regManFecha&&regManEntrada&&regManSalida&&(
@@ -3181,8 +3199,8 @@ export default function App() {
                         return (
                           <tr key={r.id} style={{background:editando?"rgba(41,128,185,0.2)":"transparent"}}>
                             <td style={S.td}>{editando?<input type="date" style={{...S.input,padding:"4px 8px",fontSize:12,width:130}} value={regEditFecha} onChange={e=>setRegEditFecha(e.target.value)}/>:r.fecha}</td>
-                            <td style={S.td}>{editando?<input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>:r.entrada}</td>
-                            <td style={S.td}>{editando?<input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>:r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
+                            <td style={S.td}>{editando?<input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>:r.entrada}</td>
+                            <td style={S.td}>{editando?<input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>:r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
                             <td style={{...S.td,color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
                             <td style={S.td}><span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":"#e67e22")}>{r.estado==="aprobado"?"✓ Apr":r.estado==="rechazado"?"✗ Rec":"● Pend"}</span></td>
                             <td style={S.td}>{r.manual&&<span style={S.bdg("#2980b9")}>Manual</span>}</td>
