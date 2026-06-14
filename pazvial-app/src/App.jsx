@@ -27,9 +27,13 @@ async function guardarEnFirebase(datos) {
     if (snap.exists()) {
       const remoto = snap.data();
 
-      // Merge de registros: conservar cualquier registro remoto que no esté en local
+      // Merge de registros: conservar remotos que no estén en local,
+      // pero respetar los que fueron eliminados explícitamente en esta sesión
       const idsLocales = new Set((datos.registros || []).map(r => r.id));
-      const registrosRemotos = (remoto.registros || []).filter(r => !idsLocales.has(r.id));
+      const idsEliminados = datos._eliminados || new Set();
+      const registrosRemotos = (remoto.registros || []).filter(r =>
+        !idsLocales.has(r.id) && !idsEliminados.has(r.id)
+      );
       datos = { ...datos, registros: [...datos.registros, ...registrosRemotos] };
 
       // Merge de solicitudes
@@ -48,7 +52,9 @@ async function guardarEnFirebase(datos) {
       datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
     }
 
-    await setDoc(doc(db, col, docId), datos);
+    // Eliminar campos internos antes de guardar en Firebase
+    const { _eliminados, ...datosLimpios } = datos;
+    await setDoc(doc(db, col, docId), datosLimpios);
   } catch(e) {
     console.error("Error guardando en Firebase:", e);
     throw e; // Re-lanzar para que el reintento funcione
@@ -911,6 +917,7 @@ export default function App() {
   // ── Estado global ──────────────────────────────────────
   const [trabajadores, setTrabajadores] = useState(T0);
   const [registros,    setRegistros]    = useState(R0);
+  const registrosEliminados = useRef(new Set()); // IDs eliminados en esta sesión
   const [compensatorios, setComps]      = useState([]);
   const [solicitudes,  setSolicitudes]  = useState([]); // permisos + vacaciones
   const [notificaciones, setNotifs]     = useState([]); // {id, tId, msg, leida}
@@ -1122,6 +1129,7 @@ export default function App() {
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
           ultimaActualizacion: new Date().toISOString(),
+          _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
         };
         // guardarEnFirebase ahora hace merge con Firebase antes de escribir
         // y devuelve los datos finales (con registros remotos incluidos)
@@ -3183,6 +3191,7 @@ export default function App() {
                                     <button
                                       onClick={()=>{
                                         if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
+                                          registrosEliminados.current.add(r.id);
                                           setRegistros(p=>p.filter(x=>x.id!==r.id));
                                         }
                                       }}
