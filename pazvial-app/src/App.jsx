@@ -81,7 +81,7 @@ const esDomingo  = d => new Date(d+"T12:00:00").getDay() === 0;
 const esViernes  = d => new Date(d+"T12:00:00").getDay() === 5;
 const esSabado   = d => new Date(d+"T12:00:00").getDay() === 6;
 const esFeriado  = d => FERIADOS.has(d);
-const esEspecial = d => esDomingo(d) || esFeriado(d);
+const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 
 function calcularHoras(entrada, salida, fecha) {
@@ -89,7 +89,11 @@ function calcularHoras(entrada, salida, fecha) {
   const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
   const total = toMin(salida) - toMin(entrada);
   if (total <= 0) return { normales: 0, extra: 0 };
-  if (esEspecial(fecha)) return { normales: 0, extra: +(total/60).toFixed(2) };
+  if (esEspecial(fecha)) {
+    // Sábado, domingo y feriado: todo es extra con mínimo garantizado de 8h
+    const efectivas = +(total/60).toFixed(2);
+    return { normales: 0, extra: Math.max(efectivas, 8) };
+  }
   const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00
   const norm = Math.max(0, Math.min(toMin(salida), fin) - Math.max(toMin(entrada), 480));
   return { normales: +(norm/60).toFixed(2), extra: +((total-norm)/60).toFixed(2) };
@@ -3246,7 +3250,7 @@ export default function App() {
                     {regManFecha&&(
                       <>
                         <div>📅 {new Date(regManFecha+"T12:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
-                        {esEspecial(regManFecha)&&<div style={{color:"#e67e22",marginTop:4}}>⚠️ {esDomingo(regManFecha)?"Domingo":"Feriado"} — generará día compensatorio</div>}
+                        {esEspecial(regManFecha)&&<div style={{color:"#e67e22",marginTop:4}}>⚠️ {esDomingo(regManFecha)?"Domingo":esSabado(regManFecha)?"Sábado":"Feriado"} — mínimo 8h extra garantizadas</div>}
                         {esViernes(regManFecha)&&!esEspecial(regManFecha)&&<div style={{color:"#9A8A6A",marginTop:4}}>Viernes — jornada hasta 14:00</div>}
                       </>
                     )}
@@ -3352,7 +3356,8 @@ export default function App() {
                     const diasEnMes=new Date(hojaAsistAnio,hojaAsistMes+1,0).getDate();
                     const regsDelMes=regsT.filter(r=>{const d=new Date(r.fecha+"T12:00:00");return d.getMonth()===hojaAsistMes&&d.getFullYear()===hojaAsistAnio;});
                     let totalExt=0;
-                    regsDelMes.forEach(r=>{if(r.salida){const h=calcularHoras(r.entrada,r.salida,r.fecha);totalExt+=h.extra;}});
+                    // Solo sumar horas extra aprobadas
+                    regsDelMes.forEach(r=>{if(r.salida&&r.estado==="aprobado"){const h=calcularHoras(r.entrada,r.salida,r.fecha);totalExt+=h.extra;}});
                     return (
                       <div key={t.id} style={{...S.card,marginTop:12,padding:14}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
@@ -3372,8 +3377,16 @@ export default function App() {
                                 const reg=regsT.find(r=>r.fecha===fecha);
                                 const diaN=new Date(fecha+"T12:00:00").getDay();
                                 const h=reg&&reg.salida?calcularHoras(reg.entrada,reg.salida,fecha):null;
+                                const extraAprobada=h&&h.extra>0&&reg.estado==="aprobado";
                                 const bgC=esDomingo(fecha)||esFeriado(fecha)?"rgba(255,215,0,0.08)":diaN===6?"rgba(255,255,255,0.03)":"transparent";
                                 const dias=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+                                const obsColor=h&&h.extra>0&&reg.estado==="rechazado"?"#e74c3c"
+                                             :h&&h.extra>0&&reg.estado==="pendiente"?"#e67e22"
+                                             :h&&h.extra>0&&reg.estado==="aprobado"?"#27ae60":"#9A8A6A";
+                                const obsLabel=h&&h.extra>0&&reg.estado==="rechazado"?"✗ HE Rechazada"
+                                             :h&&h.extra>0&&reg.estado==="pendiente"?"⏳ HE Pendiente"
+                                             :h&&h.extra>0&&reg.estado==="aprobado"?"✓ HE Aprobada"
+                                             :esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":reg?.entradaAnticipada?"⏰ Ant.":"";
                                 return (
                                   <tr key={fecha} style={{background:bgC}}>
                                     <td style={{...S.td,fontWeight:"bold",textAlign:"center"}}>{i+1}</td>
@@ -3381,8 +3394,8 @@ export default function App() {
                                     <td style={{...S.td,textAlign:"center",color:reg?.entradaAnticipada?"#e67e22":"inherit"}}>{reg?reg.entrada:"—"}</td>
                                     <td style={{...S.td,textAlign:"center"}}>{reg&&reg.salida?reg.salida:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h?"#27ae60":"#aaa"}}>{h?`${h.normales}h`:"—"}</td>
-                                    <td style={{...S.td,textAlign:"center",color:h&&h.extra>0?"#FFD700":"#aaa",fontWeight:h&&h.extra>0?"bold":"normal"}}>{h&&h.extra>0?`${h.extra}h`:"—"}</td>
-                                    <td style={{...S.td,fontSize:10,color:"#9A8A6A"}}>{esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":reg?.entradaAnticipada?"⏰ Ant.":""}</td>
+                                    <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${h.extra}h`:"—"}</td>
+                                    <td style={{...S.td,fontSize:10,color:obsColor}}>{obsLabel}</td>
                                   </tr>
                                 );
                               })}
