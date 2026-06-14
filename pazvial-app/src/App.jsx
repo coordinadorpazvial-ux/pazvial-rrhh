@@ -1686,18 +1686,29 @@ export default function App() {
         const esFer = esFeriado(fecha);
         const esDom = diaSem===0;
         const h = reg&&reg.salida ? calcularHoras(reg.entrada,reg.salida,fecha) : null;
+        // Solo contar horas extra si el registro fue aprobado (no rechazado ni pendiente)
+        const extraAprobada = h&&h.extra>0&&reg.estado==="aprobado";
         if(reg) totalDias++;
-        if(h&&h.extra>0) totalExtra+=h.extra;
+        if(extraAprobada) totalExtra+=h.extra;
         const bgRow = esDom||esFer ? "#fff3cd" : esSabado(fecha) ? "#f8f9fa" : "#fff";
         const diaLabel = nombresDias[diaSem];
+        // Observación: mostrar estado del registro si hay horas extra pendientes o rechazadas
+        const obsExtra = h&&h.extra>0&&reg.estado==="rechazado" ? "HE Rechazada"
+                       : h&&h.extra>0&&reg.estado==="pendiente" ? "HE Pendiente"
+                       : h&&h.extra>0&&reg.estado==="aprobado"  ? "HE Aprobada"
+                       : esFer?"Feriado":esDom?"Domingo":"";
+        const obsColor = h&&h.extra>0&&reg.estado==="rechazado" ? "#c0392b"
+                       : h&&h.extra>0&&reg.estado==="pendiente" ? "#e67e22"
+                       : h&&h.extra>0&&reg.estado==="aprobado"  ? "#27ae60"
+                       : "#666";
         filas += `<tr style="background:${bgRow}">
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold">${String(new Date(fecha+"T12:00:00").getDate()).padStart(2,"0")}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:#666">${diaLabel}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${reg?reg.entrada:"—"}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${reg&&reg.salida?reg.salida:"—"}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${h&&h.extra>0?"#c0392b":"#27ae60"}">${h?`${h.normales}h`:"—"}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${h&&h.extra>0?"#e67e22":"#aaa"};font-weight:${h&&h.extra>0?"bold":"normal"}">${h&&h.extra>0?`${h.extra}h`:"—"}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:10px">${esFer?"Feriado":esDom?"Domingo":""}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${extraAprobada?"#e67e22":"#aaa"};font-weight:${extraAprobada?"bold":"normal"}">${extraAprobada?`${h.extra}h`:"—"}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:10px;color:${obsColor}">${obsExtra}</td>
         </tr>`;
       });
 
