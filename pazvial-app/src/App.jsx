@@ -50,6 +50,11 @@ async function guardarEnFirebase(datos) {
       const idsAntLocal = new Set((datos.anticipos || []).map(a => a.id));
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
       datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
+
+      // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
+      const codigosLocal = new Set(datos.codigosUsados || []);
+      const codigosRemotos = (remoto.codigosUsados || []).filter(c => !codigosLocal.has(c));
+      datos = { ...datos, codigosUsados: [...(datos.codigosUsados||[]), ...codigosRemotos] };
     }
 
     // Eliminar campos internos antes de guardar en Firebase
@@ -82,6 +87,7 @@ const esViernes  = d => new Date(d+"T12:00:00").getDay() === 5;
 const esSabado   = d => new Date(d+"T12:00:00").getDay() === 6;
 const esFeriado  = d => FERIADOS.has(d);
 const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
+const esCompensable = d => esDomingo(d) || esFeriado(d); // genera día compensatorio (sábado NO genera)
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 
 function calcularHoras(entrada, salida, fecha) {
@@ -99,10 +105,19 @@ function calcularHoras(entrada, salida, fecha) {
   return { normales: +(norm/60).toFixed(2), extra: +((total-norm)/60).toFixed(2) };
 }
 
-function generarCodigo(apellido, lista) {
+function generarCodigo(apellido, lista, historicos = []) {
   const ini = (apellido.trim().toUpperCase()[0]) || "X";
-  const n = lista.filter(t => (t.apellido.trim().toUpperCase()[0]||"X") === ini).length + 1;
-  return `P${ini}${String(n).padStart(2,"0")}`;
+  const prefijo = `P${ini}`;
+  // Buscar el número más alto YA USADO con esa inicial, combinando trabajadores
+  // activos/inactivos actuales (lista) + historial de eliminados (historicos),
+  // para nunca repetir un código aunque el trabajador haya sido eliminado
+  const todos = [...lista.map(t => t.codigo), ...historicos];
+  const numerosUsados = todos
+    .filter(c => c && c.toUpperCase().startsWith(prefijo))
+    .map(c => parseInt(c.slice(prefijo.length), 10))
+    .filter(n => !isNaN(n));
+  const max = numerosUsados.length ? Math.max(...numerosUsados) : 0;
+  return `${prefijo}${String(max + 1).padStart(2,"0")}`;
 }
 
 function fmtRut(r) {
@@ -922,6 +937,7 @@ export default function App() {
   const [trabajadores, setTrabajadores] = useState(T0);
   const [registros,    setRegistros]    = useState(R0);
   const registrosEliminados = useRef(new Set()); // IDs eliminados en esta sesión
+  const [codigosUsados, setCodigosUsados] = useState([]); // historial de códigos asignados, sobrevive eliminación de trabajadores
   const [compensatorios, setComps]      = useState([]);
   const [solicitudes,  setSolicitudes]  = useState([]); // permisos + vacaciones
   const [notificaciones, setNotifs]     = useState([]); // {id, tId, msg, leida}
@@ -1107,6 +1123,7 @@ export default function App() {
           setNotifs(data.notificaciones || []);
           setLiquidaciones(data.liquidaciones || []);
           setAnticipos(data.anticipos || []);
+          setCodigosUsados(data.codigosUsados || []);
         }
       }
     }).finally(() => {
@@ -1132,6 +1149,7 @@ export default function App() {
           trabajadores, registros,
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
+          codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
         };
@@ -1152,19 +1170,25 @@ export default function App() {
           setAnticipos(d.anticipos || []);
           setTimeout(() => { cargandoDesdeFirebase.current = false; }, 500);
         }
+        setSyncEstado("ok");
+        setMarcaMsg(m => m.tipo==="ok" && m.txt.includes("Guardando...")
+          ? { tipo:"ok", txt: m.txt.replace("Guardando...", "Guardado ✓") }
+          : m);
       } catch(e) {
         console.error("Error en auto-guardado:", e);
+        setSyncEstado("error");
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados]);
 
   // ── Compensatorios: auto-generar ───────────────────────
   useEffect(() => {
     const ids = new Set(compensatorios.map(c => c.registroId));
     const nuevos = [];
     registros.forEach(r => {
-      if (!ids.has(r.id) && esEspecial(r.fecha) && r.salida) {
+      // Solo domingo y feriado generan día compensatorio (sábado NO genera, solo cuenta como hora extra)
+      if (!ids.has(r.id) && esCompensable(r.fecha) && r.salida) {
         nuevos.push({ id:nowId(), registroId:r.id, tId:r.tId, fecha:r.fecha, estado:"pendiente", fechaTomado:"" });
       }
     });
@@ -1303,37 +1327,20 @@ export default function App() {
       nuevosRegistros = registros.map(r => r.id===regHoy.id ? {...r, salida:hora} : r);
     }
 
+    // Actualizar SOLO el estado local. El guardado real a Firebase lo hace
+    // el useEffect de auto-guardado (única fuente de escritura, evita condición
+    // de carrera entre esta función y el auto-guardado disparándose a la vez).
     setRegistros(nuevosRegistros);
+    setMarcaGuardando(false);
+    setSyncEstado("guardando"); // el useEffect lo pondrá en "ok" cuando termine
 
-    // Guardar inmediatamente en Firebase con reintento
-    const intentarGuardar = async (intentos = 0) => {
-      try {
-        await guardarEnFirebase({
-          trabajadores, registros: nuevosRegistros,
-          compensatorios, solicitudes,
-          notificaciones, liquidaciones, anticipos,
-          ultimaActualizacion: new Date().toISOString(),
-        });
-        setSyncEstado("ok");
-        setMarcaGuardando(false);
-        if (tipo === "entrada") {
-          setMarcaMsg({ tipo:"ok", txt: esAnticipada
-            ? `⚠️ Entrada registrada a las ${hora}. Pendiente de validación por el administrador.`
-            : `✅ Entrada registrada y guardada a las ${hora}` });
-        } else {
-          setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada y guardada a las ${hora}` });
-        }
-      } catch(e) {
-        if (intentos < 3) {
-          setTimeout(() => intentarGuardar(intentos + 1), 3000);
-        } else {
-          setSyncEstado("error");
-          setMarcaGuardando(false);
-          setMarcaMsg({ tipo:"err", txt:"⚠️ Registro guardado localmente. Hubo un problema de conexión — se sincronizará automáticamente." });
-        }
-      }
-    };
-    intentarGuardar();
+    if (tipo === "entrada") {
+      setMarcaMsg({ tipo:"ok", txt: esAnticipada
+        ? `⚠️ Entrada registrada a las ${hora}. Pendiente de validación por el administrador.`
+        : `✅ Entrada registrada a las ${hora}. Guardando...` });
+    } else {
+      setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Guardando...` });
+    }
   }
 
   // ── Solicitud permiso/vacaciones ──────────────────────
@@ -1343,6 +1350,9 @@ export default function App() {
     if (solTipo==="vacaciones" && !solFechaHasta) { setSolMsg({ tipo:"err", txt:"Indica fecha de término." }); return; }
     if (solTipo==="vacaciones" && !esHabilVacaciones(solFechaDesde)) {
       setSolMsg({ tipo:"err", txt:"Las vacaciones solo se pueden iniciar en día hábil (lunes a viernes)." }); return;
+    }
+    if (solTipo==="vacaciones" && solFechaHasta < solFechaDesde) {
+      setSolMsg({ tipo:"err", txt:"La fecha de término no puede ser anterior a la fecha de inicio." }); return;
     }
     const nueva = {
       id: nowId(),
@@ -1404,7 +1414,17 @@ export default function App() {
   function agregarTrabajador() {
     setNFormErr("");
     if (!nNombre.trim()||!nApellido.trim()||!nRut.trim()) { setNFormErr("Completa todos los campos."); return; }
-    const codigo = generarCodigo(nApellido, trabajadores);
+    // Validar RUT duplicado (excluyendo el perfil de pruebas)
+    const rutLimpio = nRut.replace(/[^0-9kK]/g,"").toLowerCase();
+    const rutDuplicado = trabajadores.find(t =>
+      t.id !== 999 && t.rut.replace(/[^0-9kK]/g,"").toLowerCase() === rutLimpio
+    );
+    if (rutDuplicado) {
+      setNFormErr(`Este RUT ya está registrado para ${nombreCompleto(rutDuplicado)} (${rutDuplicado.codigo}).`);
+      return;
+    }
+    const codigo = generarCodigo(nApellido, trabajadores, codigosUsados);
+    setCodigosUsados(p => [...p, codigo]);
     setTrabajadores(p => [...p, { id:nowId(), nombre:nNombre.trim(), apellido:nApellido.trim(), apellidoM:nApellidoM.trim(), rut:fmtRut(nRut), codigo, activo:true, ficha:fichaVacia() }]);
     setNNombre(""); setNApellido(""); setNRut("");
   }
@@ -1606,6 +1626,17 @@ export default function App() {
   function guardarEdicion() {
     setRegEditMsg({tipo:"",txt:""});
     if(!regEditFecha||!regEditEnt){ setRegEditMsg({tipo:"err",txt:"Fecha y entrada son obligatorias."}); return; }
+    // Evitar que al editar la fecha, el registro choque con otro existente del mismo trabajador
+    const regActual = registros.find(r=>r.id===regEditando);
+    if(regActual){
+      const choque = registros.find(r=>
+        r.id!==regEditando && r.tId===regActual.tId && r.fecha===regEditFecha
+      );
+      if(choque){
+        setRegEditMsg({tipo:"err",txt:`Ya existe otro registro de este trabajador en la fecha ${regEditFecha}. Elimina o edita ese registro primero.`});
+        return;
+      }
+    }
     setRegistros(p=>p.map(r=>r.id===regEditando
       ? {...r, fecha:regEditFecha, entrada:regEditEnt, salida:regEditSal||null}
       : r
@@ -1621,6 +1652,12 @@ export default function App() {
     // Conservar trabajadores reales (no marcados como prueba)
     // y el perfil de prueba id=999
     setTrabajadores(p => {
+      // Antes de eliminar trabajadores de prueba, conservar sus códigos en el historial
+      // para que nunca se reasignen a un trabajador real
+      const eliminados = p.filter(t => t.esDePrueba && t.id !== 999);
+      if (eliminados.length > 0) {
+        setCodigosUsados(prev => [...prev, ...eliminados.map(t => t.codigo)]);
+      }
       const reales = p.filter(t => !t.esDePrueba || t.id === 999);
       // Si no quedan reales, dejar solo el perfil de prueba
       return reales.length > 0 ? reales :
@@ -1700,7 +1737,7 @@ export default function App() {
         const obsExtra = h&&h.extra>0&&reg.estado==="rechazado" ? "HE Rechazada"
                        : h&&h.extra>0&&reg.estado==="pendiente" ? "HE Pendiente"
                        : h&&h.extra>0&&reg.estado==="aprobado"  ? "HE Aprobada"
-                       : esFer?"Feriado":esDom?"Domingo":"";
+                       : esFer?"Feriado":esDom?"Domingo":esSabado(fecha)?"Sábado":"";
         const obsColor = h&&h.extra>0&&reg.estado==="rechazado" ? "#c0392b"
                        : h&&h.extra>0&&reg.estado==="pendiente" ? "#e67e22"
                        : h&&h.extra>0&&reg.estado==="aprobado"  ? "#27ae60"
@@ -1843,7 +1880,16 @@ export default function App() {
     if(!d.nombre.trim())    { setFichaGuardMsg({tipo:"err",txt:"El nombre es obligatorio."}); return; }
     if(!d.apellido.trim())  { setFichaGuardMsg({tipo:"err",txt:"El apellido es obligatorio."}); return; }
     if(!d.rut.trim())       { setFichaGuardMsg({tipo:"err",txt:"El RUT es obligatorio."}); return; }
-    const codigo = generarCodigo(d.apellido, trabajadores.filter(t=>t.id!==999));
+    // Validar RUT duplicado (excluyendo perfil de pruebas)
+    const rutLimpio = d.rut.replace(/[^0-9kK]/g,"").toLowerCase();
+    const rutDuplicado = trabajadores.find(t =>
+      t.id !== 999 && t.rut.replace(/[^0-9kK]/g,"").toLowerCase() === rutLimpio
+    );
+    if (rutDuplicado) {
+      setFichaGuardMsg({tipo:"err",txt:`Este RUT ya está registrado para ${nombreCompleto(rutDuplicado)} (${rutDuplicado.codigo}).`});
+      return;
+    }
+    const codigo = generarCodigo(d.apellido, trabajadores.filter(t=>t.id!==999), codigosUsados);
     const nuevo = {
       id: nowId(),
       nombre: d.nombre.trim(),
@@ -1882,6 +1928,7 @@ export default function App() {
         }] : [],
       },
     };
+    setCodigosUsados(p => [...p, codigo]);
     setTrabajadores(p => [...p, nuevo]);
     setFichaSelId(nuevo.id);
     setFichaMode("ver");
@@ -1894,6 +1941,15 @@ export default function App() {
     const d = fichaDraft;
     if(!d.nombre.trim()||!d.apellido.trim()||!d.rut.trim()){
       setFichaGuardMsg({tipo:"err",txt:"Nombre, apellido y RUT son obligatorios."}); return;
+    }
+    // Validar RUT duplicado (excluyendo al propio trabajador que se está editando y al perfil de pruebas)
+    const rutLimpio = d.rut.replace(/[^0-9kK]/g,"").toLowerCase();
+    const rutDuplicado = trabajadores.find(t =>
+      t.id !== 999 && t.id !== fichaSelId && t.rut.replace(/[^0-9kK]/g,"").toLowerCase() === rutLimpio
+    );
+    if (rutDuplicado) {
+      setFichaGuardMsg({tipo:"err",txt:`Este RUT ya está registrado para ${nombreCompleto(rutDuplicado)} (${rutDuplicado.codigo}).`});
+      return;
     }
     setTrabajadores(p => p.map(t => t.id===fichaSelId ? {
       ...t,
@@ -1927,7 +1983,7 @@ export default function App() {
   }
 
   function exportarDatos() {
-    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos };
+    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2009,6 +2065,13 @@ export default function App() {
           return [...prev, ...nuevos];
         });
 
+        // CÓDIGOS USADOS: unión sin duplicados (historial nunca se pierde)
+        setCodigosUsados(prev => {
+          const existentes = new Set(prev);
+          const nuevos = (data.codigosUsados || []).filter(c => !existentes.has(c));
+          return [...prev, ...nuevos];
+        });
+
         setImportMsg({ tipo:"ok", txt:"✅ Datos importados y fusionados correctamente. No se duplicó ningún registro." });
       } catch {
         setImportMsg({ tipo:"err", txt:"❌ Archivo inválido. Verifica que sea un backup de Gestión de Personas Paz Vial SpA." });
@@ -2036,13 +2099,14 @@ export default function App() {
         return r.tId===t.id && d.getMonth()===dMes && d.getFullYear()===dAnio && r.salida;
       });
       const diasTrab = regs.filter(r => !esEspecial(r.fecha)).length;
-      const diasEsp  = regs.filter(r => esEspecial(r.fecha)).length;
+      const diasEsp  = regs.filter(r => esCompensable(r.fecha)).length; // solo domingo/feriado (generan compensatorio)
+      const diasSab  = regs.filter(r => esSabado(r.fecha)).length; // sábados trabajados (solo horas extra, sin compensatorio)
       let extra = 0;
       regs.forEach(r => { if (r.estado==="aprobado") extra += calcularHoras(r.entrada,r.salida,r.fecha).extra; });
       const comps = compensatorios.filter(c => c.tId===t.id);
       const habilMes = diasHabilesEnMes(dAnio, dMes);
       return {
-        ...t, diasTrab, diasEsp, extra:extra.toFixed(1),
+        ...t, diasTrab, diasEsp, diasSab, extra:extra.toFixed(1),
         compPend: comps.filter(c=>c.estado==="pendiente").length,
         compTom:  comps.filter(c=>c.estado==="tomado").length,
         compPag:  comps.filter(c=>c.estado==="pagado").length,
@@ -2274,16 +2338,16 @@ export default function App() {
                           padding:"14px 0", cursor:"pointer", fontSize:15, fontFamily:"Georgia,serif" }}>
                         ✗ Cancelar
                       </button>
-                      <button onClick={confirmarMarca}
+                      <button onClick={confirmarMarca} disabled={marcaGuardando}
                         style={{ flex:2,
-                          background: marcaConfirm.tipo==="entrada"
+                          background: marcaGuardando ? "#555" : marcaConfirm.tipo==="entrada"
                             ? "linear-gradient(135deg,#27ae60,#1e8449)"
                             : "linear-gradient(135deg,#e74c3c,#c0392b)",
                           color:"#fff", border:"none", borderRadius:10,
-                          padding:"14px 0", cursor:"pointer", fontSize:15,
-                          fontWeight:"bold", fontFamily:"Georgia,serif",
+                          padding:"14px 0", cursor: marcaGuardando ? "not-allowed" : "pointer", fontSize:15,
+                          fontWeight:"bold", fontFamily:"Georgia,serif", opacity: marcaGuardando ? 0.7 : 1,
                           boxShadow:`0 4px 15px ${marcaConfirm.tipo==="entrada"?"rgba(39,174,96,0.4)":"rgba(231,76,60,0.4)"}` }}>
-                        ✓ Sí, Confirmar
+                        {marcaGuardando ? "⏳ Procesando..." : "✓ Sí, Confirmar"}
                       </button>
                     </div>
                   </div>
@@ -2313,7 +2377,8 @@ export default function App() {
                 </div>
                 {esEspecial(hoy()) && (
                   <div style={{ ...S.bdg("#8e44ad"), marginTop:8, fontSize:12 }}>
-                    ⚠ {esDomingo(hoy())?"Domingo":"Feriado"} — Generará día compensatorio
+                    ⚠ {esDomingo(hoy())?"Domingo":esSabado(hoy())?"Sábado":"Feriado"}
+                    {esCompensable(hoy()) ? " — Generará día compensatorio y horas extra (mín. 8h)" : " — Horas extra (mín. 8h garantizadas)"}
                   </div>
                 )}
               </div>
@@ -2418,7 +2483,7 @@ export default function App() {
                         const esp = esEspecial(r.fecha);
                         return (
                           <tr key={r.id} style={{ background:esp?"rgba(142,68,173,0.1)":"transparent" }}>
-                            <td style={S.td}>{r.fecha} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":"Feriado"}</span>}</td>
+                            <td style={S.td}>{r.fecha} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
                             <td style={S.td}>{r.entrada}</td>
                             <td style={S.td}>{r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
                             <td style={{...S.td, color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
@@ -2696,7 +2761,8 @@ export default function App() {
                       "Solo puedes registrar una entrada y una salida por día.",
                       "Debajo del botón verás el estado de tu registro del día: si aún no has marcado entrada, si ya marcaste entrada y falta la salida, o si la jornada está completa.",
                       "El indicador de sincronización muestra si el registro se guardó en la nube: 🟢 Sincronizado, 🟡 Guardando o 🔴 Error de conexión (el sistema reintenta automáticamente).",
-                      "Si trabajas en domingo o feriado, el sistema lo indicará y generará automáticamente un Día Compensatorio.",
+                      "Si trabajas en domingo o feriado, el sistema lo indicará, generará automáticamente un Día Compensatorio y registrará tus horas como extraordinarias (mínimo 8h garantizadas).",
+                      "Si trabajas en sábado, tus horas se registran como extraordinarias (mínimo 8h garantizadas), pero no genera día compensatorio.",
                     ]
                   },
                   {
@@ -2705,6 +2771,7 @@ export default function App() {
                       "Lunes a Jueves: jornada normal de 08:00 a 18:00.",
                       "Viernes: jornada normal de 08:00 a 14:00.",
                       "Si tu salida es posterior al horario normal, el excedente se registra como horas extraordinarias.",
+                      "Sábado, domingo o feriado: toda tu jornada se considera hora extraordinaria, con un mínimo garantizado de 8 horas aunque trabajes menos tiempo. Si trabajas más de 8 horas, se registran las horas efectivamente trabajadas.",
                       "Las horas extraordinarias quedan en estado Pendiente hasta que el administrador las apruebe o rechace.",
                       "Recibirás una notificación con el resultado de la revisión.",
                     ]
@@ -2723,8 +2790,28 @@ export default function App() {
                       "En la pestaña Solicitudes puedes pedir un Permiso (día puntual) o Vacaciones (rango de fechas).",
                       "Selecciona el tipo, completa las fechas y agrega un motivo si lo deseas.",
                       "Importante: las vacaciones solo pueden solicitarse con inicio en día hábil (lunes a viernes, sin feriados).",
+                      "La fecha de término no puede ser anterior a la fecha de inicio; el sistema lo valida automáticamente.",
                       "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
                       "Recibirás una notificación cuando sea aprobada o rechazada, incluyendo el motivo en caso de rechazo.",
+                    ]
+                  },
+                  {
+                    icon:"🏦", titulo:"5b. Solicitar Anticipo de Sueldo",
+                    items:[
+                      "En la pestaña Anticipo puedes solicitar un adelanto de tu remuneración.",
+                      "Ingresa el monto solicitado y un motivo breve.",
+                      "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
+                      "Si es aprobada, el monto se descontará automáticamente en tu próxima liquidación de sueldo.",
+                      "Si es rechazada, recibirás una notificación con el motivo del rechazo.",
+                    ]
+                  },
+                  {
+                    icon:"💰", titulo:"5c. Mis Liquidaciones de Sueldo",
+                    items:[
+                      "En la pestaña Liquidaciones encontrarás las liquidaciones de sueldo que el administrador te haya enviado.",
+                      "Cada liquidación detalla: sueldo base, gratificación, colación, movilización, horas extra aprobadas, descuentos previsionales y anticipos.",
+                      "Puedes revisar el detalle completo y descargar el PDF de cada liquidación.",
+                      "Al revisarla por primera vez, puedes Firmarla digitalmente como aceptación de conformidad.",
                     ]
                   },
                   {
@@ -3250,7 +3337,7 @@ export default function App() {
                     {regManFecha&&(
                       <>
                         <div>📅 {new Date(regManFecha+"T12:00:00").toLocaleDateString("es-CL",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
-                        {esEspecial(regManFecha)&&<div style={{color:"#e67e22",marginTop:4}}>⚠️ {esDomingo(regManFecha)?"Domingo":esSabado(regManFecha)?"Sábado":"Feriado"} — mínimo 8h extra garantizadas</div>}
+                        {esEspecial(regManFecha)&&<div style={{color:"#e67e22",marginTop:4}}>⚠️ {esDomingo(regManFecha)?"Domingo":esSabado(regManFecha)?"Sábado":"Feriado"} — mínimo 8h extra garantizadas{esCompensable(regManFecha)?" + día compensatorio":""}</div>}
                         {esViernes(regManFecha)&&!esEspecial(regManFecha)&&<div style={{color:"#9A8A6A",marginTop:4}}>Viernes — jornada hasta 14:00</div>}
                       </>
                     )}
@@ -3386,7 +3473,7 @@ export default function App() {
                                 const obsLabel=h&&h.extra>0&&reg.estado==="rechazado"?"✗ HE Rechazada"
                                              :h&&h.extra>0&&reg.estado==="pendiente"?"⏳ HE Pendiente"
                                              :h&&h.extra>0&&reg.estado==="aprobado"?"✓ HE Aprobada"
-                                             :esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":reg?.entradaAnticipada?"⏰ Ant.":"";
+                                             :esFeriado(fecha)?"Feriado":esDomingo(fecha)?"Domingo":esSabado(fecha)?"Sábado":reg?.entradaAnticipada?"⏰ Ant.":"";
                                 return (
                                   <tr key={fecha} style={{background:bgC}}>
                                     <td style={{...S.td,fontWeight:"bold",textAlign:"center"}}>{i+1}</td>
@@ -3515,7 +3602,12 @@ export default function App() {
                                 {t.activo?"Desactivar":"Activar"}
                               </button>
                               <button
-                                onClick={()=>{if(window.confirm(`¿Eliminar a ${nombreCompleto(t)}?`)) setTrabajadores(p=>p.filter(x=>x.id!==t.id));}}
+                                onClick={()=>{
+                                  if(window.confirm(`¿Eliminar a ${nombreCompleto(t)}?`)){
+                                    setCodigosUsados(p=>[...p,t.codigo]); // conservar el código en el historial para que nunca se reutilice
+                                    setTrabajadores(p=>p.filter(x=>x.id!==t.id));
+                                  }
+                                }}
                                 style={S.btnD}>
                                 🗑
                               </button>
@@ -3614,7 +3706,7 @@ export default function App() {
                             {fichaDraft?.apellido&&(
                               <div style={{color:"#9A8A6A",fontSize:12,marginTop:3}}>
                                 Código que se asignará: <strong style={{color:"#C9A84C",fontSize:14}}>
-                                  {generarCodigo(fichaDraft.apellido,trabajadores.filter(t=>t.id!==999))}
+                                  {generarCodigo(fichaDraft.apellido,trabajadores.filter(t=>t.id!==999),codigosUsados)}
                                 </strong>
                               </div>
                             )}
@@ -4285,7 +4377,7 @@ export default function App() {
                   icon:"📋", titulo:"3. Módulo: Asistencia",
                   items:[
                     "Tiene tres subtabs: Ver Registros, Ingresar / Editar, y Hoja Mensual PDF.",
-                    "Ver Registros: muestra el historial filtrable por trabajador, mes y año. Las horas extra pendientes de aprobación aparecen con ⏳. Cada fila tiene botón ✏️ para editar fecha, entrada y salida directamente.",
+                    "Ver Registros: muestra el historial filtrable por trabajador, mes y año, con opción de ordenar por fecha (más reciente o más antiguo primero). Las horas extra pendientes de aprobación aparecen con ⏳. Cada fila tiene botón ✏️ para editar y botón 🗑️ para eliminar el registro (pide confirmación antes de borrar).",
                     "Ingresar / Editar: permite crear registros cuando el trabajador olvidó marcar. Los registros manuales quedan con etiqueta azul 'Manual'.",
                     "Hoja Mensual PDF: genera una hoja de asistencia con logo, por trabajador o para todos. Incluye vista previa en pantalla antes de imprimir.",
                   ]
@@ -4335,7 +4427,7 @@ export default function App() {
                     "Permite ingresar registros de asistencia cuando un trabajador olvidó marcar su entrada o salida.",
                     "Selecciona el trabajador, la fecha, la hora de entrada y salida. El sistema calcula automáticamente horas normales y extra.",
                     "Los registros ingresados manualmente quedan identificados con la etiqueta azul 'Manual'.",
-                    "También puedes editar registros existentes directamente desde la tabla, haciendo clic en el botón ✏️ Editar de cada fila.",
+                    "También puedes editar registros existentes directamente desde la tabla, haciendo clic en el botón ✏️ Editar de cada fila, o eliminarlos con el botón 🗑️ (con confirmación previa).",
                     "Al editar, los campos fecha, entrada y salida se vuelven editables. Usa ✓ para guardar y ✗ para cancelar.",
                   ]
                 },
@@ -4354,10 +4446,11 @@ export default function App() {
                   icon:"👥", titulo:"5. Módulo: Trabajadores",
                   items:[
                     "Permite agregar nuevos trabajadores ingresando Nombre, Apellido Paterno y RUT.",
-                    "El sistema genera automáticamente un código único con el formato: P + inicial del apellido + número correlativo (Ej: PP01, PR02).",
+                    "El sistema valida que el RUT no esté ya registrado por otro trabajador antes de crear el perfil.",
+                    "El sistema genera automáticamente un código único con el formato: P + inicial del apellido + número correlativo (Ej: PP01, PR02). El código nunca se repite, incluso si un trabajador anterior con esa inicial fue eliminado definitivamente.",
                     "Antes de confirmar, se muestra una vista previa del código que se asignará.",
                     "Puedes Desactivar un trabajador (sin eliminarlo) para que no pueda iniciar sesión, o Activarlo nuevamente.",
-                    "El botón 🗑 elimina al trabajador definitivamente de la nómina.",
+                    "El botón 🗑 elimina al trabajador definitivamente de la nómina. Su código queda reservado para siempre y no se reasignará a otro trabajador.",
                     "El Perfil de Prueba (Administrador / RUT: Pruebas) no debe eliminarse, sirve para testear el sistema.",
                   ]
                 },
@@ -4413,6 +4506,16 @@ export default function App() {
                     "Importar: permite restaurar todos los datos desde un backup previo. Esta acción reemplaza todos los datos actuales.",
                     "Solo se aceptan archivos .json exportados desde este mismo sistema.",
                     "Se recomienda exportar un backup al menos una vez por semana o antes de cualquier cambio importante en la nómina.",
+                  ]
+                },
+                {
+                  icon:"⏱", titulo:"10b. Cálculo de Horas Extraordinarias",
+                  items:[
+                    "Día hábil (lunes a viernes): las horas extra son el tiempo trabajado fuera del horario normal (después de las 18:00, o 14:00 los viernes).",
+                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas — si el trabajador marca menos de 8h efectivas, el sistema registra igualmente 8h extra. Si trabaja más de 8h, se registran las horas reales.",
+                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. Trabajar sábado NO genera día compensatorio, solo horas extra con el mínimo de 8h.",
+                    "Esta regla aplica automáticamente al calcular horas en Asistencia, Hoja Mensual PDF, Liquidaciones y Dashboard — no requiere ajuste manual.",
+                    "Las horas extra rechazadas no se contabilizan en ningún reporte ni en el total del Dashboard ni en la Hoja Mensual.",
                   ]
                 },
                 {
