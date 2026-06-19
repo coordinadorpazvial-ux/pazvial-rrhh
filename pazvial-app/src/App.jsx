@@ -1741,10 +1741,23 @@ export default function App() {
     if(!regManEntrada){ setRegManMsg({tipo:"err",txt:"Ingresa hora de entrada."}); return; }
     const yaExiste = registros.find(r=>r.tId===Number(regManTrabId)&&r.fecha===regManFecha);
     if(yaExiste){ setRegManMsg({tipo:"err",txt:"Ya existe un registro para ese trabajador en esa fecha. Usa la opción Editar."}); return; }
+    // Detectar HE entrada anticipada y HE salida al ingresar manualmente
+    const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+    const fechaMan = regManFecha;
+    const esDiaEspMan = esEspecial(fechaMan);
+    const minEntradaMan = toMin(regManEntrada);
+    const finMan = esViernes(fechaMan) ? 840 : 1080;
+    const tieneHEEntradaMan = !esDiaEspMan && minEntradaMan < 420; // antes de 07:00
+    const tieneHESalidaMan  = !esDiaEspMan && regManSalida && toMin(regManSalida) > finMan;
     const nuevo = {
       id:nowId(), tId:Number(regManTrabId), fecha:regManFecha,
       entrada:regManEntrada, salida:regManSalida||null,
-      estado:"pendiente", motivoRechazo:"", manual:true
+      estado:"pendiente",
+      estadoEntrada: tieneHEEntradaMan ? "pendiente" : null,
+      estadoSalida:  tieneHESalidaMan  ? "pendiente" : null,
+      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+      entradaAnticipada: tieneHEEntradaMan,
+      manual:true
     };
     setRegistros(p=>[...p,nuevo]);
     setRegManMsg({tipo:"ok",txt:`✅ Registro ingresado manualmente para ${regManFecha}.`});
@@ -1773,10 +1786,23 @@ export default function App() {
         return;
       }
     }
-    setRegistros(p=>p.map(r=>r.id===regEditando
-      ? {...r, fecha:regEditFecha, entrada:regEditEnt, salida:regEditSal||null}
-      : r
-    ));
+    setRegistros(p=>p.map(r=>{
+      if (r.id!==regEditando) return r;
+      const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const esDiaEspEdit = esEspecial(regEditFecha);
+      const finEdit = esViernes(regEditFecha) ? 840 : 1080;
+      const tieneHEEnt = !esDiaEspEdit && toMin(regEditEnt) < 420;
+      const tieneHESal = !esDiaEspEdit && regEditSal && toMin(regEditSal) > finEdit;
+      return {
+        ...r,
+        fecha: regEditFecha,
+        entrada: regEditEnt,
+        salida: regEditSal||null,
+        estadoEntrada: tieneHEEnt ? (r.estadoEntrada || "pendiente") : null,
+        estadoSalida:  tieneHESal ? (r.estadoSalida  || "pendiente") : null,
+        entradaAnticipada: tieneHEEnt,
+      };
+    }));
     setRegEditando(null);
     setRegEditMsg({tipo:"ok",txt:"✅ Registro actualizado."});
   }
