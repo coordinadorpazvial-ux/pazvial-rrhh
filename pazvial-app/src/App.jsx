@@ -60,6 +60,7 @@ async function guardarEnFirebase(datos) {
     // Eliminar campos internos antes de guardar en Firebase
     const { _eliminados, ...datosLimpios } = datos;
     await setDoc(doc(db, col, docId), datosLimpios);
+    // Nota: el flag escribiendoEnFirebase lo maneja el auto-guardado externamente
   } catch(e) {
     console.error("Error guardando en Firebase:", e);
     throw e; // Re-lanzar para que el reintento funcione
@@ -1105,35 +1106,57 @@ export default function App() {
     };
   }, []);
 
-  // Cargar datos UNA sola vez al iniciar
+  // Cargar y suscribirse a Firebase con onSnapshot (tiempo real)
   useEffect(() => {
     const [col, docId] = DB_DOC.split("/");
     cargandoDesdeFirebase.current = true;
-    getDoc(doc(db, col, docId)).then((snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        // Solo cargar si Firebase tiene datos reales (más trabajadores que los de prueba)
-        const tFirebase = data.trabajadores || [];
-        const tieneReales = tFirebase.some(t => !t.esDePrueba || t.id === 999);
-        if (tieneReales) {
-          setTrabajadores(tFirebase);
-          setRegistros(data.registros || []);
-          setComps(data.compensatorios || []);
-          setSolicitudes(data.solicitudes || []);
-          setNotifs(data.notificaciones || []);
-          setLiquidaciones(data.liquidaciones || []);
-          setAnticipos(data.anticipos || []);
-          setCodigosUsados(data.codigosUsados || []);
-        }
+
+    const unsub = onSnapshot(doc(db, col, docId), (snap) => {
+      if (!snap.exists()) {
+        cargandoDesdeFirebase.current = false;
+        firebaseListo.current = true;
+        return;
       }
-    }).finally(() => {
+
+      // Si nosotros mismos acabamos de escribir, ignorar este snapshot
+      // para no sobreescribir nuestro propio estado local con datos de Firebase
+      if (escribiendoEnFirebase.current) return;
+
+      const data = snap.data();
+      const tFirebase = data.trabajadores || [];
+      const tieneReales = tFirebase.some(t => !t.esDePrueba || t.id === 999);
+
+      if (tieneReales) {
+        cargandoDesdeFirebase.current = true;
+        setTrabajadores(tFirebase);
+        setRegistros(data.registros || []);
+        setComps(data.compensatorios || []);
+        setSolicitudes(data.solicitudes || []);
+        setNotifs(data.notificaciones || []);
+        setLiquidaciones(data.liquidaciones || []);
+        setAnticipos(data.anticipos || []);
+        setCodigosUsados(data.codigosUsados || []);
+        setTimeout(() => {
+          cargandoDesdeFirebase.current = false;
+          firebaseListo.current = true;
+        }, 500);
+      } else {
+        cargandoDesdeFirebase.current = false;
+        firebaseListo.current = true;
+      }
+    }, (error) => {
+      console.error("Error en onSnapshot:", error);
       cargandoDesdeFirebase.current = false;
       firebaseListo.current = true;
     });
+
+    // Limpiar suscripción al desmontar
+    return () => unsub();
   }, []);
 
   // ── Firebase: guardar cuando cambian los datos ────────
   const renderCount = useRef(0);
+  const escribiendoEnFirebase = useRef(false); // true mientras nosotros escribimos, para ignorar nuestro propio onSnapshot
   useEffect(() => {
     renderCount.current += 1;
     // Ignorar los primeros renders (carga inicial)
@@ -1153,23 +1176,11 @@ export default function App() {
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
         };
-        // guardarEnFirebase ahora hace merge con Firebase antes de escribir
-        // y devuelve los datos finales (con registros remotos incluidos)
+        // Marcar que somos nosotros quienes escribimos, para que onSnapshot lo ignore
+        escribiendoEnFirebase.current = true;
         await guardarEnFirebase(datosAGuardar);
-
-        // Después del merge, re-leer Firebase para actualizar el estado local
-        // Esto asegura que el admin vea los registros que hicieron los trabajadores
-        const [col, docId] = "pazvial/datos".split("/");
-        const snap = await getDoc(doc(db, col, docId));
-        if (snap.exists()) {
-          const d = snap.data();
-          cargandoDesdeFirebase.current = true;
-          setRegistros(d.registros || []);
-          setSolicitudes(d.solicitudes || []);
-          setNotifs(d.notificaciones || []);
-          setAnticipos(d.anticipos || []);
-          setTimeout(() => { cargandoDesdeFirebase.current = false; }, 500);
-        }
+        // Dar tiempo a que Firebase propague el write antes de volver a escuchar snapshots
+        setTimeout(() => { escribiendoEnFirebase.current = false; }, 1500);
         setSyncEstado("ok");
         setMarcaMsg(m => m.tipo==="ok" && m.txt.includes("Guardando...")
           ? { tipo:"ok", txt: m.txt.replace("Guardando...", "Guardado ✓") }
