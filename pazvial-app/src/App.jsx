@@ -91,19 +91,65 @@ const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
 const esCompensable = d => esDomingo(d) || esFeriado(d); // genera día compensatorio (sábado NO genera)
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 
-function calcularHoras(entrada, salida, fecha) {
-  if (!entrada || !salida) return { normales: 0, extra: 0 };
+function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
+  // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
+  // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
+  if (!entrada || !salida) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
   const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
   const total = toMin(salida) - toMin(entrada);
-  if (total <= 0) return { normales: 0, extra: 0 };
+  if (total <= 0) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
+
+  // ── Días especiales (sáb/dom/feriado): todo es HE con mínimo 8h ──
   if (esEspecial(fecha)) {
-    // Sábado, domingo y feriado: todo es extra con mínimo garantizado de 8h
     const efectivas = +(total/60).toFixed(2);
-    return { normales: 0, extra: Math.max(efectivas, 8) };
+    const extra = Math.max(efectivas, 8);
+    return { normales: 0, extra, extraEntrada: 0, extraSalida: 0 };
   }
-  const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00
-  const norm = Math.max(0, Math.min(toMin(salida), fin) - Math.max(toMin(entrada), 480));
-  return { normales: +(norm/60).toFixed(2), extra: +((total-norm)/60).toFixed(2) };
+
+  const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00 en minutos
+  const INICIO = 480; // 08:00 en minutos
+  const UMBRAL_ANTICIP = 420; // 07:00 — entradas antes de esta hora generan HE anticipada
+
+  const minEntrada = toMin(entrada);
+  const minSalida  = toMin(salida);
+
+  // ── Bloque HE entrada anticipada (antes de 07:00) ──
+  // Tiempo entre la entrada real y las 08:00
+  let extraEntrada = 0;
+  if (minEntrada < UMBRAL_ANTICIP) {
+    const bloqueAntic = INICIO - minEntrada; // minutos desde entrada hasta 08:00
+    if (estadoEntrada === undefined) {
+      // Compatibilidad: sin estados independientes, se suma siempre
+      extraEntrada = +(bloqueAntic/60).toFixed(2);
+    } else if (estadoEntrada === "aprobado") {
+      extraEntrada = +(bloqueAntic/60).toFixed(2);
+    }
+    // pendiente o rechazado → extraEntrada = 0
+  }
+
+  // ── Horas normales (entre 08:00 y fin de jornada) ──
+  const norm = Math.max(0, Math.min(minSalida, fin) - Math.max(minEntrada, INICIO));
+
+  // ── Bloque HE salida posterior ──
+  let extraSalida = 0;
+  if (minSalida > fin) {
+    const bloqueSalida = minSalida - fin;
+    if (estadoSalida === undefined) {
+      // Compatibilidad: sin estados independientes, se suma siempre
+      extraSalida = +(bloqueSalida/60).toFixed(2);
+    } else if (estadoSalida === "aprobado") {
+      extraSalida = +(bloqueSalida/60).toFixed(2);
+    }
+    // pendiente o rechazado → extraSalida = 0
+  }
+
+  const extra = +(extraEntrada + extraSalida).toFixed(2);
+  return {
+    normales:     +(norm/60).toFixed(2),
+    extra,
+    extraEntrada,
+    extraSalida,
+  };
 }
 
 function generarCodigo(apellido, lista, historicos = []) {
@@ -215,7 +261,14 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
   let totalMinExtra = 0;
   regs.forEach(r => {
-    if(r.estado==="aprobado") totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+    if (esEspecial(r.fecha)) {
+      // Días especiales: usar estado general
+      if (r.estado==="aprobado") totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+    } else {
+      // Días normales: sumar HE entrada y HE salida según sus estados independientes
+      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+      totalMinExtra += h.extra * 60;
+    }
   });
   const horasExtra = +(totalMinExtra/60).toFixed(2);
   const valorHHExtra = Math.round(horasExtra * valorHoraBase * 1.5);
@@ -1330,12 +1383,37 @@ export default function App() {
 
     let nuevosRegistros;
     if (tipo === "entrada") {
-      const estadoInicial = esAnticipada ? "pendiente_entrada" : "pendiente";
-      // Usar trabVigente.id (ID real y actual del trabajador en Firebase)
-      const nuevoReg = { id:nowId(), tId:trabVigente.id, fecha, entrada:hora, salida:null, estado:estadoInicial, motivoRechazo:"", entradaAnticipada: esAnticipada };
+      const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const minEntrada = toMin(hora);
+      // HE anticipada: entrada antes de las 07:00 (más de 1h antes de las 08:00)
+      const tieneHEEntrada = !esEspecial(fecha) && minEntrada < 420;
+      const estadoEntradaHE = tieneHEEntrada ? "pendiente" : null;
+      const nuevoReg = {
+        id: nowId(), tId: trabVigente.id, fecha,
+        entrada: hora, salida: null,
+        estado: "pendiente",           // estado general del registro
+        estadoEntrada: estadoEntradaHE, // HE anticipada (null = no aplica)
+        estadoSalida: null,            // HE salida (se asigna al marcar salida)
+        motivoRechazoEntrada: "",
+        motivoRechazoSalida: "",
+        motivoRechazo: "",
+        entradaAnticipada: tieneHEEntrada,
+      };
       nuevosRegistros = [...registros, nuevoReg];
     } else {
-      nuevosRegistros = registros.map(r => r.id===regHoy.id ? {...r, salida:hora} : r);
+      // Al marcar salida: detectar si genera HE de salida
+      nuevosRegistros = registros.map(r => {
+        if (r.id !== regHoy.id) return r;
+        const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+        const fin = esViernes(fecha) ? 840 : 1080;
+        const tieneHESalida = !esEspecial(fecha) && toMin(hora) > fin;
+        return {
+          ...r,
+          salida: hora,
+          estadoSalida: tieneHESalida ? "pendiente" : null,
+          motivoRechazoSalida: r.motivoRechazoSalida || "",
+        };
+      });
     }
 
     // Actualizar SOLO el estado local. El guardado real a Firebase lo hace
@@ -1346,11 +1424,18 @@ export default function App() {
     setSyncEstado("guardando"); // el useEffect lo pondrá en "ok" cuando termine
 
     if (tipo === "entrada") {
-      setMarcaMsg({ tipo:"ok", txt: esAnticipada
-        ? `⚠️ Entrada registrada a las ${hora}. Pendiente de validación por el administrador.`
+      const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const tieneHEEntrada = !esEspecial(fecha) && toMin(hora) < 420;
+      setMarcaMsg({ tipo:"ok", txt: tieneHEEntrada
+        ? `⚠️ Entrada registrada a las ${hora}. Las horas previas a las 08:00 quedan pendientes de aprobación.`
         : `✅ Entrada registrada a las ${hora}. Guardando...` });
     } else {
-      setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Guardando...` });
+      const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const fin = esViernes(fecha) ? 840 : 1080;
+      const tieneHESalida = !esEspecial(fecha) && toMin(hora) > fin;
+      setMarcaMsg({ tipo:"ok", txt: tieneHESalida
+        ? `⚠️ Salida registrada a las ${hora}. Las horas posteriores al horario normal quedan pendientes de aprobación.`
+        : `✅ Salida registrada a las ${hora}. Guardando...` });
     }
   }
 
@@ -1382,6 +1467,7 @@ export default function App() {
   }
 
   // ── Admin: aprobar/rechazar extra ─────────────────────
+  // ── HE clásica (días especiales: sáb/dom/feriado) ──
   function aprobarExtra(id) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado"} : r));
     const r = registros.find(x => x.id===id);
@@ -1396,6 +1482,45 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
     setMotivoModal(null);
+  }
+
+  // ── HE entrada anticipada (antes de 07:00) ──
+  function aprobarHEEntrada(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado"} : r));
+    const r = registros.find(x => x.id===id);
+    if (r) {
+      const h = calcularHoras(r.entrada, r.salida||"08:00", r.fecha, "aprobado", r.estadoSalida||null);
+      pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${r.fecha} (${h.extraEntrada}h antes de las 08:00) fueron aprobadas.`);
+    }
+  }
+  function rechazarHEEntrada(id, motivo) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"rechazado", motivoRechazoEntrada:motivo||""} : r));
+    const r = registros.find(x => x.id===id);
+    if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+  }
+
+  // ── HE salida posterior ──
+  function aprobarHESalida(id) {
+    setRegistros(p => p.map(r => {
+      if (r.id!==id) return r;
+      // Si no tiene HE entrada pendiente, también marcamos estado general como aprobado
+      const estadoGeneral = (!r.estadoEntrada || r.estadoEntrada!=="pendiente") ? "aprobado" : r.estado;
+      return {...r, estadoSalida:"aprobado", estado:estadoGeneral};
+    }));
+    const r = registros.find(x => x.id===id);
+    if (r) {
+      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, "aprobado");
+      pushNotif(r.tId, `✅ Tus HE de salida del ${r.fecha} (${h.extraSalida}h después del horario normal) fueron aprobadas.`);
+    }
+  }
+  function rechazarHESalida(id, motivo) {
+    setRegistros(p => p.map(r => {
+      if (r.id!==id) return r;
+      const estadoGeneral = r.estadoEntrada==="aprobado" ? "aprobado" : "rechazado";
+      return {...r, estadoSalida:"rechazado", motivoRechazoSalida:motivo||"", estado:estadoGeneral};
+    }));
+    const r = registros.find(x => x.id===id);
+    if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
   // ── Admin: aprobar/rechazar solicitud ─────────────────
@@ -1738,10 +1863,19 @@ export default function App() {
         const esFer = esFeriado(fecha);
         const esDom = diaSem===0;
         const h = reg&&reg.salida ? calcularHoras(reg.entrada,reg.salida,fecha) : null;
-        // Solo contar horas extra si el registro fue aprobado (no rechazado ni pendiente)
-        const extraAprobada = h&&h.extra>0&&reg.estado==="aprobado";
+        // Solo contar horas extra aprobadas (con estados independientes para días normales)
+        const extraAprobada = h && h.extra > 0 && (
+          esEspecial(fecha) ? reg.estado==="aprobado"
+          : (reg.estadoEntrada==="aprobado" || reg.estadoSalida==="aprobado")
+        );
         if(reg) totalDias++;
-        if(extraAprobada) totalExtra+=h.extra;
+        if(extraAprobada) {
+          // Usar calcularHoras con estados para obtener solo las HE realmente aprobadas
+          const hAprobada = esEspecial(fecha)
+            ? h
+            : calcularHoras(reg.entrada,reg.salida,fecha,reg.estadoEntrada||null,reg.estadoSalida||null);
+          totalExtra += hAprobada.extra;
+        }
         const bgRow = esDom||esFer ? "#fff3cd" : esSabado(fecha) ? "#f8f9fa" : "#fff";
         const diaLabel = nombresDias[diaSem];
         // Observación: mostrar estado del registro si hay horas extra pendientes o rechazadas
@@ -2096,9 +2230,14 @@ export default function App() {
   // DATOS DERIVADOS
   // ═══════════════════════════════════════════════════════
   const regConExtraPendiente = registros.filter(r => {
-    if (!r.salida || r.estado==="rechazado") return false;
-    const h = calcularHoras(r.entrada, r.salida, r.fecha);
-    return h.extra > 0 && r.estado==="pendiente";
+    if (!r.salida) return false;
+    // HE clásica (día especial): estado general pendiente
+    if (esEspecial(r.fecha) && r.estado==="pendiente") return true;
+    // HE entrada anticipada pendiente
+    if (r.estadoEntrada==="pendiente") return true;
+    // HE salida posterior pendiente
+    if (r.estadoSalida==="pendiente") return true;
+    return false;
   });
 
   const solPendientes = solicitudes.filter(s => s.estado==="pendiente");
@@ -2113,7 +2252,13 @@ export default function App() {
       const diasEsp  = regs.filter(r => esCompensable(r.fecha)).length; // solo domingo/feriado (generan compensatorio)
       const diasSab  = regs.filter(r => esSabado(r.fecha)).length; // sábados trabajados (solo horas extra, sin compensatorio)
       let extra = 0;
-      regs.forEach(r => { if (r.estado==="aprobado") extra += calcularHoras(r.entrada,r.salida,r.fecha).extra; });
+      regs.forEach(r => {
+        if (esEspecial(r.fecha)) {
+          if (r.estado==="aprobado") extra += calcularHoras(r.entrada,r.salida,r.fecha).extra;
+        } else {
+          extra += calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null).extra;
+        }
+      });
       const comps = compensatorios.filter(c => c.tId===t.id);
       const habilMes = diasHabilesEnMes(dAnio, dMes);
       return {
@@ -2900,9 +3045,16 @@ export default function App() {
         setMotivoModal={setMotivoModal}
         onConfirmar={(mot) => {
           if (motivoModal.tipo==="extra") {
+            // HE clásica (día especial)
             setRegistros(p => p.map(r => r.id===motivoModal.id ? {...r, estado:"rechazado", motivoRechazo:mot} : r));
             const r = registros.find(x => x.id===motivoModal.id);
             if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
+          } else if (motivoModal.tipo==="heEntrada") {
+            // HE entrada anticipada
+            rechazarHEEntrada(motivoModal.id, mot);
+          } else if (motivoModal.tipo==="heSalida") {
+            // HE salida posterior
+            rechazarHESalida(motivoModal.id, mot);
           } else if (motivoModal.tipo==="anticipo") {
             rechazarAnticipo(motivoModal.id, mot);
           } else {
@@ -3020,24 +3172,81 @@ export default function App() {
                 <div style={{color:"#9A8A6A",textAlign:"center",padding:24}}>✅ Sin horas extra pendientes</div>
               ) : (
                 <table style={S.tbl}><thead><tr>
-                  {["Trabajador","Código","Fecha","Entrada","Salida","H. Extra","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                  {["Trabajador","Código","Fecha","Entrada","Salida","HE Entrada","HE Salida","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}
                 </tr></thead><tbody>
                 {regConExtraPendiente.map(r=>{
-                  const t=trabajadores.find(x=>x.id===r.tId);
-                  const h=calcularHoras(r.entrada,r.salida,r.fecha);
+                  const t = trabajadores.find(x=>x.id===r.tId);
+                  const esDiaEsp = esEspecial(r.fecha);
+                  const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+                  const hBruto = calcularHoras(r.entrada, r.salida, r.fecha); // sin filtrar estados, para mostrar cuánto generaría
                   return (
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
-                      <td style={S.td}>{r.fecha}</td>
+                      <td style={S.td}>
+                        {r.fecha}
+                        {esDiaEsp && <span style={{...S.bdg("#8e44ad"),marginLeft:4,fontSize:10}}>
+                          {esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}
+                        </span>}
+                      </td>
                       <td style={S.td}>{r.entrada}</td>
                       <td style={S.td}>{r.salida}</td>
-                      <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{h.extra}h</td>
+
+                      {/* ── Columna HE Entrada ── */}
                       <td style={S.td}>
-                        <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>aprobarExtra(r.id)} style={S.btnG}>✓ Aprobar</button>
-                          <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={S.btnD}>✗ Rechazar</button>
-                        </div>
+                        {esDiaEsp ? <span style={{color:"#aaa"}}>—</span>
+                        : r.estadoEntrada==="pendiente" ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
+                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                              ⏱ {hBruto.extraEntrada}h anticipadas
+                            </span>
+                            <div style={{display:"flex",gap:4}}>
+                              <button onClick={()=>aprobarHEEntrada(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
+                              <button onClick={()=>setMotivoModal({tipo:"heEntrada",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                            </div>
+                          </div>
+                        ) : r.estadoEntrada==="aprobado" ? (
+                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
+                        ) : r.estadoEntrada==="rechazado" ? (
+                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                        ) : <span style={{color:"#aaa"}}>—</span>}
+                      </td>
+
+                      {/* ── Columna HE Salida ── */}
+                      <td style={S.td}>
+                        {esDiaEsp ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
+                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                              ⏱ {hBruto.extra}h (día especial)
+                            </span>
+                            <div style={{display:"flex",gap:4}}>
+                              <button onClick={()=>aprobarExtra(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
+                              <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                            </div>
+                          </div>
+                        ) : r.estadoSalida==="pendiente" ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
+                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                              ⏱ {hBruto.extraSalida}h posteriores
+                            </span>
+                            <div style={{display:"flex",gap:4}}>
+                              <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
+                              <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                            </div>
+                          </div>
+                        ) : r.estadoSalida==="aprobado" ? (
+                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraSalida}h aprobadas</span>
+                        ) : r.estadoSalida==="rechazado" ? (
+                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                        ) : <span style={{color:"#aaa"}}>—</span>}
+                      </td>
+
+                      {/* ── Acciones generales (solo para días especiales ya están en HE Salida) ── */}
+                      <td style={S.td}>
+                        {!esDiaEsp && (r.estadoEntrada==="pendiente"||r.estadoSalida==="pendiente") && (
+                          <span style={{color:"#9A8A6A",fontSize:11}}>Ver columnas →</span>
+                        )}
+                        {esDiaEsp && <span style={{color:"#9A8A6A",fontSize:11}}>—</span>}
                       </td>
                     </tr>
                   );
@@ -3454,8 +3663,15 @@ export default function App() {
                     const diasEnMes=new Date(hojaAsistAnio,hojaAsistMes+1,0).getDate();
                     const regsDelMes=regsT.filter(r=>{const d=new Date(r.fecha+"T12:00:00");return d.getMonth()===hojaAsistMes&&d.getFullYear()===hojaAsistAnio;});
                     let totalExt=0;
-                    // Solo sumar horas extra aprobadas
-                    regsDelMes.forEach(r=>{if(r.salida&&r.estado==="aprobado"){const h=calcularHoras(r.entrada,r.salida,r.fecha);totalExt+=h.extra;}});
+                    // Solo sumar horas extra aprobadas (con estados independientes para días normales)
+                    regsDelMes.forEach(r=>{
+                      if(!r.salida) return;
+                      if(esEspecial(r.fecha)){
+                        if(r.estado==="aprobado") totalExt+=calcularHoras(r.entrada,r.salida,r.fecha).extra;
+                      } else {
+                        totalExt+=calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null).extra;
+                      }
+                    });
                     return (
                       <div key={t.id} style={{...S.card,marginTop:12,padding:14}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
@@ -3475,7 +3691,10 @@ export default function App() {
                                 const reg=regsT.find(r=>r.fecha===fecha);
                                 const diaN=new Date(fecha+"T12:00:00").getDay();
                                 const h=reg&&reg.salida?calcularHoras(reg.entrada,reg.salida,fecha):null;
-                                const extraAprobada=h&&h.extra>0&&reg.estado==="aprobado";
+                                const extraAprobada = h && h.extra > 0 && (
+                                  esEspecial(fecha) ? reg.estado==="aprobado"
+                                  : (reg.estadoEntrada==="aprobado"||reg.estadoSalida==="aprobado")
+                                );
                                 const bgC=esDomingo(fecha)||esFeriado(fecha)?"rgba(255,215,0,0.08)":diaN===6?"rgba(255,255,255,0.03)":"transparent";
                                 const dias=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
                                 const obsColor=h&&h.extra>0&&reg.estado==="rechazado"?"#e74c3c"
