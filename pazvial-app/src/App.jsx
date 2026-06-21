@@ -4635,7 +4635,6 @@ export default function App() {
                       <span style={{color:"#9A8A6A",fontSize:12}}>Feriado</span>
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
-                    </div>
                     </div>)()}
                   </div>
 
