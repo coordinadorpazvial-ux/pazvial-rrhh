@@ -997,13 +997,17 @@ function TutorialMarca({ onClose }) {
     {
       icono: "🟢",
       titulo: "Paso 1: Selecciona Entrada o Salida",
-      desc: "Al llegar, toca el boton Entrada. Al terminar tu jornada, toca Salida. Asegurate de seleccionar el correcto antes de continuar.",
+      desc: "Al llegar, toca Entrada. Al terminar tu jornada, toca Salida. Asegurate de seleccionar el correcto antes de continuar.",
       color: "#27ae60",
       tip: "Si seleccionas el incorrecto, cancela en el siguiente paso y vuelve a intentarlo.",
       visual: (
         <div style={{display:"flex",gap:8,margin:"16px 0"}}>
-          <div style={{flex:1,background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#fff",fontWeight:"bold",fontSize:14}}>🟢 Entrada</div>
-          <div style={{flex:1,background:"rgba(30,26,15,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#9A8A6A",fontSize:14}}>🔴 Salida</div>
+          <div style={{flex:1,background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#fff",fontWeight:"bold",fontSize:14}}>
+            Entrada
+          </div>
+          <div style={{flex:1,background:"rgba(30,26,15,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#9A8A6A",fontSize:14}}>
+            Salida
+          </div>
         </div>
       ),
     },
@@ -1012,22 +1016,21 @@ function TutorialMarca({ onClose }) {
       titulo: "Paso 2: Toca Registrar",
       desc: "Toca el boton grande verde (Entrada) o rojo (Salida). El sistema capturara la hora exacta de ese momento.",
       color: "#27ae60",
-      tip: "No toques el boton antes de estar listo. La hora que se captura es la del momento exacto en que tocas.",
+      tip: "No toques el boton antes de estar listo. La hora se captura en el momento exacto en que tocas.",
       visual: (
         <div style={{margin:"16px 0",background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:12,padding:"16px 0",textAlign:"center",color:"#fff",fontWeight:"bold",fontSize:16,boxShadow:"0 4px 15px rgba(39,174,96,0.4)"}}>
-          🟢 Registrar Entrada
+          Registrar Entrada
         </div>
       ),
     },
     {
-      icono: "OK",
+      icono: "✔",
       titulo: "Paso 3: Confirma la marca",
       desc: "Aparecera una pantalla mostrando la hora exacta. Revisala y toca Confirmar para guardar. Si la hora es incorrecta, toca Cancelar.",
       color: "#C9A84C",
       tip: "Si cancelas, la marca NO queda guardada. Debes volver a tocar el boton de Registrar.",
       visual: (
         <div style={{margin:"16px 0",background:"linear-gradient(135deg,#001a4d,#003082)",border:"2px solid #27ae60",borderRadius:14,padding:"18px",textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:6}}>🟢</div>
           <div style={{color:"#fff",fontWeight:"bold",marginBottom:4}}>Confirmar Entrada</div>
           <div style={{color:"#C9A84C",fontSize:32,fontWeight:"bold",letterSpacing:3,margin:"10px 0"}}>08:02</div>
           <div style={{display:"flex",gap:8,marginTop:12}}>
@@ -1050,8 +1053,8 @@ function TutorialMarca({ onClose }) {
             <br/><span style={{color:"#9A8A6A",fontSize:11}}>Todo correcto, marca guardada.</span>
           </div>
           <div style={{background:"rgba(230,126,34,0.15)",border:"1px solid #e67e22",borderRadius:8,padding:"10px 14px",color:"#e67e22",fontSize:13}}>
-            Entrada registrada a las 06:45. Horas previas pendientes de aprobacion.
-            <br/><span style={{color:"#9A8A6A",fontSize:11}}>Marca guardada, pero el jefe debe aprobar las horas extra.</span>
+            Horas previas a las 08:00 pendientes de aprobacion.
+            <br/><span style={{color:"#9A8A6A",fontSize:11}}>Marca guardada, el jefe debe aprobar las horas extra.</span>
           </div>
           <div style={{background:"rgba(231,76,60,0.15)",border:"1px solid #e74c3c",borderRadius:8,padding:"10px 14px",color:"#e74c3c",fontSize:13}}>
             Ya tiene registro de entrada hoy.
@@ -1062,19 +1065,19 @@ function TutorialMarca({ onClose }) {
     },
     {
       icono: "🌐",
-      titulo: "Importante: necesitas conexion",
-      desc: "El sistema guarda tu marca en la nube. Sin internet, la marca NO quedara registrada. Verifica siempre el indicador de arriba:",
+      titulo: "Necesitas conexion a internet",
+      desc: "El sistema guarda tu marca en la nube. Sin internet la marca NO quedara registrada. Verifica el indicador de arriba.",
       color: "#8e44ad",
       tip: "Si ves Error de conexion, busca WiFi o datos moviles y vuelve a intentarlo.",
       visual: (
         <div style={{margin:"16px 0",display:"flex",flexDirection:"column",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(39,174,96,0.1)",borderRadius:8,padding:"10px 14px"}}>
             <div style={{width:10,height:10,borderRadius:"50%",background:"#27ae60",flexShrink:0}}/>
-            <span style={{color:"#27ae60",fontSize:13}}>Sincronizado con la nube — <strong>puedes marcar</strong></span>
+            <span style={{color:"#27ae60",fontSize:13}}>Sincronizado — <strong>puedes marcar</strong></span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(231,76,60,0.1)",borderRadius:8,padding:"10px 14px"}}>
             <div style={{width:10,height:10,borderRadius:"50%",background:"#e74c3c",flexShrink:0}}/>
-            <span style={{color:"#e74c3c",fontSize:13}}>Error de conexion — <strong>no marques hasta recuperar señal</strong></span>
+            <span style={{color:"#e74c3c",fontSize:13}}>Error de conexion — <strong>no marques aun</strong></span>
           </div>
         </div>
       ),
@@ -1082,7 +1085,7 @@ function TutorialMarca({ onClose }) {
     {
       icono: "🎉",
       titulo: "Listo! Ya sabes como marcar",
-      desc: "Recuerda siempre: 1) Seleccionar Entrada al llegar y Salida al irse. 2) Confirmar la hora. 3) Verificar el mensaje verde de confirmacion.",
+      desc: "Recuerda: 1) Selecciona Entrada o Salida. 2) Confirma la hora. 3) Verifica el mensaje verde de confirmacion.",
       color: "#27ae60",
       tip: "Si tienes problemas, avisa a tu administrador para que ingrese el registro manualmente.",
       visual: null,
@@ -1094,67 +1097,44 @@ function TutorialMarca({ onClose }) {
   const esUltimo = paso === pasos.length - 1;
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:1000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"linear-gradient(135deg,#0a0800,#1a1400)", border:`2px solid ${p.color}`,
-        borderRadius:20, padding:28, maxWidth:400, width:"100%", position:"relative",
-        boxShadow:`0 0 40px ${p.color}33` }}>
-
-        <button onClick={onClose} style={{ position:"absolute", top:12, right:12,
-          background:"rgba(255,255,255,0.1)", border:"none", color:"#9A8A6A",
-          width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:16 }}>X</button>
-
-        <div style={{ display:"flex", gap:4, marginBottom:20 }}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"linear-gradient(135deg,#0a0800,#1a1400)",border:`2px solid ${p.color}`,borderRadius:20,padding:28,maxWidth:400,width:"100%",position:"relative"}}>
+        <button onClick={onClose} style={{position:"absolute",top:12,right:12,background:"rgba(255,255,255,0.1)",border:"none",color:"#9A8A6A",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:14}}>
+          X
+        </button>
+        <div style={{display:"flex",gap:4,marginBottom:20}}>
           {pasos.map((_,i) => (
-            <div key={i} style={{ flex:1, height:3, borderRadius:2,
-              background: i<=paso ? p.color : "rgba(255,255,255,0.15)",
-              transition:"background 0.3s" }} />
+            <div key={i} style={{flex:1,height:3,borderRadius:2,background:i<=paso?p.color:"rgba(255,255,255,0.15)"}} />
           ))}
         </div>
-
-        <div style={{ textAlign:"center", marginBottom:16 }}>
-          <div style={{ fontSize:52, marginBottom:10 }}>{p.icono}</div>
-          <h3 style={{ color:p.color, margin:"0 0 10px", fontSize:17 }}>{p.titulo}</h3>
-          <p style={{ color:"#C5BBA0", fontSize:14, lineHeight:1.6, margin:0 }}>{p.desc}</p>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:48,marginBottom:8}}>{p.icono}</div>
+          <h3 style={{color:p.color,margin:"0 0 8px",fontSize:16}}>{p.titulo}</h3>
+          <p style={{color:"#C5BBA0",fontSize:13,lineHeight:1.6,margin:0}}>{p.desc}</p>
         </div>
-
         {p.visual && p.visual}
-
         {p.tip && (
-          <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.2)",
-            borderRadius:8, padding:"10px 14px", color:"#C9A84C", fontSize:12,
-            lineHeight:1.5, marginTop:4 }}>
+          <div style={{background:"rgba(255,215,0,0.08)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:8,padding:"10px 14px",color:"#C9A84C",fontSize:12,lineHeight:1.5,marginTop:8}}>
             {p.tip}
           </div>
         )}
-
-        <div style={{ display:"flex", gap:10, marginTop:20 }}>
+        <div style={{display:"flex",gap:10,marginTop:20}}>
           {!esPrimero && (
-            <button onClick={()=>setPaso(p=>p-1)}
-              style={{ flex:1, background:"rgba(30,26,15,0.8)", border:"1px solid rgba(255,255,255,0.2)",
-                color:"#C9A84C", borderRadius:10, padding:"12px 0", cursor:"pointer",
-                fontSize:14, fontFamily:"Georgia,serif" }}>
+            <button onClick={()=>setPaso(p=>p-1)} style={{flex:1,background:"rgba(30,26,15,0.8)",border:"1px solid rgba(255,255,255,0.2)",color:"#C9A84C",borderRadius:10,padding:"12px 0",cursor:"pointer",fontSize:14,fontFamily:"Georgia,serif"}}>
               Anterior
             </button>
           )}
           {!esUltimo ? (
-            <button onClick={()=>setPaso(p=>p+1)}
-              style={{ flex:2, background:`linear-gradient(135deg,${p.color},${p.color}cc)`,
-                border:"none", color:"#fff", borderRadius:10, padding:"12px 0",
-                cursor:"pointer", fontSize:14, fontWeight:"bold", fontFamily:"Georgia,serif" }}>
+            <button onClick={()=>setPaso(p=>p+1)} style={{flex:2,background:`linear-gradient(135deg,${p.color},${p.color}cc)`,border:"none",color:"#fff",borderRadius:10,padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:"bold",fontFamily:"Georgia,serif"}}>
               Siguiente
             </button>
           ) : (
-            <button onClick={onClose}
-              style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
-                border:"none", color:"#fff", borderRadius:10, padding:"12px 0",
-                cursor:"pointer", fontSize:14, fontWeight:"bold", fontFamily:"Georgia,serif" }}>
-              Entendido, a marcar!
+            <button onClick={onClose} style={{flex:2,background:"linear-gradient(135deg,#27ae60,#1e8449)",border:"none",color:"#fff",borderRadius:10,padding:"12px 0",cursor:"pointer",fontSize:14,fontWeight:"bold",fontFamily:"Georgia,serif"}}>
+              Entendido!
             </button>
           )}
         </div>
-
-        <div style={{ textAlign:"center", marginTop:12, color:"#9A8A6A", fontSize:12 }}>
+        <div style={{textAlign:"center",marginTop:12,color:"#9A8A6A",fontSize:12}}>
           Paso {paso + 1} de {pasos.length}
         </div>
       </div>
