@@ -4630,12 +4630,12 @@ export default function App() {
                         <span style={{color:"rgba(201,168,76,0.5)",fontSize:11}}>({t.codigo})</span>
                       </div>
                     ))}
-                    {(()=><div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,100,100,0.4)",flexShrink:0}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Feriado</span>
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
-                    </div>)()}
+                    </div>
                   </div>
 
                   {/* Grilla del calendario */}
