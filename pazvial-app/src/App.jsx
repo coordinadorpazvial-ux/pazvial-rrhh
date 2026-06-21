@@ -1276,18 +1276,35 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados]);
 
-  // ── Compensatorios: auto-generar ───────────────────────
+  // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
+    // 1. Eliminar compensatorios cuya fecha ya NO es compensable según el calendario vigente
+    //    (puede ocurrir si se corrigió la lista de feriados retroactivamente)
+    //    Solo eliminamos los que están en estado "pendiente" — los ya tomados/pagados no se tocan
+    const regPorId = new Map(registros.map(r => [r.id, r]));
+    const huerfanos = compensatorios.filter(c => {
+      if (c.estado !== "pendiente") return false; // no tocar tomados/pagados
+      const reg = regPorId.get(c.registroId);
+      if (!reg) return true; // el registro fue eliminado
+      return !esCompensable(reg.fecha); // la fecha ya no es compensable
+    });
+    if (huerfanos.length) {
+      const idsHuerfanos = new Set(huerfanos.map(c => c.id));
+      setComps(p => p.filter(c => !idsHuerfanos.has(c.id)));
+      return; // esperar al próximo render para agregar nuevos
+    }
+
+    // 2. Agregar compensatorios faltantes para registros que sí corresponden
     const ids = new Set(compensatorios.map(c => c.registroId));
     const nuevos = [];
     registros.forEach(r => {
-      // Solo domingo y feriado generan día compensatorio (sábado NO genera, solo cuenta como hora extra)
+      // Solo domingo y feriado generan día compensatorio (sábado NO genera)
       if (!ids.has(r.id) && esCompensable(r.fecha) && r.salida) {
         nuevos.push({ id:nowId(), registroId:r.id, tId:r.tId, fecha:r.fecha, estado:"pendiente", fechaTomado:"" });
       }
     });
     if (nuevos.length) setComps(p => [...p, ...nuevos]);
-  }, [registros]);
+  }, [registros, compensatorios.length]);
 
   // ── Re-sincronizar trabActivo cuando Firebase actualiza la lista ──────
   // Evita que un trabajador con sesión abierta quede con un ID desactualizado
@@ -4234,15 +4251,18 @@ export default function App() {
               ) : (
                 <div style={{ overflowX:"auto" }}>
                   <table style={S.tbl}>
-                    <thead><tr>{["Trabajador","Fecha","Tipo","Estado","Fecha Tomado","Acción"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                    <thead><tr>{["Trabajador","Fecha","Tipo","Estado","Fecha Tomado","Acción",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                     <tbody>
                       {compensatorios.map(c => {
                         const t=trabajadores.find(x=>x.id===c.tId);
+                        // Etiqueta de tipo correcta: puede ser Dom, Feriado o Sáb (si quedó mal)
+                        const tipoLabel = esDomingo(c.fecha) ? "Dom" : esSabado(c.fecha) ? "Sáb" : "Feriado";
+                        const tipoColor = esDomingo(c.fecha) ? "#8e44ad" : esSabado(c.fecha) ? "#7f8c8d" : "#c0392b";
                         return (
                           <tr key={c.id}>
                             <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                             <td style={S.td}>{c.fecha}</td>
-                            <td style={S.td}><span style={S.bdg(esDomingo(c.fecha)?"#8e44ad":"#c0392b")}>{esDomingo(c.fecha)?"Dom":"Feriado"}</span></td>
+                            <td style={S.td}><span style={S.bdg(tipoColor)}>{tipoLabel}</span></td>
                             <td style={S.td}>
                               <select style={{...S.sel,fontSize:12,padding:"4px 8px"}} value={c.estado} onChange={e=>setComps(p=>p.map(x=>x.id===c.id?{...x,estado:e.target.value}:x))}>
                                 <option value="pendiente">⏳ Pendiente</option>
@@ -4256,6 +4276,17 @@ export default function App() {
                                 : <span style={{color:"#aaa"}}>—</span>}
                             </td>
                             <td style={S.td}><span style={S.bdg(c.estado==="tomado"?"#27ae60":c.estado==="pagado"?"#3498db":"#e67e22")}>{c.estado==="tomado"?"✓ Descontado":c.estado==="pagado"?"💰 Pagado":"● Pendiente"}</span></td>
+                            <td style={S.td}>
+                              <button
+                                onClick={()=>{
+                                  if(window.confirm(`¿Eliminar el compensatorio de ${t?nombreCompleto(t):"este trabajador"} del ${c.fecha}?`)){
+                                    setComps(p=>p.filter(x=>x.id!==c.id));
+                                  }
+                                }}
+                                style={{...S.btnD,fontSize:11,padding:"4px 10px"}}
+                                title="Eliminar compensatorio"
+                              >🗑️</button>
+                            </td>
                           </tr>
                         );
                       })}
