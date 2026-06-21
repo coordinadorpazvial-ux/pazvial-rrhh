@@ -3209,7 +3209,6 @@ export default function App() {
                   </div>
                 </div>
 
-                <div>
                 {[
                   {
                     icon:"🔑", titulo:"1. Cómo Ingresar al Sistema",
@@ -3318,14 +3317,12 @@ export default function App() {
                     </div>
                   </div>
                 ))}
-
-                <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+                {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                   <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
                   <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
                     Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
                   </div>
-                </div>
-                </div>
+                </div>)()}
               </div>
             </div>
           )}
@@ -4633,13 +4630,13 @@ export default function App() {
                         <span style={{color:"rgba(201,168,76,0.5)",fontSize:11}}>({t.codigo})</span>
                       </div>
                     ))}
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
+                    {(()=><div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,100,100,0.4)",flexShrink:0}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Feriado</span>
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
                     </div>
-                    </div>
+                    </div>)()}
                   </div>
 
                   {/* Grilla del calendario */}
@@ -4914,7 +4911,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
               {[
                 {
                   icon:"🔑", titulo:"1. Acceso al Panel de Administración",
@@ -5110,8 +5106,7 @@ export default function App() {
                   </div>
                 </div>
               ))}
-
-              <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+              {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                 <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                   <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
@@ -5123,8 +5118,7 @@ export default function App() {
                     <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
                   </div>
                 </div>
-              </div>
-              </div>
+              </div>)()}
             </div>
           </div>
         )}
