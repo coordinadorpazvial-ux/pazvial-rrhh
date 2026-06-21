@@ -983,7 +983,7 @@ const S = {
 // TUTORIAL INTERACTIVO DE MARCAS — componente global
 // ═══════════════════════════════════════════════════════════
 function TutorialMarca({ onClose }) {
-  const [paso, setPaso] = React.useState(0);
+  const [paso, setPaso] = useState(0);
   const pasos = [
     {
       icono: "👋",
