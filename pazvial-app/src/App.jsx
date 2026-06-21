@@ -71,13 +71,43 @@ async function guardarEnFirebase(datos) {
 // CONSTANTES
 // ═══════════════════════════════════════════════════════════
 const ADMIN_PASS = "Negra2026";
+// Feriados de carácter general Chile — fuente: feriados.cl
+// (solo aplican a todas las personas a nivel nacional)
 const FERIADOS = new Set([
-  "2025-01-01","2025-04-18","2025-04-19","2025-05-01","2025-05-21","2025-06-20",
-  "2025-06-29","2025-07-16","2025-08-15","2025-09-18","2025-09-19","2025-10-12",
-  "2025-10-31","2025-11-01","2025-12-08","2025-12-25",
-  "2026-01-01","2026-04-03","2026-04-04","2026-05-01","2026-05-21","2026-06-19",
-  "2026-06-29","2026-07-16","2026-08-15","2026-09-18","2026-09-19","2026-10-12",
-  "2026-10-31","2026-11-01","2026-12-08","2026-12-25",
+  // 2025
+  "2025-01-01", // Año Nuevo
+  "2025-04-18", // Viernes Santo
+  "2025-04-19", // Sábado Santo
+  "2025-05-01", // Día Nacional del Trabajo
+  "2025-05-21", // Día de las Glorias Navales
+  "2025-06-20", // Día Nacional de los Pueblos Indígenas (solsticio 2025)
+  "2025-06-29", // San Pedro y San Pablo
+  "2025-07-16", // Día de la Virgen del Carmen
+  "2025-08-15", // Asunción de la Virgen
+  "2025-09-18", // Independencia Nacional
+  "2025-09-19", // Día de las Glorias del Ejército
+  "2025-10-12", // Encuentro de Dos Mundos
+  "2025-10-31", // Día de las Iglesias Evangélicas y Protestantes
+  "2025-11-01", // Día de Todos los Santos
+  "2025-12-08", // Inmaculada Concepción
+  "2025-12-25", // Navidad
+  // 2026
+  "2026-01-01", // Año Nuevo
+  "2026-04-03", // Viernes Santo
+  "2026-04-04", // Sábado Santo
+  "2026-05-01", // Día Nacional del Trabajo
+  "2026-05-21", // Día de las Glorias Navales
+  // 2026-06-21 = Día Nacional de los Pueblos Indígenas, pero cae domingo (ya no laboral)
+  "2026-06-29", // San Pedro y San Pablo
+  "2026-07-16", // Día de la Virgen del Carmen
+  "2026-08-15", // Asunción de la Virgen
+  "2026-09-18", // Independencia Nacional
+  "2026-09-19", // Día de las Glorias del Ejército
+  "2026-10-12", // Encuentro de Dos Mundos
+  "2026-10-31", // Día de las Iglesias Evangélicas y Protestantes
+  "2026-11-01", // Día de Todos los Santos
+  "2026-12-08", // Inmaculada Concepción
+  "2026-12-25", // Navidad
 ]);
 
 // ═══════════════════════════════════════════════════════════
@@ -2952,10 +2982,12 @@ export default function App() {
                     items:[
                       "Lunes a Jueves: jornada normal de 08:00 a 18:00.",
                       "Viernes: jornada normal de 08:00 a 14:00.",
-                      "Si tu salida es posterior al horario normal, el excedente se registra como horas extraordinarias.",
-                      "Sábado, domingo o feriado: toda tu jornada se considera hora extraordinaria, con un mínimo garantizado de 8 horas aunque trabajes menos tiempo. Si trabajas más de 8 horas, se registran las horas efectivamente trabajadas.",
-                      "Las horas extraordinarias quedan en estado Pendiente hasta que el administrador las apruebe o rechace.",
-                      "Recibirás una notificación con el resultado de la revisión.",
+                      "Si entras antes de las 07:00 (más de 1 hora antes del inicio), el tiempo entre tu entrada y las 08:00 se registra como horas extraordinarias de entrada anticipada, pendientes de aprobación.",
+                      "Si tu salida es posterior al horario normal (18:00 de lunes a jueves, 14:00 los viernes), el excedente se registra como horas extraordinarias de salida, también pendientes de aprobación.",
+                      "Ambas (HE de entrada y HE de salida) son independientes: el administrador puede aprobar una y rechazar la otra.",
+                      "Sábado, domingo o feriado: toda tu jornada se considera hora extraordinaria, con un mínimo garantizado de 8 horas. Si trabajas más de 8 horas, se registran las horas efectivamente trabajadas.",
+                      "Si trabajas en domingo o feriado, además se genera automáticamente un Día Compensatorio. El sábado NO genera compensatorio.",
+                      "Recibirás una notificación por cada aprobación o rechazo, con el motivo indicado por el administrador.",
                     ]
                   },
                   {
@@ -4623,10 +4655,11 @@ export default function App() {
                   icon:"🔔", titulo:"2. Módulo: Bandeja de Pendientes",
                   items:[
                     "Punto de control central. El contador en el tab muestra el total de ítems pendientes de revisión.",
-                    "Agrupa en una sola pantalla: entradas anticipadas (antes de 08:00), horas extraordinarias, permisos/vacaciones y anticipos de remuneración.",
-                    "Cada sección muestra solo los ítems pendientes con sus botones de Aprobar o Rechazar.",
-                    "Al pie se muestra un historial resumido de los últimos ítems resueltos en cada categoría.",
-                    "Las entradas anticipadas tienen un modal especial: puedes aprobar la hora original o corregirla.",
+                    "Agrupa en una sola pantalla: horas extraordinarias, permisos/vacaciones y anticipos de remuneración.",
+                    "HE en días hábiles: la tabla muestra dos columnas independientes — 'HE Entrada' (tiempo antes de las 08:00 para entradas antes de las 07:00) y 'HE Salida' (tiempo después del horario normal). Cada una tiene sus propios botones ✓ Aprobar / ✗ Rechazar.",
+                    "HE en días especiales (sáb/dom/feriado): flujo clásico con un solo botón de aprobación por registro.",
+                    "Puedes aprobar la HE de entrada y rechazar la de salida del mismo día, o viceversa — son decisiones completamente independientes.",
+                    "Al rechazar siempre deberás ingresar un motivo obligatorio que el trabajador verá en sus notificaciones.",
                   ]
                 },
                 {
@@ -4767,11 +4800,13 @@ export default function App() {
                 {
                   icon:"⏱", titulo:"10b. Cálculo de Horas Extraordinarias",
                   items:[
-                    "Día hábil (lunes a viernes): las horas extra son el tiempo trabajado fuera del horario normal (después de las 18:00, o 14:00 los viernes).",
-                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas — si el trabajador marca menos de 8h efectivas, el sistema registra igualmente 8h extra. Si trabaja más de 8h, se registran las horas reales.",
-                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. Trabajar sábado NO genera día compensatorio, solo horas extra con el mínimo de 8h.",
-                    "Esta regla aplica automáticamente al calcular horas en Asistencia, Hoja Mensual PDF, Liquidaciones y Dashboard — no requiere ajuste manual.",
-                    "Las horas extra rechazadas no se contabilizan en ningún reporte ni en el total del Dashboard ni en la Hoja Mensual.",
+                    "Entrada anticipada (antes de las 07:00): el tiempo entre la hora real de entrada y las 08:00 genera HE de entrada, con estado pendiente independiente. Puedes aprobarla o rechazarla sin afectar la HE de salida del mismo día.",
+                    "Salida posterior (después de las 18:00 de lunes a jueves, o 14:00 los viernes): el excedente genera HE de salida, también con estado pendiente independiente.",
+                    "Ambas aprobaciones son independientes y aparecen en columnas separadas en la bandeja de Pendientes. Puedes aprobar una y rechazar la otra para el mismo registro.",
+                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas. Si el trabajador labora más de 8h, se registran las horas reales. Esta HE usa el flujo de aprobación clásico (un solo estado).",
+                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. El sábado NO genera compensatorio, solo HE.",
+                    "El calendario de feriados considera solo los feriados de carácter general de Chile (aplican a todas las personas a nivel nacional), según la ley vigente.",
+                    "Las horas extra rechazadas no se contabilizan en ningún reporte: ni en el Dashboard, ni en la Hoja Mensual, ni en las Liquidaciones.",
                   ]
                 },
                 {
