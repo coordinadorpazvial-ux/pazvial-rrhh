@@ -3209,6 +3209,7 @@ export default function App() {
                   </div>
                 </div>
 
+                <>
                 {[
                   {
                     icon:"🔑", titulo:"1. Cómo Ingresar al Sistema",
@@ -3323,6 +3324,7 @@ export default function App() {
                     Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
                   </div>
                 </div>
+                </>
               </div>
             </div>
           )}
@@ -4622,6 +4624,7 @@ export default function App() {
                 <div>
                   {/* Leyenda */}
                   <div style={{...S.card, display:"flex", flexWrap:"wrap", gap:10, padding:"12px 16px", marginBottom:14}}>
+                    <>
                     {trabActivos.map((t,i) => (
                       <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
                         <div style={{width:12,height:12,borderRadius:3,background:COLORES[i%COLORES.length],flexShrink:0}}/>
@@ -4635,6 +4638,7 @@ export default function App() {
                       <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
                       <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
                     </div>
+                    </>
                   </div>
 
                   {/* Grilla del calendario */}
@@ -4909,6 +4913,7 @@ export default function App() {
                 </div>
               </div>
 
+              <>
               {[
                 {
                   icon:"🔑", titulo:"1. Acceso al Panel de Administración",
@@ -5117,6 +5122,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              </>
             </div>
           </div>
         )}
