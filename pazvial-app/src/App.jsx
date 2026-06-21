@@ -1080,10 +1080,7 @@ function TutorialMarca({ onClose }) {
     {
       icono: "🎉",
       titulo: "¡Listo! Ya sabes cómo marcar",
-      desc: "Recuerda siempre:
-1. Seleccionar Entrada al llegar y Salida al irse
-2. Confirmar la hora cuando aparezca la pantalla
-3. Verificar que aparezca el mensaje de confirmación en verde",
+      desc: "Recuerda siempre:\n1. Seleccionar Entrada al llegar y Salida al irse\n2. Confirmar la hora cuando aparezca la pantalla\n3. Verificar que aparezca el mensaje de confirmación en verde",
       color: "#27ae60",
       tip: "Si tienes problemas, avisa a tu administrador para que ingrese el registro manualmente.",
       visual: null,
