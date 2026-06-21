@@ -958,8 +958,8 @@ const BLANCO  = "#F5F0E8";   // blanco cálido
 
 const S = {
   app:   { minHeight:"100vh", background:`linear-gradient(160deg,${NEGRO} 0%,#0F0F0F 40%,#161208 100%)`, fontFamily:"'Georgia',serif", color:BLANCO },
-  hdr:   { background:"rgba(5,5,5,0.95)", backdropFilter:"blur(20px)", borderBottom:`1px solid ${ORO}`, padding:"10px 24px", display:"flex", alignItems:"center", gap:12, justifyContent:"space-between", boxShadow:`0 2px 20px rgba(201,168,76,0.15)` },
-  card:  { background:`rgba(20,18,10,0.85)`, backdropFilter:"blur(12px)", border:`1px solid rgba(201,168,76,0.18)`, borderRadius:14, padding:20, marginBottom:16, boxShadow:"0 4px 24px rgba(0,0,0,0.4)" },
+  hdr:   { background:"rgba(5,5,5,0.95)", backdropFilter:"blur(20px)", borderBottom:`1px solid ${ORO}`, padding:"8px 14px", display:"flex", alignItems:"center", gap:8, justifyContent:"space-between", boxShadow:`0 2px 20px rgba(201,168,76,0.15)`, flexWrap:"wrap" },
+  card:  { background:`rgba(20,18,10,0.85)`, backdropFilter:"blur(12px)", border:`1px solid rgba(201,168,76,0.18)`, borderRadius:14, padding:16, marginBottom:14, boxShadow:"0 4px 24px rgba(0,0,0,0.4)", overflow:"hidden" },
   input: { background:"rgba(18,15,8,0.7)", border:`1px solid rgba(201,168,76,0.35)`, borderRadius:8, padding:"9px 13px", color:BLANCO, fontSize:14, fontFamily:"Georgia,serif", outline:"none", width:"100%", boxSizing:"border-box" },
   sel:   { background:NEGRO2, border:`1px solid rgba(201,168,76,0.35)`, borderRadius:8, padding:"8px 12px", color:BLANCO, fontSize:13, fontFamily:"Georgia,serif", cursor:"pointer" },
   lbl:   { fontSize:11, color:"#9A8A6A", marginBottom:4, display:"block", textTransform:"uppercase", letterSpacing:1.5 },
@@ -968,15 +968,207 @@ const S = {
   btnD:  { background:"#7B1F1F", color:"#FFCCCC", border:"1px solid #c0392b", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
   btnG:  { background:"#1A4A2A", color:"#AAFFCC", border:"1px solid #27ae60", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
   btnB:  { background:"#1A2E4A", color:"#AAD4FF", border:"1px solid #2980b9", borderRadius:7, padding:"6px 13px", cursor:"pointer", fontSize:12, fontFamily:"Georgia,serif" },
-  tab:   a => ({ background:a?`linear-gradient(135deg,${ORO},${ORO_D})`:NEGRO2, color:a?NEGRO:"#9A8A6A", border:a?"none":`1px solid rgba(201,168,76,0.15)`, borderRadius:"8px 8px 0 0", padding:"9px 16px", cursor:"pointer", fontWeight:a?"bold":"normal", fontFamily:"Georgia,serif", fontSize:12, boxShadow:a?`0 -2px 8px rgba(201,168,76,0.2)`:"none" }),
+  tab:   a => ({ background:a?`linear-gradient(135deg,${ORO},${ORO_D})`:NEGRO2, color:a?NEGRO:"#9A8A6A", border:a?"none":`1px solid rgba(201,168,76,0.15)`, borderRadius:"8px 8px 0 0", padding:"7px 10px", cursor:"pointer", fontWeight:a?"bold":"normal", fontFamily:"Georgia,serif", fontSize:11, boxShadow:a?`0 -2px 8px rgba(201,168,76,0.2)`:"none", whiteSpace:"nowrap" }),
   bdg:   c => ({ background:c, borderRadius:10, padding:"2px 9px", fontSize:11, fontWeight:"bold", display:"inline-block" }),
   th:    { background:NEGRO2, padding:"9px 11px", textAlign:"left", color:ORO, fontSize:11, textTransform:"uppercase", letterSpacing:1.5, borderBottom:`1px solid rgba(201,168,76,0.25)` },
   td:    { padding:"9px 11px", borderBottom:`1px solid rgba(201,168,76,0.08)`, verticalAlign:"middle", fontSize:13, color:BLANCO },
   err:   { background:"rgba(120,30,30,0.4)", border:"1px solid #c0392b", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#FFAAAA" },
   ok:    { background:"rgba(20,60,35,0.5)", border:"1px solid #27ae60", borderRadius:8, padding:"9px 14px", marginTop:8, fontSize:13, color:"#AAFFCC" },
   notif: { background:"rgba(100,70,10,0.3)", border:`1px solid ${ORO_D}`, borderRadius:8, padding:"10px 14px", marginBottom:8, fontSize:13 },
-  tbl:   { width:"100%", borderCollapse:"collapse", fontSize:13 },
+  tbl:   { width:"100%", borderCollapse:"collapse", fontSize:12, minWidth:480 },
 };
+
+
+// ═══════════════════════════════════════════════════════════
+// TUTORIAL INTERACTIVO DE MARCAS — componente global
+// ═══════════════════════════════════════════════════════════
+function TutorialMarca({ onClose }) {
+  const [paso, setPaso] = React.useState(0);
+  const pasos = [
+    {
+      icono: "👋",
+      titulo: "Bienvenido al tutorial",
+      desc: "Te explicamos cómo registrar correctamente tu entrada y salida. Son solo 3 pasos simples. Sigue las instrucciones y tu marca quedará guardada sin problemas.",
+      color: "#C9A84C",
+      tip: null,
+    },
+    {
+      icono: "🟢",
+      titulo: "Paso 1: Selecciona Entrada o Salida",
+      desc: "Al llegar, toca el botón 🟢 Entrada. Al terminar tu jornada, toca 🔴 Salida. Asegúrate de seleccionar el correcto antes de continuar.",
+      color: "#27ae60",
+      tip: "⚠️ Si seleccionas el incorrecto, cancela en el siguiente paso y vuelve a intentarlo.",
+      visual: (
+        <div style={{display:"flex",gap:8,margin:"16px 0"}}>
+          <div style={{flex:1,background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#fff",fontWeight:"bold",fontSize:14}}>🟢 Entrada</div>
+          <div style={{flex:1,background:"rgba(30,26,15,0.8)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:10,padding:"12px 0",textAlign:"center",color:"#9A8A6A",fontSize:14}}>🔴 Salida</div>
+        </div>
+      ),
+    },
+    {
+      icono: "👆",
+      titulo: "Paso 2: Toca Registrar",
+      desc: "Toca el botón grande verde (Entrada) o rojo (Salida). El sistema capturará la hora exacta de ese momento.",
+      color: "#27ae60",
+      tip: "⚠️ No toques el botón antes de estar listo — la hora que se captura es la del momento exacto en que tocas.",
+      visual: (
+        <div style={{margin:"16px 0",background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:12,padding:"16px 0",textAlign:"center",color:"#fff",fontWeight:"bold",fontSize:16,boxShadow:"0 4px 15px rgba(39,174,96,0.4)"}}>
+          🟢 Registrar Entrada
+        </div>
+      ),
+    },
+    {
+      icono: "✅",
+      titulo: "Paso 3: Confirma la marca",
+      desc: "Aparecerá una pantalla mostrando la hora exacta. Revísala y toca ✓ Sí, Confirmar para guardar. Si la hora es incorrecta, toca ✗ Cancelar.",
+      color: "#C9A84C",
+      tip: "⚠️ Si cancelas, la marca NO queda guardada. Debes volver a tocar el botón de Registrar.",
+      visual: (
+        <div style={{margin:"16px 0",background:"linear-gradient(135deg,#001a4d,#003082)",border:"2px solid #27ae60",borderRadius:14,padding:"18px",textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:6}}>🟢</div>
+          <div style={{color:"#fff",fontWeight:"bold",marginBottom:4}}>Confirmar Entrada</div>
+          <div style={{color:"#C9A84C",fontSize:32,fontWeight:"bold",letterSpacing:3,margin:"10px 0"}}>08:02</div>
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <div style={{flex:1,background:"rgba(30,26,15,0.8)",borderRadius:8,padding:"10px 0",color:"#9A8A6A",fontSize:13}}>✗ Cancelar</div>
+            <div style={{flex:2,background:"linear-gradient(135deg,#27ae60,#1e8449)",borderRadius:8,padding:"10px 0",color:"#fff",fontWeight:"bold",fontSize:13}}>✓ Sí, Confirmar</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icono: "🔔",
+      titulo: "¿Cómo sé que quedó guardado?",
+      desc: "Después de confirmar verás uno de estos mensajes:",
+      color: "#3498db",
+      tip: null,
+      visual: (
+        <div style={{margin:"16px 0",display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",borderRadius:8,padding:"10px 14px",color:"#27ae60",fontSize:13}}>
+            ✅ Entrada registrada a las 08:02. Guardado ✓<br/>
+            <span style={{color:"#9A8A6A",fontSize:11}}>→ Todo correcto, marca guardada.</span>
+          </div>
+          <div style={{background:"rgba(230,126,34,0.15)",border:"1px solid #e67e22",borderRadius:8,padding:"10px 14px",color:"#e67e22",fontSize:13}}>
+            ⚠️ Entrada registrada a las 06:45. Las horas previas a las 08:00 quedan pendientes de aprobación.<br/>
+            <span style={{color:"#9A8A6A",fontSize:11}}>→ Marca guardada, pero el jefe debe aprobar las horas extra.</span>
+          </div>
+          <div style={{background:"rgba(231,76,60,0.15)",border:"1px solid #e74c3c",borderRadius:8,padding:"10px 14px",color:"#e74c3c",fontSize:13}}>
+            Ya tiene registro de entrada hoy.<br/>
+            <span style={{color:"#9A8A6A",fontSize:11}}>→ Ya marcaste entrada. Ahora debes marcar Salida al terminar.</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icono: "🌐",
+      titulo: "Importante: necesitas conexión",
+      desc: "El sistema guarda tu marca en la nube. Si no tienes internet, la marca NO quedará registrada. Verifica siempre que el indicador de arriba diga:",
+      color: "#8e44ad",
+      tip: "💡 Si ves '⚠ Error de conexión', busca señal de WiFi o datos móviles y vuelve a intentarlo.",
+      visual: (
+        <div style={{margin:"16px 0",display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(39,174,96,0.1)",borderRadius:8,padding:"10px 14px"}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:"#27ae60",flexShrink:0}}/>
+            <span style={{color:"#27ae60",fontSize:13}}>✓ Sincronizado con la nube — <strong>puedes marcar</strong></span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,background:"rgba(231,76,60,0.1)",borderRadius:8,padding:"10px 14px"}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:"#e74c3c",flexShrink:0}}/>
+            <span style={{color:"#e74c3c",fontSize:13}}>⚠ Error de conexión — <strong>no marques hasta recuperar señal</strong></span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      icono: "🎉",
+      titulo: "¡Listo! Ya sabes cómo marcar",
+      desc: "Recuerda siempre:
+1. Seleccionar Entrada al llegar y Salida al irse
+2. Confirmar la hora cuando aparezca la pantalla
+3. Verificar que aparezca el mensaje de confirmación en verde",
+      color: "#27ae60",
+      tip: "Si tienes problemas, avisa a tu administrador para que ingrese el registro manualmente.",
+      visual: null,
+    },
+  ];
+
+  const p = pasos[paso];
+  const esPrimero = paso === 0;
+  const esUltimo = paso === pasos.length - 1;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:1000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"linear-gradient(135deg,#0a0800,#1a1400)", border:`2px solid ${p.color}`,
+        borderRadius:20, padding:28, maxWidth:400, width:"100%", position:"relative",
+        boxShadow:`0 0 40px ${p.color}33` }}>
+
+        {/* Cerrar */}
+        <button onClick={onClose} style={{ position:"absolute", top:12, right:12,
+          background:"rgba(255,255,255,0.1)", border:"none", color:"#9A8A6A",
+          width:32, height:32, borderRadius:"50%", cursor:"pointer", fontSize:16 }}>✕</button>
+
+        {/* Progreso */}
+        <div style={{ display:"flex", gap:4, marginBottom:20 }}>
+          {pasos.map((_,i) => (
+            <div key={i} style={{ flex:1, height:3, borderRadius:2,
+              background: i<=paso ? p.color : "rgba(255,255,255,0.15)",
+              transition:"background 0.3s" }} />
+          ))}
+        </div>
+
+        {/* Contenido */}
+        <div style={{ textAlign:"center", marginBottom:16 }}>
+          <div style={{ fontSize:52, marginBottom:10 }}>{p.icono}</div>
+          <h3 style={{ color:p.color, margin:"0 0 10px", fontSize:17 }}>{p.titulo}</h3>
+          <p style={{ color:"#C5BBA0", fontSize:14, lineHeight:1.6, margin:0, whiteSpace:"pre-line" }}>{p.desc}</p>
+        </div>
+
+        {/* Visual ilustrativo */}
+        {p.visual && p.visual}
+
+        {/* Tip */}
+        {p.tip && (
+          <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.2)",
+            borderRadius:8, padding:"10px 14px", color:"#C9A84C", fontSize:12,
+            lineHeight:1.5, marginTop:4 }}>
+            {p.tip}
+          </div>
+        )}
+
+        {/* Navegación */}
+        <div style={{ display:"flex", gap:10, marginTop:20 }}>
+          {!esPrimero && (
+            <button onClick={()=>setPaso(p=>p-1)}
+              style={{ flex:1, background:"rgba(30,26,15,0.8)", border:"1px solid rgba(255,255,255,0.2)",
+                color:"#C9A84C", borderRadius:10, padding:"12px 0", cursor:"pointer",
+                fontSize:14, fontFamily:"Georgia,serif" }}>
+              ← Anterior
+            </button>
+          )}
+          {!esUltimo ? (
+            <button onClick={()=>setPaso(p=>p+1)}
+              style={{ flex:2, background:`linear-gradient(135deg,${p.color},${p.color}cc)`,
+                border:"none", color:"#fff", borderRadius:10, padding:"12px 0",
+                cursor:"pointer", fontSize:14, fontWeight:"bold", fontFamily:"Georgia,serif" }}>
+              Siguiente →
+            </button>
+          ) : (
+            <button onClick={onClose}
+              style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
+                border:"none", color:"#fff", borderRadius:10, padding:"12px 0",
+                cursor:"pointer", fontSize:14, fontWeight:"bold", fontFamily:"Georgia,serif" }}>
+              ✓ Entendido, ¡a marcar!
+            </button>
+          )}
+        </div>
+
+        {/* Indicador de paso */}
+        <div style={{ textAlign:"center", marginTop:12, color:"#9A8A6A", fontSize:12 }}>
+          Paso {paso + 1} de {pasos.length}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════
 // MODAL MOTIVO RECHAZO — definido GLOBALMENTE para que React
@@ -1136,6 +1328,7 @@ export default function App() {
   const [marcaConfirm,   setMarcaConfirm]   = useState(null);   // {tipo, hora, fecha} | null
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
+  const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
 
   // ── Liquidaciones ──────────────────────────────────────
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -1174,11 +1367,51 @@ export default function App() {
     const style = document.createElement('style');
     style.id = 'pazvial-time-fix';
     style.textContent = `
+      /* ── Formato 24h ── */
       input[type="time"]::-webkit-datetime-edit-ampm-field { display: none !important; width: 0 !important; }
       input[type="time"]::-webkit-datetime-edit-hour-field,
       input[type="time"]::-webkit-datetime-edit-minute-field { color: #F5F0E8; }
       input[type="time"] { -webkit-appearance: none; }
       input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+
+      /* ── Base móvil ── */
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      body { margin: 0; overflow-x: hidden; }
+
+      /* ── Tablas: scroll horizontal en móvil ── */
+      .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+
+      /* ── Grids adaptativos ── */
+      @media (max-width: 600px) {
+        .grid-3 { grid-template-columns: 1fr 1fr !important; }
+        .grid-4 { grid-template-columns: 1fr 1fr !important; }
+        .grid-5 { grid-template-columns: 1fr 1fr !important; }
+        .hide-mobile { display: none !important; }
+        .full-mobile { width: 100% !important; max-width: 100% !important; }
+        .stack-mobile { flex-direction: column !important; }
+        .font-sm-mobile { font-size: 11px !important; }
+        .pad-sm-mobile { padding: 8px !important; }
+        .tab-btn { font-size: 10px !important; padding: 7px 8px !important; }
+      }
+
+      /* ── Botones táctiles más grandes ── */
+      @media (max-width: 600px) {
+        button { min-height: 40px; }
+        input, select, textarea { font-size: 16px !important; } /* evita zoom en iOS */
+      }
+
+      /* ── Tablas dentro de cards: scroll en móvil ── */
+      @media (max-width: 600px) {
+        table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        th, td { white-space: nowrap; }
+      }
+
+      /* ── Animación pulso para sincronización ── */
+      @keyframes pulse {
+        0%   { opacity: 1; }
+        50%  { opacity: 0.3; }
+        100% { opacity: 1; }
+      }
     `;
     if (!document.getElementById('pazvial-time-fix')) {
       document.head.appendChild(style);
@@ -2402,7 +2635,7 @@ export default function App() {
               Seleccione su perfil para continuar
             </p>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18, width:"100%", maxWidth:480 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:14, width:"100%", maxWidth:480 }}>
             {[
               { label:"Trabajador", sub:"Registrar entrada / salida", icon:"👷", action:()=>setVista("trabLogin"), gold:false },
               { label:"Administrador", sub:"Gestión y reportes", icon:"🔐", action:()=>setVista("adminLogin"), gold:true },
@@ -2413,7 +2646,7 @@ export default function App() {
                   : "rgba(20,18,10,0.7)",
                 backdropFilter:"blur(20px)",
                 border: b.gold ? "1px solid rgba(201,168,76,0.6)" : "1px solid rgba(201,168,76,0.2)",
-                borderRadius:16, padding:"28px 16px", cursor:"pointer", textAlign:"center",
+                borderRadius:16, padding:"20px 12px", cursor:"pointer", textAlign:"center",
                 transition:"all 0.25s",
                 boxShadow: b.gold ? "0 8px 32px rgba(201,168,76,0.2)" : "0 4px 16px rgba(0,0,0,0.4)"
               }}>
@@ -2457,8 +2690,8 @@ export default function App() {
   if (vista==="trabLogin") return (
     <div style={S.app}>
       <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub="Acceso Trabajador" onBack={()=>setVista("portada")} />
-      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 70px)", padding:20 }}>
-        <div style={{ width:"100%", maxWidth:380 }}>
+      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"calc(100vh - 70px)", padding:16 }}>
+        <div style={{ width:"100%", maxWidth:400 }}>
           <div style={S.card}>
             <div style={{ textAlign:"center", marginBottom:18 }}><Logo size={52} /></div>
             <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>Identificación</h3>
@@ -2519,17 +2752,16 @@ export default function App() {
           <span style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>
             Bienvenido/a, {nombreCompleto(trabActivo)}
           </span>
-          <span style={{ color:"#9A8A6A", fontSize:12, marginLeft:8 }}>Código: {trabActivo.codigo}</span>
-          <span style={{ color:"#9A8A6A", fontSize:12 }}> — RUT: {trabActivo.rut}</span>
+          <span style={{ color:"#9A8A6A", fontSize:11, marginLeft:4 }}>{trabActivo.codigo}</span>
           {noLeidas>0 && <span style={{ marginLeft:"auto", ...S.bdg("#e67e22") }}>🔔 {noLeidas} nuevo{noLeidas>1?"s":""}</span>}
         </div>
 
         {/* Tabs */}
-        <div style={{ padding:"0 16px", display:"flex", gap:3, flexWrap:"wrap", marginTop:12 }}>
+        <div style={{ padding:"0 8px", display:"flex", gap:2, flexWrap:"wrap", marginTop:8 }}>
           {tabsTrab.map(t => <button key={t.k} onClick={()=>setTabTrab(t.k)} style={S.tab(tabTrab===t.k)}>{t.l}</button>)}
         </div>
 
-        <div style={{ padding:"0 16px 40px" }}>
+        <div style={{ padding:"0 8px 40px" }}>
 
           {/* ── TAB: MARCAR ──────────────────────────────── */}
           {tabTrab==="marcar" && (
@@ -2583,9 +2815,18 @@ export default function App() {
                 </div>
               )}
 
-              {/* Indicador de sincronización */}
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end",
+              {/* Tutorial interactivo */}
+              {showTutorial && <TutorialMarca onClose={()=>setShowTutorial(false)} />}
+
+              {/* Indicador de sincronización + botón tutorial */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
                 marginTop:12, marginBottom:4, paddingRight:4 }}>
+                <button onClick={()=>setShowTutorial(true)}
+                  style={{ background:"rgba(201,168,76,0.12)", border:"1px solid rgba(201,168,76,0.3)",
+                    color:"#C9A84C", borderRadius:8, padding:"5px 12px", cursor:"pointer",
+                    fontSize:12, fontFamily:"Georgia,serif" }}>
+                  📖 ¿Cómo marcar?
+                </button>
                 <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11,
                   color: syncEstado==="ok"?"#27ae60":syncEstado==="guardando"?"#FFD700":"#e74c3c" }}>
                   <div style={{ width:8, height:8, borderRadius:"50%",
@@ -2701,7 +2942,7 @@ export default function App() {
               {/* Historial de registros */}
               <div style={S.card}>
                 <h4 style={{ color:"#C9A84C", marginTop:0 }}>Historial de Asistencia</h4>
-                <div style={{ overflowX:"auto" }}>
+                <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
                   <table style={S.tbl}>
                     <thead><tr>
                       {["Fecha","Entrada","Salida","H. Extra","Estado","Nota"].map(h=><th key={h} style={S.th}>{h}</th>)}
@@ -3191,7 +3432,7 @@ export default function App() {
       )}
 
       {/* Tabs */}
-      <div style={{ padding:"0 16px", display:"flex", gap:3, flexWrap:"wrap", marginTop:12 }}>
+      <div style={{ padding:"0 8px", display:"flex", gap:2, flexWrap:"wrap", marginTop:8 }}>
         {tabsAdmin.map(t => <button key={t.k} onClick={()=>{
           setTabAdmin(t.k);
           if(t.k==="nomina" && !fichaSelId){
@@ -3201,7 +3442,7 @@ export default function App() {
         }} style={S.tab(tabAdmin===t.k)}>{t.l}</button>)}
       </div>
 
-      <div style={{ padding:"0 16px 48px" }}>
+      <div style={{ padding:"0 8px 48px" }}>
 
         {/* ── TAB: BANDEJA DE PENDIENTES ──────────────── */}
         {tabAdmin==="bandeja" && (
@@ -3276,8 +3517,8 @@ export default function App() {
                               ⏱ {hBruto.extraEntrada}h anticipadas
                             </span>
                             <div style={{display:"flex",gap:4}}>
-                              <button onClick={()=>aprobarHEEntrada(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
-                              <button onClick={()=>setMotivoModal({tipo:"heEntrada",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                              <button onClick={()=>aprobarHEEntrada(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
+                              <button onClick={()=>setMotivoModal({tipo:"heEntrada",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
                             </div>
                           </div>
                         ) : r.estadoEntrada==="aprobado" ? (
@@ -3305,8 +3546,8 @@ export default function App() {
                               ⏱ {hBruto.extraSalida}h posteriores
                             </span>
                             <div style={{display:"flex",gap:4}}>
-                              <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
-                              <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                              <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
+                              <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
                             </div>
                           </div>
                         ) : r.estadoSalida==="aprobado" ? (
@@ -3487,7 +3728,7 @@ export default function App() {
               <div style={S.card}>
                 <h3 style={{color:"#C9A84C",marginTop:0}}>📋 Registros de Asistencia</h3>
                 {/* Filtros */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:14}}>
                   <div>
                     <label style={S.lbl}>Trabajador</label>
                     <select style={{...S.sel,width:"100%"}} value={filtroRegTrab} onChange={e=>setFiltroRegTrab(e.target.value)}>
@@ -4249,7 +4490,7 @@ export default function App() {
               {compensatorios.length===0 ? (
                 <div style={{ color:"#9A8A6A", textAlign:"center", padding:36 }}>No hay días compensatorios</div>
               ) : (
-                <div style={{ overflowX:"auto" }}>
+                <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch" }}>
                   <table style={S.tbl}>
                     <thead><tr>{["Trabajador","Fecha","Tipo","Estado","Fecha Tomado","Acción",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                     <tbody>
@@ -4298,6 +4539,7 @@ export default function App() {
             {/* Resumen */}
             <div style={S.card}>
               <h4 style={{ color:"#9A8A6A", marginTop:0 }}>Resumen por Trabajador</h4>
+              <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
               <table style={S.tbl}>
                 <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                 <tbody>
