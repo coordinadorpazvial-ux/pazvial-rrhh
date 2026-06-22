@@ -3317,12 +3317,12 @@ export default function App() {
                     </div>
                   </div>
                 ))}
-                {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+                {(()=>(<div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                   <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
                   <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
                     Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
                   </div>
-                </div>)()}
+                </div>))()}
               </div>
             </div>
           )}
@@ -5104,7 +5104,7 @@ export default function App() {
                   </div>
                 </div>
               ))}
-              {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+              {(()=>(<div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                 <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                   <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
@@ -5116,7 +5116,7 @@ export default function App() {
                     <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
                   </div>
                 </div>
-              </div>)()}
+              </div>))()}
             </div>
           </div>
         )}
