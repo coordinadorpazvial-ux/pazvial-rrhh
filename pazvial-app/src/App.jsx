@@ -4444,29 +4444,414 @@ export default function App() {
             <div style={S.card}>
               <h4 style={{ color:"#9A8A6A", marginTop:0 }}>Resumen por Trabajador</h4>
               <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-              <table style={S.tbl}>
-                <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-                <tbody>
-                  {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>{
-                    const cs=compensatorios.filter(c=>c.tId===t.id);
-                    return(
-                      <tr key={t.id}>
-                        <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#C9A84C"}}>({t.codigo})</span></td>
-                        <td style={S.td}>{cs.length}</td>
-                        <td style={{...S.td,color:"#27ae60"}}>{cs.filter(c=>c.estado==="tomado").length}</td>
-                        <td style={{...S.td,color:"#3498db"}}>{cs.filter(c=>c.estado==="pagado").length}</td>
-                        <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{cs.filter(c=>c.estado==="pendiente").length}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                <table style={S.tbl}>
+                  <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>{
+                      const cs=compensatorios.filter(c=>c.tId===t.id);
+                      return(
+                        <tr key={t.id}>
+                          <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#C9A84C"}}>({t.codigo})</span></td>
+                          <td style={S.td}>{cs.length}</td>
+                          <td style={{...S.td,color:"#27ae60"}}>{cs.filter(c=>c.estado==="tomado").length}</td>
+                          <td style={{...S.td,color:"#3498db"}}>{cs.filter(c=>c.estado==="pagado").length}</td>
+                          <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{cs.filter(c=>c.estado==="pendiente").length}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
 
-        {null /* calendario, dashboard, exportar, manual eliminados para debug */}
+        {/* ── TAB: CALENDARIO ────────────────────────────── */}
+        {tabAdmin==="calendario" && (
+          <div style={{marginTop:4}}>
+            <div style={{...S.card, marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+                <h3 style={{color:"#C9A84C",margin:0}}>🗓 Calendario de Vacaciones y Permisos</h3>
+                <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                  <button onClick={()=>{
+                    const d = new Date(calAnio, calMes-1, 1);
+                    setCalMes(d.getMonth()); setCalAnio(d.getFullYear());
+                  }} style={{...S.btnS, padding:"6px 14px", fontSize:16}}>‹</button>
+                  <span style={{color:"#C9A84C",fontWeight:"bold",fontSize:16,minWidth:160,textAlign:"center"}}>
+                    {mesNombre(calMes)} {calAnio}
+                  </span>
+                  <button onClick={()=>{
+                    const d = new Date(calAnio, calMes+1, 1);
+                    setCalMes(d.getMonth()); setCalAnio(d.getFullYear());
+                  }} style={{...S.btnS, padding:"6px 14px", fontSize:16}}>›</button>
+                  <button onClick={()=>{setCalMes(new Date().getMonth());setCalAnio(new Date().getFullYear());}}
+                    style={{...S.btn, padding:"6px 14px", fontSize:12}}>Hoy</button>
+                </div>
+              </div>
+            </div>
 
+            {/* Leyenda de colores por trabajador */}
+            {(()=>{
+              const trabActivos = trabajadores.filter(t=>t.activo&&t.id!==999);
+              const COLORES = ["#C9A84C","#3498db","#27ae60","#9b59b6","#e67e22","#e74c3c","#1abc9c","#f39c12","#2ecc71","#e91e63"];
+
+              // Obtener solicitudes aprobadas del mes
+              const diasEnMes = new Date(calAnio, calMes+1, 0).getDate();
+              const primerDia = new Date(calAnio, calMes, 1).getDay(); // 0=Dom
+
+              // Para cada trabajador, qué días tiene vacaciones/permiso aprobados
+              const getEventosTrab = (tId) => {
+                const sols = solicitudes.filter(s =>
+                  s.tId === tId && s.estado === "aprobado"
+                );
+                const diasMarcados = new Set();
+                sols.forEach(s => {
+                  const desde = new Date(s.fechaDesde+"T12:00:00");
+                  const hasta = new Date(s.fechaHasta+"T12:00:00");
+                  for(let d = new Date(desde); d <= hasta; d.setDate(d.getDate()+1)) {
+                    if(d.getMonth()===calMes && d.getFullYear()===calAnio) {
+                      diasMarcados.add(d.getDate());
+                    }
+                  }
+                });
+                return diasMarcados;
+              };
+
+              const eventosPorTrab = {};
+              trabActivos.forEach((t,i) => {
+                eventosPorTrab[t.id] = {
+                  dias: getEventosTrab(t.id),
+                  color: COLORES[i % COLORES.length],
+                  nombre: `${t.nombre} ${t.apellido}`,
+                  codigo: t.codigo,
+                };
+              });
+
+              return (
+                <div>
+                  {/* Leyenda */}
+                  <div style={{...S.card, display:"flex", flexWrap:"wrap", gap:10, padding:"12px 16px", marginBottom:14}}>
+                    {trabActivos.map((t,i) => (
+                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:12,height:12,borderRadius:3,background:COLORES[i%COLORES.length],flexShrink:0}}/>
+                        <span style={{color:"#9A8A6A",fontSize:12}}>{t.nombre} {t.apellido}</span>
+                        <span style={{color:"rgba(201,168,76,0.5)",fontSize:11}}>({t.codigo})</span>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginLeft:"auto"}}>
+                      <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,100,100,0.4)",flexShrink:0}}/>
+                      <span style={{color:"#9A8A6A",fontSize:12}}>Feriado</span>
+                      <div style={{width:12,height:12,borderRadius:3,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",flexShrink:0,marginLeft:8}}/>
+                      <span style={{color:"#9A8A6A",fontSize:12}}>Fin de semana</span>
+                    </div>
+                  </div>
+
+                  {/* Grilla del calendario */}
+                  <div style={S.card}>
+                    {/* Cabeceras días semana */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+                      {["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(d=>(
+                        <div key={d} style={{textAlign:"center",fontSize:11,fontWeight:"bold",
+                          color:"#C9A84C",padding:"6px 0",letterSpacing:1,textTransform:"uppercase"}}>
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Días */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+                      {/* Celdas vacías al inicio */}
+                      {Array.from({length:primerDia},(_,i)=>(
+                        <div key={`v${i}`} style={{minHeight:80,borderRadius:6,background:"rgba(5,4,2,0.3)"}}/>
+                      ))}
+
+                      {/* Días del mes */}
+                      {Array.from({length:diasEnMes},(_,i)=>{
+                        const dia = i+1;
+                        const fechaStr = `${calAnio}-${String(calMes+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+                        const diaSem = new Date(fechaStr+"T12:00:00").getDay();
+                        const esFinSem = diaSem===0||diaSem===6;
+                        const esFer = esFeriado(fechaStr);
+                        const esHoy = fechaStr===hoy();
+
+                        // Quién tiene eventos este día
+                        const eventosHoy = trabActivos
+                          .filter(t => eventosPorTrab[t.id]?.dias.has(dia))
+                          .map((t,idx) => ({
+                            nombre: t.nombre+" "+t.apellido,
+                            codigo: t.codigo,
+                            color: eventosPorTrab[t.id].color,
+                          }));
+
+                        return (
+                          <div key={dia} style={{
+                            minHeight:80, borderRadius:6, padding:"6px 4px",
+                            background: esHoy
+                              ? "rgba(201,168,76,0.12)"
+                              : esFer
+                                ? "rgba(180,30,30,0.08)"
+                                : esFinSem
+                                  ? "rgba(5,4,2,0.5)"
+                                  : "rgba(12,10,6,0.6)",
+                            border: esHoy
+                              ? "1.5px solid rgba(201,168,76,0.5)"
+                              : esFer
+                                ? "1px solid rgba(180,30,30,0.2)"
+                                : "1px solid rgba(201,168,76,0.06)",
+                            position:"relative",
+                          }}>
+                            {/* Número del día */}
+                            <div style={{
+                              fontSize:13, fontWeight: esHoy?"bold":"normal",
+                              color: esHoy?"#C9A84C":esFer?"#e74c3c":esFinSem?"rgba(154,138,106,0.5)":"#9A8A6A",
+                              marginBottom:4, textAlign:"right", paddingRight:2,
+                            }}>
+                              {dia}
+                              {esFer&&<span style={{fontSize:9,display:"block",color:"rgba(231,76,60,0.7)"}}>Fer.</span>}
+                            </div>
+
+                            {/* Eventos del día */}
+                            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                              {eventosHoy.map((ev,idx)=>(
+                                <div key={idx} title={`${ev.nombre} (${ev.codigo})`}
+                                  style={{
+                                    background:ev.color,
+                                    borderRadius:3, padding:"2px 4px",
+                                    fontSize:9, color:"#000",
+                                    fontWeight:"bold", overflow:"hidden",
+                                    whiteSpace:"nowrap", textOverflow:"ellipsis",
+                                    boxShadow:`0 1px 4px ${ev.color}44`,
+                                  }}>
+                                  {ev.codigo}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Resumen del mes */}
+                  {trabActivos.some(t=>eventosPorTrab[t.id]?.dias.size>0) && (
+                    <div style={S.card}>
+                      <div style={{color:"#C9A84C",fontWeight:"bold",marginBottom:12,fontSize:13,textTransform:"uppercase",letterSpacing:1}}>
+                        Resumen — {mesNombre(calMes)} {calAnio}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:8}}>
+                        {trabActivos.filter(t=>eventosPorTrab[t.id]?.dias.size>0).map((t,i)=>(
+                          <div key={t.id} style={{
+                            background:"rgba(12,10,6,0.6)",
+                            border:`1px solid ${COLORES[i%COLORES.length]}33`,
+                            borderLeft:`3px solid ${COLORES[i%COLORES.length]}`,
+                            borderRadius:8, padding:"10px 14px",
+                          }}>
+                            <div style={{fontWeight:"bold",fontSize:13,color:COLORES[i%COLORES.length]}}>{t.nombre} {t.apellido}</div>
+                            <div style={{color:"#9A8A6A",fontSize:12,marginTop:4}}>
+                              {eventosPorTrab[t.id].dias.size} día(s) de ausencia aprobada
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {!trabActivos.some(t=>eventosPorTrab[t.id]?.dias.size>0) && (
+                    <div style={{...S.card,textAlign:"center",color:"#9A8A6A",padding:32}}>
+                      ✅ Sin vacaciones ni permisos aprobados para {mesNombre(calMes)} {calAnio}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ── TAB: DASHBOARD ─────────────────────────────── */}
+        {tabAdmin==="dashboard" && (
+          <div style={{ marginTop:4 }}>
+            {/* Filtros */}
+            <div style={{ ...S.card, display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
+              <div>
+                <label style={S.lbl}>Mes</label>
+                <select style={S.sel} value={dMes} onChange={e=>setDMes(Number(e.target.value))}>
+                  {Array.from({length:12},(_,i)=><option key={i} value={i}>{mesNombre(i)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.lbl}>Año</label>
+                <select style={S.sel} value={dAnio} onChange={e=>setDAnio(Number(e.target.value))}>
+                  {[2024,2025,2026].map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div style={{ marginLeft:"auto", color:"#C9A84C", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
+            </div>
+
+            {/* KPIs */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:12, marginBottom:16 }}>
+              {[
+                { icon:"👥", val:trabajadores.filter(t=>t.activo&&t.id!==999).length, lbl:"Trabajadores Activos", sub:"en nómina", c:"#3498db" },
+                { icon:"📆", val:dashData.reduce((a,d)=>a+d.diasTrab,0), lbl:"Días Trabajados", sub:"mes seleccionado", c:"#27ae60" },
+                { icon:"⏱", val:dashData.reduce((a,d)=>a+parseFloat(d.extra),0).toFixed(1)+"h", lbl:"H. Extra Aprobadas", sub:"autorizadas", c:"#FFD700" },
+                { icon:"🗓", val:dashData.reduce((a,d)=>a+d.diasEsp,0), lbl:"Días Dom/Feriado", c:"#8e44ad", sub:"generan comp." },
+                { icon:"📅", val:compensatorios.filter(c=>c.estado==="pendiente").length, lbl:"Comp. Pendientes", c:"#e67e22", sub:"por resolver" },
+              ].map(x=>(
+                <div key={x.lbl} style={{ ...S.card, textAlign:"center", borderColor:x.c+"55", padding:"16px 10px" }}>
+                  <div style={{ fontSize:28 }}>{x.icon}</div>
+                  <div style={{ fontSize:28, fontWeight:"bold", color:x.c, margin:"4px 0" }}>{x.val}</div>
+                  <div style={{ color:"#fff", fontSize:12, fontWeight:"bold" }}>{x.lbl}</div>
+                  <div style={{ color:"#7A6A4A", fontSize:11, marginTop:2 }}>{x.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla detalle */}
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — {mesNombre(dMes)} {dAnio}</h3>
+              <div style={{ overflowX:"auto" }}>
+                <table style={S.tbl}>
+                  <thead><tr>{["Trabajador","Cód","Días Háb","Días Trab","Asistencia","Ausencias","Dom/Fer","H. Extra","C. Pend","C. Tom","C. Pag"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {dashData.map(d=>(
+                      <tr key={d.id}>
+                        <td style={S.td}>{d.nombre}</td>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{d.codigo}</td>
+                        <td style={{...S.td,color:"#9A8A6A"}}>{d.habilMes}</td>
+                        <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{d.diasTrab}</td>
+                        <td style={S.td}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                            <div style={{ flex:1, background:"rgba(30,26,15,0.8)", borderRadius:4, height:6, minWidth:50 }}>
+                              <div style={{ width:`${d.pct}%`, background:d.pct>=90?"#27ae60":d.pct>=70?"#f39c12":"#c0392b", height:"100%", borderRadius:4 }} />
+                            </div>
+                            <span style={{ fontSize:11, color:"#9A8A6A" }}>{d.pct}%</span>
+                          </div>
+                        </td>
+                        <td style={{...S.td,color:d.ausencias>0?"#e74c3c":"#27ae60",fontWeight:d.ausencias>0?"bold":"normal"}}>{d.ausencias>0?`⚠ ${d.ausencias}`:"✓ 0"}</td>
+                        <td style={{...S.td,color:d.diasEsp>0?"#8e44ad":"#aaa"}}>{d.diasEsp>0?`★ ${d.diasEsp}`:"—"}</td>
+                        <td style={{...S.td,color:parseFloat(d.extra)>0?"#FFD700":"#aaa",fontWeight:"bold"}}>{parseFloat(d.extra)>0?`${d.extra}h`:"—"}</td>
+                        <td style={{...S.td,color:d.compPend>0?"#e67e22":"#aaa"}}>{d.compPend>0?<span style={S.bdg("#e67e22")}>{d.compPend}</span>:"—"}</td>
+                        <td style={{...S.td,color:"#27ae60"}}>{d.compTom>0?<span style={S.bdg("#27ae60")}>{d.compTom}</span>:"—"}</td>
+                        <td style={{...S.td,color:"#3498db"}}>{d.compPag>0?<span style={S.bdg("#3498db")}>{d.compPag}</span>:"—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {dashData.length>0&&(
+                    <tfoot>
+                      <tr style={{ background:"rgba(255,215,0,0.08)", borderTop:"2px solid rgba(255,215,0,0.3)" }}>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}} colSpan={3}>TOTALES</td>
+                        <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.diasTrab,0)}</td>
+                        <td style={S.td}>—</td>
+                        <td style={{...S.td,color:"#e74c3c",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.ausencias,0)}</td>
+                        <td style={{...S.td,color:"#8e44ad",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.diasEsp,0)}</td>
+                        <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+parseFloat(d.extra),0).toFixed(1)}h</td>
+                        <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compPend,0)}</td>
+                        <td style={{...S.td,color:"#27ae60",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compTom,0)}</td>
+                        <td style={{...S.td,color:"#3498db",fontWeight:"bold"}}>{dashData.reduce((a,d)=>a+d.compPag,0)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: EXPORTAR / IMPORTAR ───────────────────── */}
+        {tabAdmin==="exportar" && (
+          <div style={{ marginTop:4 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+              {/* EXPORTAR */}
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>💾 Exportar Datos</h3>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                  Descarga un archivo <strong style={{color:"#C9A84C"}}>JSON</strong> con toda la información del sistema:
+                  trabajadores, registros de asistencia, compensatorios, solicitudes y notificaciones.
+                </p>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                  Guarda este archivo en un lugar seguro. Úsalo para restaurar los datos en caso de falla.
+                </p>
+                <div style={{ background:"rgba(255,215,0,0.08)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#9A8A6A" }}>
+                  <div>📋 Trabajadores: <strong style={{color:"#fff"}}>{trabajadores.filter(t=>t.id!==999).length}</strong></div>
+                  <div>📆 Registros: <strong style={{color:"#fff"}}>{registros.length}</strong></div>
+                  <div>📅 Compensatorios: <strong style={{color:"#fff"}}>{compensatorios.length}</strong></div>
+                  <div>📝 Solicitudes: <strong style={{color:"#fff"}}>{solicitudes.length}</strong></div>
+                  <div>🔔 Notificaciones: <strong style={{color:"#fff"}}>{notificaciones.length}</strong></div>
+                </div>
+                <button onClick={exportarDatos} style={{ ...S.btn, width:"100%", fontSize:14, padding:"13px 0" }}>
+                  ⬇ Descargar Backup JSON
+                </button>
+                <div style={{ color:"#9A8A6A", fontSize:11, marginTop:10, textAlign:"center" }}>
+                  Archivo: pazvial-rrhh-backup-{hoy()}.json
+                </div>
+              </div>
+
+              {/* IMPORTAR */}
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📂 Importar Datos</h3>
+                <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                  Restaura el sistema desde un archivo de backup previamente exportado.
+                </p>
+                <div style={{ background:"rgba(39,174,96,0.15)", border:"1px solid rgba(39,174,96,0.4)", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:"#aaffcc" }}>
+                  ✅ <strong>Importación inteligente:</strong> Los datos del backup se fusionan con los datos actuales. No se duplican registros existentes. Si un trabajador ya existe (mismo RUT), sus datos se actualizan con los del backup.</div>
+                <input ref={importRef} type="file" accept=".json" onChange={importarDatos} style={{ display:"none" }} />
+                <button onClick={()=>importRef.current?.click()} style={{ ...S.btn, width:"100%", fontSize:14, padding:"13px 0", background:"#2980b9", color:"#fff" }}>
+                  ⬆ Seleccionar archivo de Backup
+                </button>
+                <MsgBox m={importMsg} />
+                <div style={{ color:"#9A8A6A", fontSize:11, marginTop:10, textAlign:"center" }}>
+                  Solo archivos .json exportados desde este sistema
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: MANUAL ADMINISTRADOR ──────────────────── */}
+        {tabAdmin==="manual" && (
+          <div style={{ marginTop:4, maxWidth:820, margin:"4px auto 0" }}>
+            <div style={{ ...S.card, border:"2px solid rgba(255,215,0,0.4)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+                <Logo size={48} />
+                <div>
+                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:1 }}>Manual del Administrador</h2>
+                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, marginTop:4 }}>Guía de administración · Paz Vial SpA</div>
+                </div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🔑</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>1. Acceso al Panel</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Selecciona el botón Administrador desde la portada.","Ingresa la contraseña: Negra2026.","Tendrás acceso a 9 módulos en la barra de tabs."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>👥</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>2. Gestión de Trabajadores</h3></div>
+                <div style={{ paddingLeft:34 }}>{["En Nómina puedes agregar, editar o desactivar trabajadores.","Cada trabajador recibe un código único automático.","Los trabajadores desactivados conservan su historial."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Las HE aparecen en Pendientes separadas por tipo.","Entrada anticipada y salida posterior se aprueban de forma independiente.","Los domingos y feriados generan compensatorio; los sábados no."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💰</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Liquidaciones</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Selecciona mes y trabajador en la pestaña Liquidaciones.","El sistema calcula sueldo base, HE aprobadas y descuentos.","Puedes previsualizar, enviar por email y marcar como firmada."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💾</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>5. Exportar e Importar</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Usa Exportar / Importar para hacer backups del sistema.","El backup es un archivo JSON con todos los datos.","Para restaurar, carga el archivo JSON de backup."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+                <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Administrador</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#C9A84C"}}>Negra2026</strong></div>
+                  </div>
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
 
