@@ -2738,6 +2738,14 @@ export default function App() {
       { k:"manual",    l:"📖 Manual de Uso" },
     ];
 
+    const divAyudaTrab = (
+      <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+        <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
+        <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
+          Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
+        </div>
+      </div>
+    );
     return (
       <div style={S.app}>
         <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub={`Trabajador: ${nombreCompleto(trabActivo)}`}
@@ -3345,14 +3353,6 @@ export default function App() {
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
 
-  const divAyudaTrab = (
-    <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
-      <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
-      <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
-        Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
-      </div>
-    </div>
-  );
 
   const divCredsAdmin = (
     <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
