@@ -2738,14 +2738,6 @@ export default function App() {
       { k:"manual",    l:"📖 Manual de Uso" },
     ];
 
-    const divAyudaTrab = (
-      <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
-        <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
-        <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
-          Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
-        </div>
-      </div>
-    );
     return (
       <div style={S.app}>
         <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub={`Trabajador: ${nombreCompleto(trabActivo)}`}
@@ -3209,123 +3201,33 @@ export default function App() {
           {tabTrab==="manual" && (
             <div style={{ marginTop:16, maxWidth:780, margin:"16px auto 0" }}>
               <div style={{ ...S.card, border:"2px solid rgba(255,215,0,0.4)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
                   <Logo size={48} />
                   <div>
-                    <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
-                    <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Trabajador — Gestión de Personas Paz Vial SpA</div>
+                    <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:1 }}>Manual del Trabajador</h2>
+                    <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, marginTop:4 }}>Guía de uso del sistema · Paz Vial SpA</div>
                   </div>
                 </div>
-
-                {[
-                  {
-                    icon:"🔑", titulo:"1. Cómo Ingresar al Sistema",
-                    items:[
-                      "Desde la portada, selecciona el botón Trabajador.",
-                      "Ingresa tu Código de trabajador (Ej: PP01) y tu RUT (Ej: 12.345.678-9). El sistema te saludará con tu nombre completo.",
-                      "Si los datos son correctos, el sistema te dará la bienvenida con tu nombre completo.",
-                      "Tu código es único y fue asignado por el administrador al momento de tu registro.",
-                    ]
-                  },
-                  {
-                    icon:"🕐", titulo:"2. Registrar Entrada y Salida",
-                    items:[
-                      "En la pestaña Marcar Asistencia, selecciona el tipo de marca: Entrada o Salida.",
-                      "Presiona el botón correspondiente. Aparecerá una pantalla de confirmación con la hora exacta del momento.",
-                      "Lee la hora que muestra el sistema y presiona '✓ Sí, Confirmar' para registrar, o '✗ Cancelar' si no es el momento correcto.",
-                      "Solo puedes registrar una entrada y una salida por día.",
-                      "Debajo del botón verás el estado de tu registro del día: si aún no has marcado entrada, si ya marcaste entrada y falta la salida, o si la jornada está completa.",
-                      "El indicador de sincronización muestra si el registro se guardó en la nube: 🟢 Sincronizado, 🟡 Guardando o 🔴 Error de conexión (el sistema reintenta automáticamente).",
-                      "Si trabajas en domingo o feriado, el sistema lo indicará, generará automáticamente un Día Compensatorio y registrará tus horas como extraordinarias (mínimo 8h garantizadas).",
-                      "Si trabajas en sábado, tus horas se registran como extraordinarias (mínimo 8h garantizadas), pero no genera día compensatorio.",
-                    ]
-                  },
-                  {
-                    icon:"📅", titulo:"3. Jornada Laboral y Horas Extraordinarias",
-                    items:[
-                      "Lunes a Jueves: jornada normal de 08:00 a 18:00.",
-                      "Viernes: jornada normal de 08:00 a 14:00.",
-                      "Si entras antes de las 07:00 (más de 1 hora antes del inicio), el tiempo entre tu entrada y las 08:00 se registra como horas extraordinarias de entrada anticipada, pendientes de aprobación.",
-                      "Si tu salida es posterior al horario normal (18:00 de lunes a jueves, 14:00 los viernes), el excedente se registra como horas extraordinarias de salida, también pendientes de aprobación.",
-                      "Ambas (HE de entrada y HE de salida) son independientes: el administrador puede aprobar una y rechazar la otra.",
-                      "Sábado, domingo o feriado: toda tu jornada se considera hora extraordinaria, con un mínimo garantizado de 8 horas. Si trabajas más de 8 horas, se registran las horas efectivamente trabajadas.",
-                      "Si trabajas en domingo o feriado, además se genera automáticamente un Día Compensatorio. El sábado NO genera compensatorio.",
-                      "Recibirás una notificación por cada aprobación o rechazo, con el motivo indicado por el administrador.",
-                    ]
-                  },
-                  {
-                    icon:"📊", titulo:"4. Mi Resumen",
-                    items:[
-                      "En la pestaña Mi Resumen encontrarás un resumen del mes en curso: días trabajados, horas extra aprobadas, compensatorios pendientes y solicitudes pendientes.",
-                      "Más abajo verás el historial completo de tus registros de asistencia con el estado de cada uno.",
-                      "Si una hora extraordinaria fue rechazada, verás el motivo indicado por el administrador.",
-                    ]
-                  },
-                  {
-                    icon:"📝", titulo:"5. Solicitar Permiso o Vacaciones",
-                    items:[
-                      "En la pestaña Solicitudes puedes pedir un Permiso (día puntual) o Vacaciones (rango de fechas).",
-                      "Selecciona el tipo, completa las fechas y agrega un motivo si lo deseas.",
-                      "Importante: las vacaciones solo pueden solicitarse con inicio en día hábil (lunes a viernes, sin feriados).",
-                      "La fecha de término no puede ser anterior a la fecha de inicio; el sistema lo valida automáticamente.",
-                      "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
-                      "Recibirás una notificación cuando sea aprobada o rechazada, incluyendo el motivo en caso de rechazo.",
-                    ]
-                  },
-                  {
-                    icon:"🏦", titulo:"5b. Solicitar Anticipo de Sueldo",
-                    items:[
-                      "En la pestaña Anticipo puedes solicitar un adelanto de tu remuneración.",
-                      "Ingresa el monto solicitado y un motivo breve.",
-                      "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
-                      "Si es aprobada, el monto se descontará automáticamente en tu próxima liquidación de sueldo.",
-                      "Si es rechazada, recibirás una notificación con el motivo del rechazo.",
-                    ]
-                  },
-                  {
-                    icon:"💰", titulo:"5c. Mis Liquidaciones de Sueldo",
-                    items:[
-                      "En la pestaña Liquidaciones encontrarás las liquidaciones de sueldo que el administrador te haya enviado.",
-                      "Cada liquidación detalla: sueldo base, gratificación, colación, movilización, horas extra aprobadas, descuentos previsionales y anticipos.",
-                      "Puedes revisar el detalle completo y descargar el PDF de cada liquidación.",
-                      "Al revisarla por primera vez, puedes Firmarla digitalmente como aceptación de conformidad.",
-                    ]
-                  },
-                  {
-                    icon:"🔔", titulo:"6. Notificaciones",
-                    items:[
-                      "En la pestaña Notificaciones verás todos los mensajes del sistema relacionados con tus horas extra y solicitudes.",
-                      "Las notificaciones nuevas aparecen destacadas en naranja y con un contador en la pestaña.",
-                      "Puedes marcarlas como leídas con el botón Marcar todas como leídas.",
-                      "Al ingresar al sistema, las notificaciones pendientes se marcan automáticamente.",
-                    ]
-                  },
-                  {
-                    icon:"💡", titulo:"7. Consejos y Buenas Prácticas",
-                    items:[
-                      "Marca siempre tu entrada al llegar y tu salida al retirarte para mantener un registro preciso.",
-                      "Si olvidaste marcar, comunícate con el administrador para que corrija el registro.",
-                      "Solicita tus vacaciones con anticipación para facilitar la aprobación.",
-                      "Revisa tus notificaciones regularmente para estar al tanto de aprobaciones y rechazos.",
-                    ]
-                  },
-                ].map(sec => (
-                  <div key={sec.titulo} style={{ marginBottom:24 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                      <span style={{ fontSize:24 }}>{sec.icon}</span>
-                      <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
-                    </div>
-                    <div style={{ paddingLeft:34 }}>
-                      {sec.items.map((item, i) => (
-                        <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
-                          <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
-                          <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {divAyudaTrab}
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🔑</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>1. Cómo Ingresar al Sistema</h3></div>
+                  <div style={{ paddingLeft:34 }}>{["Desde la portada, selecciona el botón Trabajador.","Ingresa tu Código (Ej: PP01) y tu RUT (Ej: 12.345.678-9).","Tu código fue asignado por el administrador.","Si los datos son correctos, el sistema te dará la bienvenida."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+                </div>
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🕐</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>2. Registrar Entrada y Salida</h3></div>
+                  <div style={{ paddingLeft:34 }}>{["En Marcar Asistencia, selecciona Entrada o Salida.","Aparecerá una pantalla de confirmación con la hora exacta.","Presiona '✓ Sí, Confirmar' para registrar.","Solo puedes registrar una entrada y una salida por día."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+                </div>
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
+                  <div style={{ paddingLeft:34 }}>{["Entrada antes de las 07:00 genera HE entrada anticipada.","Salida después del horario normal genera HE salida posterior.","Ambas se aprueban de forma independiente por el administrador.","Sábado/domingo/feriado: mínimo 8 horas garantizadas.","Domingos y feriados generan compensatorio; sábados no."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+                </div>
+                <div style={{ marginBottom:24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>📝</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Solicitar Vacaciones o Permisos</h3></div>
+                  <div style={{ paddingLeft:34 }}>{["Ve a la pestaña Solicitudes.","Selecciona el tipo: Vacaciones, Permiso con goce o sin goce.","Elige las fechas de inicio y término.","Recibirás una notificación con el resultado."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+                </div>
+                <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+                  <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
+                  <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>Si tienes problemas para acceder al sistema, contacta directamente al Administrador.</div>
+                </div>
               </div>
             </div>
           )}
@@ -3354,21 +3256,6 @@ export default function App() {
   ];
 
 
-  const divCredsAdmin = (
-    <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
-      <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
-          <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Acceso Administrador</div>
-          <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#C9A84C"}}>Negra2026</strong></div>
-        </div>
-        <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
-          <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba (Trabajador)</div>
-          <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div style={S.app}>
@@ -4921,210 +4808,46 @@ export default function App() {
         {tabAdmin==="manual" && (
           <div style={{ marginTop:4, maxWidth:820, margin:"4px auto 0" }}>
             <div style={{ ...S.card, border:"2px solid rgba(255,215,0,0.4)" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
                 <Logo size={48} />
                 <div>
-                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
-                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Administrador — Gestión de Personas Paz Vial SpA</div>
+                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:1 }}>Manual del Administrador</h2>
+                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, marginTop:4 }}>Guía de administración · Paz Vial SpA</div>
                 </div>
               </div>
-
-              {[
-                {
-                  icon:"🔑", titulo:"1. Acceso al Panel de Administración",
-                  items:[
-                    "Desde la portada, selecciona el botón Administrador.",
-                    "Ingresa la contraseña de administrador: Negra2026.",
-                    "Al ingresar tendrás acceso a 8 módulos principales en la barra de tabs.",
-                    "La barra superior muestra la fecha actual, el botón Limpiar pantalla y el botón Limpiar datos de prueba.",
-                    "Para salir usa el botón Cerrar sesión en la parte superior derecha.",
-                  ]
-                },
-                {
-                  icon:"🔔", titulo:"2. Módulo: Bandeja de Pendientes",
-                  items:[
-                    "Punto de control central. El contador en el tab muestra el total de ítems pendientes de revisión.",
-                    "Agrupa en una sola pantalla: horas extraordinarias, permisos/vacaciones y anticipos de remuneración.",
-                    "HE en días hábiles: la tabla muestra dos columnas independientes — 'HE Entrada' (tiempo antes de las 08:00 para entradas antes de las 07:00) y 'HE Salida' (tiempo después del horario normal). Cada una tiene sus propios botones ✓ Aprobar / ✗ Rechazar.",
-                    "HE en días especiales (sáb/dom/feriado): flujo clásico con un solo botón de aprobación por registro.",
-                    "Puedes aprobar la HE de entrada y rechazar la de salida del mismo día, o viceversa — son decisiones completamente independientes.",
-                    "Al rechazar siempre deberás ingresar un motivo obligatorio que el trabajador verá en sus notificaciones.",
-                  ]
-                },
-                {
-                  icon:"📋", titulo:"3. Módulo: Asistencia",
-                  items:[
-                    "Tiene tres subtabs: Ver Registros, Ingresar / Editar, y Hoja Mensual PDF.",
-                    "Ver Registros: muestra el historial filtrable por trabajador, mes y año, con opción de ordenar por fecha (más reciente o más antiguo primero). Las horas extra pendientes de aprobación aparecen con ⏳. Cada fila tiene botón ✏️ para editar y botón 🗑️ para eliminar el registro (pide confirmación antes de borrar).",
-                    "Ingresar / Editar: permite crear registros cuando el trabajador olvidó marcar. Los registros manuales quedan con etiqueta azul 'Manual'.",
-                    "Hoja Mensual PDF: genera una hoja de asistencia con logo, por trabajador o para todos. Incluye vista previa en pantalla antes de imprimir.",
-                  ]
-                },
-                {
-                  icon:"👥", titulo:"4. Módulo: Nómina",
-                  items:[
-                    "Tiene dos subtabs: Lista y Alta, y Fichas de Personal. Ambas están conectadas — la ficha alimenta la lista automáticamente.",
-                    "Lista y Alta: tabla completa de todos los trabajadores con código, nombre, RUT, cargo, AFP, previsión, fecha de ingreso y estado. Botón 'Ver Ficha' lleva directamente a la ficha del trabajador.",
-                    "Fichas de Personal: es donde se crean y editan los registros. Tiene tres modos: Ver (solo lectura), Editar y Nueva Ficha.",
-                    "Para crear un trabajador: presiona '➕ Nueva Ficha' (disponible en ambos subtabs y en la lista lateral). Se abre el formulario en blanco. Completa los datos y presiona '💾 Grabar' para registrar al trabajador en el sistema.",
-                    "Para editar: selecciona un trabajador de la lista lateral y presiona '✏️ Editar'. Modifica los campos necesarios y presiona '💾 Grabar'. Presiona '✗ Cancelar' para descartar cambios.",
-                    "El código se genera automáticamente al grabar, siguiendo el formato P + inicial apellido + número correlativo (Ej: PP01).",
-                    "En modo Ver, todos los campos aparecen en gris (solo lectura). Solo se pueden editar en modo Editar.",
-                    "La ficha incluye: nombres, apellido paterno, apellido materno, RUT, cargo, dirección, teléfono, correo, contacto de emergencia, previsión de salud, AFP, sueldo pactado, colación, movilización, gratificación legal, fecha de ingreso, fecha de salida, motivo de salida, antigüedad calculada automáticamente y observaciones.",
-                    "Al crear un trabajador con sueldo pactado, se genera automáticamente el primer registro del Historial de Remuneraciones.",
-                    "Para registrar un aumento o ajuste de renta: ve a la ficha del trabajador (modo Ver), baja hasta la sección 💰 Historial de Remuneraciones, completa la fecha de vigencia, nuevo sueldo, colación, movilización, motivo y presiona 'Registrar Cambio de Remuneración'. El registro antiguo queda en el historial y no se elimina.",
-                    "El registro marcado como VIGENTE es el que se usa automáticamente para calcular la liquidación del mes correspondiente. Si una liquidación es de enero y el aumento es de marzo, la liquidación de enero usa el sueldo anterior.",
-                    "Los motivos disponibles son: Sueldo inicial, Ajuste anual, Incremento por mérito, Promoción, Cambio de cargo, Negociación colectiva, Corrección, Otro.",
-                  ]
-                },
-
-                {
-                  icon:"💰", titulo:"5. Módulo: Liquidaciones de Sueldo",
-                  items:[
-                    "Genera las liquidaciones mensuales de cada trabajador tomando datos automáticamente de la ficha: sueldo, AFP, previsión, colación, movilización y gratificación.",
-                    "También considera los días trabajados, horas extra aprobadas y anticipos aprobados del mes.",
-                    "El resultado muestra la vista previa completa antes de enviar. Puedes ver el PDF antes de enviarlo.",
-                    "Al presionar Enviar al Trabajador, la liquidación llega al perfil del trabajador con notificación.",
-                    "La liquidación queda firmada por el empleador con fecha y hora de envío automáticas.",
-                    "El historial muestra el estado de cada liquidación: Enviada o Firmada (por el trabajador).",
-                  ]
-                },
-                {
-                  icon:"⏰", titulo:"3b. Módulo: Entradas Anticipadas",
-                  items:[
-                    "Si un trabajador marca su entrada antes de las 08:00, el registro queda automáticamente en estado 'Pendiente de validación' y aparece en este módulo.",
-                    "El contador en el tab muestra cuántas entradas anticipadas están pendientes de revisión.",
-                    "Al hacer clic en 'Revisar', se abre un panel con la hora marcada por el trabajador.",
-                    "Opción 1 — Aprobar: se mantiene la hora original marcada por el trabajador.",
-                    "Opción 2 — Corregir: ingresa la hora correcta (por defecto 08:00) y el sistema registrará esa hora. El trabajador recibe notificación de la corrección.",
-                  ]
-                },
-                {
-                  icon:"✏️", titulo:"3c. Módulo: Asistencia Manual",
-                  items:[
-                    "Permite ingresar registros de asistencia cuando un trabajador olvidó marcar su entrada o salida.",
-                    "Selecciona el trabajador, la fecha, la hora de entrada y salida. El sistema calcula automáticamente horas normales y extra.",
-                    "Los registros ingresados manualmente quedan identificados con la etiqueta azul 'Manual'.",
-                    "También puedes editar registros existentes directamente desde la tabla, haciendo clic en el botón ✏️ Editar de cada fila, o eliminarlos con el botón 🗑️ (con confirmación previa).",
-                    "Al editar, los campos fecha, entrada y salida se vuelven editables. Usa ✓ para guardar y ✗ para cancelar.",
-                  ]
-                },
-                {
-                  icon:"📝", titulo:"4. Módulo: Solicitudes (Permisos y Vacaciones)",
-                  items:[
-                    "Aquí aparecen todas las solicitudes de permiso y vacaciones enviadas por los trabajadores.",
-                    "El número en el tab indica cuántas solicitudes están pendientes de revisión.",
-                    "Para Aprobar: haz clic en ✓ Aprobar. El trabajador recibirá notificación inmediata.",
-                    "Para Rechazar: haz clic en ✗ Rechazar e ingresa el motivo en el formulario que se abre. Es obligatorio.",
-                    "Las vacaciones solo pueden solicitarse con inicio en día hábil; el sistema ya lo valida en el perfil del trabajador.",
-                    "El historial de solicitudes ya resueltas se muestra en la parte inferior del módulo.",
-                  ]
-                },
-                {
-                  icon:"👥", titulo:"5. Módulo: Trabajadores",
-                  items:[
-                    "Permite agregar nuevos trabajadores ingresando Nombre, Apellido Paterno y RUT.",
-                    "El sistema valida que el RUT no esté ya registrado por otro trabajador antes de crear el perfil.",
-                    "El sistema genera automáticamente un código único con el formato: P + inicial del apellido + número correlativo (Ej: PP01, PR02). El código nunca se repite, incluso si un trabajador anterior con esa inicial fue eliminado definitivamente.",
-                    "Antes de confirmar, se muestra una vista previa del código que se asignará.",
-                    "Puedes Desactivar un trabajador (sin eliminarlo) para que no pueda iniciar sesión, o Activarlo nuevamente.",
-                    "El botón 🗑 elimina al trabajador definitivamente de la nómina. Su código queda reservado para siempre y no se reasignará a otro trabajador.",
-                    "El Perfil de Prueba (Administrador / RUT: Pruebas) no debe eliminarse, sirve para testear el sistema.",
-                  ]
-                },
-                {
-                  icon:"📅", titulo:"6. Módulo: Compensatorios",
-                  items:[
-                    "Se generan automáticamente cuando un trabajador registra asistencia en domingo o feriado.",
-                    "Cada compensatorio puede estar en estado: Pendiente, Tomado (con fecha en que se tomó) o Pagado.",
-                    "Al marcar como Tomado, debes ingresar la fecha en que el trabajador usó su día libre; esto lo descuenta del total pendiente.",
-                    "El resumen al pie del módulo muestra el total de compensatorios por trabajador, separados por estado.",
-                  ]
-                },
-                {
-                  icon:"📊", titulo:"7. Módulo: Dashboard",
-                  items:[
-                    "Panel de control mensual. Usa los selectores de Mes y Año para filtrar el período.",
-                    "Las tarjetas superiores muestran KPIs globales: trabajadores activos, días trabajados, horas extra aprobadas, días especiales y compensatorios pendientes.",
-                    "La tabla detalla por cada trabajador: días hábiles del mes, días trabajados, barra de asistencia (% en color), ausencias, horas extra y compensatorios.",
-                    "La fila de Totales al pie suma todas las columnas del período seleccionado.",
-                    "Verde ≥ 90% asistencia, Amarillo ≥ 70%, Rojo < 70%.",
-                  ]
-                },
-                {
-                  icon:"🗓", titulo:"8. Módulo: Calendario",
-                  items:[
-                    "Vista mensual que muestra visualmente quién tiene vacaciones o permisos aprobados en cada día del mes.",
-                    "Navega entre meses con las flechas ‹ › o vuelve al mes actual con el botón 'Hoy'.",
-                    "Cada trabajador tiene un color único asignado automáticamente. Los días con ausencias muestran el código del trabajador en su color.",
-                    "El día de hoy aparece resaltado en dorado. Los feriados en rojo y los fines de semana en gris oscuro.",
-                    "La leyenda superior muestra el color y nombre de cada trabajador para identificarlos fácilmente.",
-                    "Al pie del calendario aparece un resumen con los trabajadores que tienen días aprobados en el mes y cuántos días.",
-                    "Solo muestra vacaciones y permisos en estado Aprobado — las solicitudes pendientes no aparecen en el calendario.",
-                  ]
-                },
-                {
-                  icon:"📄", titulo:"9. Módulo: Hoja de Asistencia Mensual",
-                  items:[
-                    "Genera un documento PDF con el registro diario de asistencia de uno o todos los trabajadores activos.",
-                    "Selecciona trabajador (opcional), mes y año, luego haz clic en 'Generar PDF'.",
-                    "Si no seleccionas trabajador, el PDF incluirá una sección por cada trabajador activo.",
-                    "El documento incluye: logo de la empresa, nombre del trabajador, RUT, código, y una tabla con todos los días del mes.",
-                    "Cada fila muestra: día, día de la semana, hora de entrada, hora de salida, horas normales, horas extra y observaciones.",
-                    "Los domingos y feriados aparecen en amarillo. Los sábados en gris claro.",
-                    "Al pie del documento aparecen líneas de firma del trabajador y de administración.",
-                    "La vista previa en pantalla permite revisar la información antes de generar el PDF.",
-                  ]
-                },
-                {
-                  icon:"💾", titulo:"10. Módulo: Exportar / Importar",
-                  items:[
-                    "Exportar: descarga un archivo JSON con todos los datos del sistema (trabajadores, registros, compensatorios, solicitudes y notificaciones). Guárdalo en un lugar seguro.",
-                    "El nombre del archivo incluye la fecha del día: pazvial-rrhh-backup-AAAA-MM-DD.json.",
-                    "Importar: permite restaurar todos los datos desde un backup previo. Esta acción reemplaza todos los datos actuales.",
-                    "Solo se aceptan archivos .json exportados desde este mismo sistema.",
-                    "Se recomienda exportar un backup al menos una vez por semana o antes de cualquier cambio importante en la nómina.",
-                  ]
-                },
-                {
-                  icon:"⏱", titulo:"10b. Cálculo de Horas Extraordinarias",
-                  items:[
-                    "Entrada anticipada (antes de las 07:00): el tiempo entre la hora real de entrada y las 08:00 genera HE de entrada, con estado pendiente independiente. Puedes aprobarla o rechazarla sin afectar la HE de salida del mismo día.",
-                    "Salida posterior (después de las 18:00 de lunes a jueves, o 14:00 los viernes): el excedente genera HE de salida, también con estado pendiente independiente.",
-                    "Ambas aprobaciones son independientes y aparecen en columnas separadas en la bandeja de Pendientes. Puedes aprobar una y rechazar la otra para el mismo registro.",
-                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas. Si el trabajador labora más de 8h, se registran las horas reales. Esta HE usa el flujo de aprobación clásico (un solo estado).",
-                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. El sábado NO genera compensatorio, solo HE.",
-                    "El calendario de feriados considera solo los feriados de carácter general de Chile (aplican a todas las personas a nivel nacional), según la ley vigente.",
-                    "Las horas extra rechazadas no se contabilizan en ningún reporte: ni en el Dashboard, ni en la Hoja Mensual, ni en las Liquidaciones.",
-                  ]
-                },
-                {
-                  icon:"💡", titulo:"11. Buenas Prácticas de Administración",
-                  items:[
-                    "Revisa diariamente las horas extraordinarias y solicitudes pendientes para dar respuesta oportuna a los trabajadores.",
-                    "Siempre indica un motivo claro y constructivo al rechazar una solicitud o horas extra, ya que el trabajador lo leerá.",
-                    "Mantén la nómina actualizada: desactiva a trabajadores que salieron de la empresa en lugar de eliminarlos, para conservar el historial.",
-                    "Realiza backups frecuentes usando el módulo Exportar / Importar.",
-                    "El perfil de prueba (Administrador / Pruebas) permite simular el flujo completo sin afectar datos reales de trabajadores.",
-                  ]
-                },
-              ].map(sec => (
-                <div key={sec.titulo} style={{ marginBottom:24 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                    <span style={{ fontSize:24 }}>{sec.icon}</span>
-                    <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🔑</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>1. Acceso al Panel</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Selecciona el botón Administrador desde la portada.","Ingresa la contraseña: Negra2026.","Tendrás acceso a 9 módulos en la barra de tabs."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>👥</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>2. Gestión de Trabajadores</h3></div>
+                <div style={{ paddingLeft:34 }}>{["En Nómina puedes agregar, editar o desactivar trabajadores.","Cada trabajador recibe un código único automático.","Los trabajadores desactivados conservan su historial."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Las HE aparecen en Pendientes separadas por tipo.","Entrada anticipada y salida posterior se aprueban de forma independiente.","Los domingos y feriados generan compensatorio; los sábados no."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💰</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Liquidaciones</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Selecciona mes y trabajador en la pestaña Liquidaciones.","El sistema calcula sueldo base, HE aprobadas y descuentos.","Puedes previsualizar, enviar por email y marcar como firmada."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ marginBottom:24 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💾</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>5. Exportar e Importar</h3></div>
+                <div style={{ paddingLeft:34 }}>{["Usa Exportar / Importar para hacer backups del sistema.","El backup es un archivo JSON con todos los datos.","Para restaurar, carga el archivo JSON de backup."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+              </div>
+              <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+                <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Administrador</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#C9A84C"}}>Negra2026</strong></div>
                   </div>
-                  <div style={{ paddingLeft:34 }}>
-                    {sec.items.map((item, i) => (
-                      <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
-                        <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
-                        <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
-                      </div>
-                    ))}
+                  <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba</div>
+                    <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
                   </div>
                 </div>
-              ))}
-              {divCredsAdmin}
+              </div>
             </div>
           </div>
         )}
