@@ -2287,14 +2287,19 @@ export default function App() {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const blob = new Blob([html],{type:"text/html;charset=utf-8"});
-    const url  = URL.createObjectURL(blob);
-    const w = window.open(url, "_blank");
-    if(!w) {
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // Fallback: descarga como archivo HTML
+      const blob = new Blob([html],{type:"text/html;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = "hoja-asistencia.html"; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 10000);
     }
-    setTimeout(()=>URL.revokeObjectURL(url), 30000);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
