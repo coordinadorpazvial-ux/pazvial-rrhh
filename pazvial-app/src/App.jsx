@@ -2287,19 +2287,22 @@ export default function App() {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-    } else {
-      // Fallback: descarga como archivo HTML
-      const blob = new Blob([html],{type:"text/html;charset=utf-8"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "hoja-asistencia.html"; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url), 10000);
-    }
+    // Usar iframe oculto para imprimir sin depender de popups
+    const ifrId = "__pv_print_frame__";
+    let ifr = document.getElementById(ifrId);
+    if (ifr) ifr.remove();
+    ifr = document.createElement("iframe");
+    ifr.id = ifrId;
+    ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
+    document.body.appendChild(ifr);
+    ifr.contentDocument.open();
+    ifr.contentDocument.write(html);
+    ifr.contentDocument.close();
+    setTimeout(() => {
+      ifr.contentWindow.focus();
+      ifr.contentWindow.print();
+      setTimeout(() => ifr.remove(), 2000);
+    }, 500);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
