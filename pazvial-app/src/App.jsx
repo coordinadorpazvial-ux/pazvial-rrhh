@@ -2216,7 +2216,7 @@ export default function App() {
       });
 
       seccionesHTML += `
-        <div style="margin-bottom:${listaTrabajadores.length>1?"40px":"0"}">
+        <div class="trabajador-bloque" style="margin-bottom:${listaTrabajadores.length>1?"40px":"0"}">
           ${listaTrabajadores.length>1?`<h3 style="margin:0 0 6px;font-size:13px;color:#FF6B00;border-bottom:2px solid #FF6B00;padding-bottom:4px">${nombreCompleto(t)} — Código: ${t.codigo} — RUT: ${t.rut}</h3>`:""}
           <table style="width:100%;border-collapse:collapse;font-size:11px">
             <thead>
@@ -2262,7 +2262,7 @@ export default function App() {
       .trab-info{background:#f2f2f2;padding:7px 12px;border-radius:4px;margin-bottom:10px;font-size:11px;display:flex;gap:20px;flex-wrap:wrap;}
       .firmas{display:flex;gap:40px;margin-top:30px;}
       .firma{text-align:center;border-top:1px solid #333;padding-top:6px;width:200px;font-size:10px;}
-      @media print{body{padding:10px;}.no-print{display:none;}}
+      @media print{body{padding:10px;}.no-print{display:none;}.trabajador-bloque{page-break-inside:avoid;}}
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
       <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
@@ -2287,22 +2287,14 @@ export default function App() {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    // Usar iframe oculto para imprimir sin depender de popups
-    const ifrId = "__pv_print_frame__";
-    let ifr = document.getElementById(ifrId);
-    if (ifr) ifr.remove();
-    ifr = document.createElement("iframe");
-    ifr.id = ifrId;
-    ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
-    document.body.appendChild(ifr);
-    ifr.contentDocument.open();
-    ifr.contentDocument.write(html);
-    ifr.contentDocument.close();
-    setTimeout(() => {
-      ifr.contentWindow.focus();
-      ifr.contentWindow.print();
-      setTimeout(() => ifr.remove(), 2000);
-    }, 500);
+    const blob = new Blob([html],{type:"text/html;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const w = window.open(url, "_blank");
+    if(!w) {
+      const a = document.createElement("a");
+      a.href = url; a.download = "hoja-asistencia.html"; a.click();
+    }
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
