@@ -270,6 +270,17 @@ function getRemuneracionVigente(ficha, mes, anio) {
   };
 }
 
+// ── PERÍODO DE LIQUIDACIÓN: del 26 del mes anterior al 25 del mes actual ──
+function periodoLiquidacion(mes, anio) {
+  // desde: 26 del mes anterior
+  const mesAnterior = mes === 0 ? 11 : mes - 1;
+  const anioAnterior = mes === 0 ? anio - 1 : anio;
+  const desde = `${anioAnterior}-${String(mesAnterior+1).padStart(2,"0")}-26`;
+  // hasta: 25 del mes actual
+  const hasta = `${anio}-${String(mes+1).padStart(2,"0")}-25`;
+  return { desde, hasta };
+}
+
 function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
@@ -279,10 +290,10 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const colacion = remVigente.colacion;
   const movilizacion = remVigente.movilizacion;
 
-  // Días trabajados del mes
+  // Días trabajados del período (26 mes anterior → 25 mes actual)
+  const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
   const regs = registros.filter(r => {
-    const d = new Date(r.fecha+"T12:00:00");
-    return r.tId===trab.id && d.getMonth()===mes && d.getFullYear()===anio && r.salida;
+    return r.tId===trab.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida;
   });
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
 
@@ -2145,13 +2156,15 @@ export default function App() {
       ? [trab]
       : trabajadores.filter(t=>t.activo && t.id!==999);
 
-    // Generar días del mes
-    const diasEnMes = new Date(anio, mes+1, 0).getDate();
-    const diasMes = Array.from({length:diasEnMes},(_,i)=>{
-      const d = String(i+1).padStart(2,"0");
-      const m = String(mes+1).padStart(2,"0");
-      return `${anio}-${m}-${d}`;
-    });
+    // Generar días del período (26 mes anterior → 25 mes actual)
+    const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
+    const diasMes = [];
+    let cur = new Date(pDesde + "T12:00:00");
+    const fin = new Date(pHasta + "T12:00:00");
+    while (cur <= fin) {
+      diasMes.push(cur.toISOString().slice(0,10));
+      cur.setDate(cur.getDate()+1);
+    }
 
     const nombresDias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
@@ -2276,9 +2289,12 @@ export default function App() {
 
     const blob = new Blob([html],{type:"text/html;charset=utf-8"});
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href=url; a.target="_blank"; a.rel="noopener"; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),10000);
+    const w = window.open(url, "_blank");
+    if(!w) {
+      const a = document.createElement("a");
+      a.href = url; a.download = "hoja-asistencia.html"; a.click();
+    }
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
@@ -2548,9 +2564,9 @@ export default function App() {
 
   function getDashData() {
     return trabajadores.filter(t => t.activo && t.id !== 999).map(t => {
+      const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(dMes, dAnio);
       const regs = registros.filter(r => {
-        const d = new Date(r.fecha+"T12:00:00");
-        return r.tId===t.id && d.getMonth()===dMes && d.getFullYear()===dAnio && r.salida;
+        return r.tId===t.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida;
       });
       const diasTrab = regs.filter(r => !esEspecial(r.fecha)).length;
       const diasEsp  = regs.filter(r => esCompensable(r.fecha)).length; // solo domingo/feriado (generan compensatorio)
@@ -4707,7 +4723,7 @@ export default function App() {
 
             {/* Tabla detalle */}
             <div style={S.card}>
-              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — {mesNombre(dMes)} {dAnio}</h3>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — Período {periodoLiquidacion(dMes,dAnio).desde} al {periodoLiquidacion(dMes,dAnio).hasta}</h3>
               <div style={{ overflowX:"auto" }}>
                 <table style={S.tbl}>
                   <thead><tr>{["Trabajador","Cód","Días Háb","Días Trab","Asistencia","Ausencias","Dom/Fer","H. Extra","C. Pend","C. Tom","C. Pag"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
@@ -4750,6 +4766,61 @@ export default function App() {
                       </tr>
                     </tfoot>
                   )}
+                </table>
+              </div>
+            </div>
+          </div>
+
+            {/* Detalle día a día de HE aprobadas */}
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>⏱ Detalle de Horas Extras — Período {periodoLiquidacion(dMes,dAnio).desde} al {periodoLiquidacion(dMes,dAnio).hasta}</h3>
+              <div style={{ overflowX:"auto" }}>
+                <table style={S.tbl}>
+                  <thead><tr>{["Trabajador","Fecha","Día","Tipo","Entrada","Salida","H. Extra","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {(()=>{
+                      const { desde: pD, hasta: pH } = periodoLiquidacion(dMes, dAnio);
+                      const nombresDias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+                      const filas = [];
+                      trabajadores.filter(t=>t.activo&&t.id!==999).forEach(t => {
+                        const regsT = registros.filter(r=>r.tId===t.id&&r.salida&&r.fecha>=pD&&r.fecha<=pH);
+                        regsT.forEach(r => {
+                          const esp = esEspecial(r.fecha);
+                          const h = calcularHoras(r.entrada, r.salida, r.fecha,
+                            esp ? null : r.estadoEntrada||null,
+                            esp ? null : r.estadoSalida||null);
+                          if (h.extra <= 0) return;
+                          const estadoHE = esp
+                            ? r.estado
+                            : (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "aprobado"
+                            : (r.estadoEntrada==="rechazado"&&r.estadoSalida==="rechazado") ? "rechazado"
+                            : "pendiente";
+                          const diaSem = new Date(r.fecha+"T12:00:00").getDay();
+                          const tipo = esFeriado(r.fecha) ? "Feriado" : diaSem===0 ? "Domingo" : diaSem===6 ? "Sábado" : "Día Normal";
+                          filas.push({ trab:t, r, h, estadoHE, diaSem, tipo });
+                        });
+                      });
+                      if (filas.length === 0) return (
+                        <tr><td colSpan={8} style={{...S.td, textAlign:"center", color:"#9A8A6A", padding:20}}>No hay horas extras en este período</td></tr>
+                      );
+                      return filas.map((f,i) => (
+                        <tr key={i} style={{ background: f.estadoHE==="aprobado" ? "rgba(39,174,96,0.06)" : f.estadoHE==="rechazado" ? "rgba(192,57,43,0.06)" : "rgba(230,126,34,0.06)" }}>
+                          <td style={S.td}><span style={{color:"#C9A84C",fontWeight:"bold"}}>{f.trab.codigo}</span> {nombreCompleto(f.trab)}</td>
+                          <td style={S.td}>{f.r.fecha}</td>
+                          <td style={S.td}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][f.diaSem]}</td>
+                          <td style={S.td}><span style={S.bdg(f.tipo==="Día Normal"?"#3498db":f.tipo==="Sábado"?"#8e44ad":"#e67e22")}>{f.tipo}</span></td>
+                          <td style={S.td}>{f.r.entrada}</td>
+                          <td style={S.td}>{f.r.salida}</td>
+                          <td style={{...S.td, color:"#FFD700", fontWeight:"bold"}}>{f.h.extra}h</td>
+                          <td style={S.td}>
+                            <span style={S.bdg(f.estadoHE==="aprobado"?"#27ae60":f.estadoHE==="rechazado"?"#c0392b":"#e67e22")}>
+                              {f.estadoHE==="aprobado"?"✓ Aprobada":f.estadoHE==="rechazado"?"✗ Rechazada":"● Pendiente"}
+                            </span>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -4827,7 +4898,7 @@ export default function App() {
               </div>
               <div style={{ marginBottom:24 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
-                <div style={{ paddingLeft:34 }}>{["Las HE aparecen en Pendientes separadas por tipo.","Entrada anticipada y salida posterior se aprueban de forma independiente.","Los domingos y feriados generan compensatorio; los sábados no."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
+                <div style={{ paddingLeft:34 }}>{["Las HE aparecen en Pendientes separadas por tipo (entrada anticipada / salida posterior).","Entrada anticipada y salida posterior se aprueban de forma independiente.","Los domingos y feriados generan compensatorio; los sábados no.","El período de liquidación va del día 26 del mes anterior al día 25 del mes actual.","El detalle diario de HE por trabajador está disponible en el tab Dashboard."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
               </div>
               <div style={{ marginBottom:24 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💰</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Liquidaciones</h3></div>
