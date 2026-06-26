@@ -4769,7 +4769,7 @@ export default function App() {
                 </table>
               </div>
             </div>
-          </div>
+
 
             {/* Detalle día a día de HE aprobadas */}
             <div style={S.card}>
