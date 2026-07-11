@@ -1255,6 +1255,7 @@ export default function App() {
 
   // ── Admin: aprobar/rechazar ────────────────────────────
   const [motivoModal, setMotivoModal] = useState(null); // {tipo:"extra"|"solicitud", id, accion:"rechazar"}
+  const [editAnticipo, setEditAnticipo] = useState({id:null, monto:""});
 
   // ── Dashboard filtros ──────────────────────────────────
   const [dMes,  setDMes]  = useState(new Date().getMonth());
@@ -1926,6 +1927,11 @@ export default function App() {
     if(a) pushNotif(a.tId,`❌ Tu solicitud de anticipo fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
+  function editarMontoAnticipo(id, nuevoMonto) {
+    const m = Number(nuevoMonto);
+    if (!m || m <= 0) return;
+    setAnticipos(p=>p.map(a=>a.id===id?{...a,monto:m}:a));
+  }
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
     const d = liq.datos;
@@ -3547,8 +3553,22 @@ export default function App() {
                       <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{a.motivo||"—"}</td>
                       <td style={S.td}>
                         <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>aprobarAnticipo(a.id)} style={S.btnG}>✓ Aprobar</button>
-                          <button onClick={()=>setMotivoModal({tipo:"anticipo",id:a.id,motivo:""})} style={S.btnD}>✗ Rechazar</button>
+                          {editAnticipo.id===a.id ? (
+                            <>
+                              <input type="number" value={editAnticipo.monto}
+                                onChange={e=>setEditAnticipo(p=>({...p,monto:e.target.value}))}
+                                style={{...S.input,width:110,padding:"2px 6px",fontSize:11}}
+                                placeholder="Monto CLP" />
+                              <button onClick={()=>{editarMontoAnticipo(a.id,editAnticipo.monto);setEditAnticipo({id:null,monto:""}); }} style={{...S.btnG,fontSize:11,padding:"4px 8px"}}>✓</button>
+                              <button onClick={()=>setEditAnticipo({id:null,monto:""})} style={{...S.btnD,fontSize:11,padding:"4px 8px"}}>✗</button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={()=>aprobarAnticipo(a.id)} style={S.btnG}>✓ Aprobar</button>
+                              <button onClick={()=>setMotivoModal({tipo:"anticipo",id:a.id,motivo:""})} style={S.btnD}>✗ Rechazar</button>
+                              <button onClick={()=>setEditAnticipo({id:a.id,monto:String(a.monto)})} style={{background:"transparent",border:"1px solid #C9A84C",color:"#C9A84C",borderRadius:4,fontSize:11,padding:"4px 8px",cursor:"pointer"}}>✏ Editar</button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -3581,7 +3601,27 @@ export default function App() {
                   <div style={{color:"#9A8A6A",marginBottom:6,fontWeight:"bold"}}>Anticipos resueltos</div>
                   {[...anticipos.filter(a=>a.estado!=="pendiente")].reverse().slice(0,5).map(a=>{
                     const t=trabajadores.find(x=>x.id===a.tId);
-                    return <div key={a.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} ${Number(a.monto).toLocaleString("es-CL")} <span style={S.bdg(a.estado==="aprobado"?"#27ae60":"#c0392b")}>{a.estado==="aprobado"?"✓":"✗"}</span></div>;
+                    return (
+                      <div key={a.id} style={{marginBottom:6,color:"#d0e0ff",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span>{t?.apellido}</span>
+                        {editAnticipo.id===a.id ? (
+                          <span style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <input type="number" value={editAnticipo.monto}
+                              onChange={e=>setEditAnticipo(p=>({...p,monto:e.target.value}))}
+                              style={{...S.input,width:110,padding:"2px 6px",fontSize:11}}
+                              placeholder="Monto CLP" />
+                            <button onClick={()=>{editarMontoAnticipo(a.id,editAnticipo.monto);setEditAnticipo({id:null,monto:""}); }} style={{...S.btnG,fontSize:10,padding:"2px 8px"}}>✓</button>
+                            <button onClick={()=>setEditAnticipo({id:null,monto:""})} style={{...S.btnD,fontSize:10,padding:"2px 8px"}}>✗</button>
+                          </span>
+                        ) : (
+                          <span style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <strong style={{color:"#C9A84C"}}>${Number(a.monto).toLocaleString("es-CL")}</strong>
+                            <span style={S.bdg(a.estado==="aprobado"?"#27ae60":"#c0392b")}>{a.estado==="aprobado"?"✓":"✗"}</span>
+                            <button onClick={()=>setEditAnticipo({id:a.id,monto:String(a.monto)})} style={{background:"transparent",border:"1px solid #C9A84C",color:"#C9A84C",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>✏</button>
+                          </span>
+                        )}
+                      </div>
+                    );
                   })}
                 </div>
               </div>
