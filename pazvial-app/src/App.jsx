@@ -5234,6 +5234,9 @@ export default function App() {
         {/* ── TAB: CUADRILLAS ───────────────────────────────── */}
         {tabAdmin==="cuadrillas" && (
           <div style={{ marginTop:4 }}>
+            <div style={{ background:"rgba(201,168,76,0.1)", border:"1px solid #C9A84C", borderRadius:8, padding:12, marginBottom:12, fontSize:12, color:"#C9A84C" }}>
+              Debug: trab={trabajadores.length} cuad={cuadrillas.length}
+            </div>
             <CuadrillasAdmin
               trabajadores={trabajadores}
               cuadrillas={cuadrillas}
