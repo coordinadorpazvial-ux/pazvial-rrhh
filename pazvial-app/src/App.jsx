@@ -2900,8 +2900,10 @@ export default function App() {
   if (vista==="supervisor" && supActivo) {
     const cuadActiva = cuadrillas.find(c => c.supervisorId === supActivo.id);
     const miembros = cuadActiva
-      ? trabajadores.filter(t => (cuadActiva.miembros||[]).includes(t.id) && t.activo)
-      : [];
+      ? trabajadores.filter(t => (
+          ((cuadActiva.miembros||[]).includes(t.id) || t.id === supActivo.id) && t.activo
+        ))
+      : [supActivo].filter(Boolean);
     const hoy = new Date().toISOString().slice(0,10);
     const tabs = [
       { k:"hoy",        l:"📍 Marcas Hoy" },
