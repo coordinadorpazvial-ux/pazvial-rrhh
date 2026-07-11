@@ -1215,6 +1215,132 @@ function ModalMotivo({ motivoModal, setMotivoModal, onConfirmar }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// COMPONENTE: CUADRILLAS ADMIN
+// ═══════════════════════════════════════════════════════════
+function CuadrillasAdmin({ trabajadores, cuadrillas, onGuardar, onEliminar, S, nombreCompleto }) {
+  const [modo, setModo] = React.useState(null); // null | "nueva" | id_cuadrilla
+  const [form, setForm] = React.useState({ nombre:"", supervisorId:"", miembros:[] });
+  const [msg, setMsg] = React.useState("");
+
+  function abrirNueva() {
+    setForm({ nombre:"", supervisorId:"", miembros:[] });
+    setModo("nueva");
+    setMsg("");
+  }
+  function abrirEditar(c) {
+    setForm({ ...c });
+    setModo(c.id);
+    setMsg("");
+  }
+  function cerrar() { setModo(null); setMsg(""); }
+
+  function guardar() {
+    if (!form.nombre.trim()) { setMsg("Ingresa un nombre para la cuadrilla."); return; }
+    if (!form.supervisorId) { setMsg("Selecciona un supervisor."); return; }
+    if (form.miembros.length === 0) { setMsg("Agrega al menos un integrante."); return; }
+    onGuardar({ ...form, id: modo==="nueva" ? null : modo });
+    cerrar();
+  }
+
+  function toggleMiembro(id) {
+    setForm(p => ({
+      ...p,
+      miembros: p.miembros.includes(id)
+        ? p.miembros.filter(x => x !== id)
+        : [...p.miembros, id]
+    }));
+  }
+
+  const trabActivos = trabajadores.filter(t => t.activo && t.id !== 999);
+  const supervisor = form.supervisorId ? trabajadores.find(t => t.id === Number(form.supervisorId)) : null;
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <h3 style={{ color:"#C9A84C", margin:0 }}>👥 Cuadrillas</h3>
+          <button onClick={abrirNueva} style={S.btn}>+ Nueva Cuadrilla</button>
+        </div>
+        {cuadrillas.length === 0
+          ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay cuadrillas creadas</div>
+          : cuadrillas.map(c => {
+              const sup = trabajadores.find(t => t.id === c.supervisorId);
+              const mbs = trabajadores.filter(t => (c.miembros||[]).includes(t.id));
+              return (
+                <div key={c.id} style={{ border:"1px solid rgba(201,168,76,0.2)", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div>
+                      <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16, marginBottom:4 }}>{c.nombre}</div>
+                      <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:6 }}>
+                        👤 Supervisor: <span style={{ color:"#d0e0ff" }}>{sup ? `${nombreCompleto(sup)} (${sup.codigo})` : "—"}</span>
+                      </div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                        {mbs.map(t => (
+                          <span key={t.id} style={{ background:"rgba(201,168,76,0.1)", border:"1px solid rgba(201,168,76,0.3)", borderRadius:12, padding:"2px 10px", fontSize:12, color:"#C9A84C" }}>
+                            {t.codigo} {t.apellido}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                      <button onClick={()=>abrirEditar(c)} style={{ ...S.btn, fontSize:12, padding:"4px 10px" }}>✏ Editar</button>
+                      <button onClick={()=>onEliminar(c.id)} style={{ ...S.btnD, fontSize:12, padding:"4px 10px" }}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+        }
+      </div>
+
+      {/* Modal crear/editar cuadrilla */}
+      {modo !== null && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ ...S.card, maxWidth:500, width:"100%", maxHeight:"90vh", overflowY:"auto" }}>
+            <h3 style={{ color:"#C9A84C", marginTop:0 }}>{modo==="nueva" ? "Nueva Cuadrilla" : "Editar Cuadrilla"}</h3>
+
+            <label style={S.lbl}>Nombre de la Cuadrilla</label>
+            <input style={S.input} value={form.nombre} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Cuadrilla Norte" />
+
+            <label style={{ ...S.lbl, marginTop:12 }}>Supervisor</label>
+            <select style={S.sel} value={form.supervisorId} onChange={e=>setForm(p=>({...p,supervisorId:Number(e.target.value)}))}>
+              <option value="">— Seleccionar supervisor —</option>
+              {trabActivos.map(t => (
+                <option key={t.id} value={t.id}>{t.codigo} — {nombreCompleto(t)}</option>
+              ))}
+            </select>
+            {supervisor && (
+              <div style={{ color:"#27ae60", fontSize:11, marginTop:4 }}>
+                ✓ Contraseña de acceso: <strong>{supervisor.codigo}</strong>
+              </div>
+            )}
+
+            <label style={{ ...S.lbl, marginTop:12 }}>Integrantes <span style={{ color:"#9A8A6A", fontWeight:"normal" }}>(selecciona los miembros)</span></label>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, maxHeight:200, overflowY:"auto", padding:8, background:"rgba(0,0,0,0.2)", borderRadius:8 }}>
+              {trabActivos.filter(t => t.id !== Number(form.supervisorId)).map(t => (
+                <label key={t.id} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 6px", borderRadius:6,
+                  background: form.miembros.includes(t.id) ? "rgba(201,168,76,0.15)" : "transparent" }}>
+                  <input type="checkbox" checked={form.miembros.includes(t.id)} onChange={()=>toggleMiembro(t.id)} />
+                  <span style={{ fontSize:12, color:"#d0e0ff" }}>{t.codigo} {t.apellido}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{form.miembros.length} integrante(s) seleccionado(s)</div>
+
+            {msg && <div style={S.err}>{msg}</div>}
+
+            <div style={{ display:"flex", gap:10, marginTop:16 }}>
+              <button onClick={guardar} style={{ ...S.btnG, flex:1 }}>✓ Guardar</button>
+              <button onClick={cerrar} style={{ ...S.btnD, flex:1 }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // APP PRINCIPAL
 // ═══════════════════════════════════════════════════════════
 export default function App() {
@@ -1241,6 +1367,15 @@ export default function App() {
   // ── Login admin ────────────────────────────────────────
   const [aPass,  setAPass]  = useState("");
   const [aError, setAError] = useState("");
+
+  // ── Login supervisor ───────────────────────────────────
+  const [supCodigo, setSupCodigo] = useState("");
+  const [supError,  setSupError]  = useState("");
+  const [supActivo, setSupActivo] = useState(null); // trabajador que es supervisor
+
+  // ── Cuadrillas ─────────────────────────────────────────
+  const [cuadrillas, setCuadrillas] = useState([]);
+  const [tabSup, setTabSup] = useState("hoy");
 
   // ── Marca asistencia ───────────────────────────────────
   const [tipoMarca,   setTipoMarca]   = useState("entrada");
@@ -1461,6 +1596,7 @@ export default function App() {
         setNotifs(data.notificaciones || []);
         setLiquidaciones(data.liquidaciones || []);
         setAnticipos(data.anticipos || []);
+    setCuadrillas(data.cuadrillas || []);
         setCodigosUsados(data.codigosUsados || []);
         setTimeout(() => {
           cargandoDesdeFirebase.current = false;
@@ -1585,6 +1721,30 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   // ACCIONES
   // ═══════════════════════════════════════════════════════
+
+  // ── LOGIN SUPERVISOR ──────────────────────────────────
+  function loginSupervisor() {
+    const codigo = supCodigo.trim().toUpperCase();
+    if (!codigo) { setSupError("Ingresa tu código de supervisor."); return; }
+    const trab = trabajadores.find(t => t.codigo?.toUpperCase() === codigo && t.activo);
+    if (!trab) { setSupError("Código no encontrado o inactivo."); return; }
+    const cuad = cuadrillas.find(c => c.supervisorId === trab.id);
+    if (!cuad) { setSupError("No tienes cuadrilla asignada. Contacta al administrador."); return; }
+    setSupActivo(trab);
+    setVista("supervisor");
+    setSupError("");
+    setSupCodigo("");
+  }
+
+  // ── CRUD CUADRILLAS ───────────────────────────────────
+  function guardarCuadrilla(cuad) {
+    setCuadrillas(p => cuad.id
+      ? p.map(c => c.id === cuad.id ? cuad : c)
+      : [...p, { ...cuad, id: Date.now() }]);
+  }
+  function eliminarCuadrilla(id) {
+    setCuadrillas(p => p.filter(c => c.id !== id));
+  }
 
   function loginTrabajador() {
     setLError("");
@@ -2454,7 +2614,7 @@ export default function App() {
   }
 
   function exportarDatos() {
-    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados };
+    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, cuadrillas, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2658,6 +2818,7 @@ export default function App() {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:14, width:"100%", maxWidth:480 }}>
             {[
               { label:"Trabajador", sub:"Registrar entrada / salida", icon:"👷", action:()=>setVista("trabLogin"), gold:false },
+              { label:"Supervisor", sub:"Monitoreo de cuadrilla", icon:"👁", action:()=>setVista("supLogin"), gold:false },
               { label:"Administrador", sub:"Gestión y reportes", icon:"🔐", action:()=>setVista("adminLogin"), gold:true },
             ].map(b => (
               <button key={b.label} onClick={b.action} style={{
@@ -2703,6 +2864,208 @@ export default function App() {
       </div>
     </div>
   );
+
+  // ═══════════════════════════════════════════════════════
+  // VISTA: LOGIN SUPERVISOR
+  // ═══════════════════════════════════════════════════════
+  if (vista==="supLogin") return (
+    <div style={S.app}>
+      <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub="Acceso Supervisor" onBack={()=>setVista("portada")} />
+      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"70vh", padding:16 }}>
+        <div style={{ width:"100%", maxWidth:360 }}>
+          <div style={S.card}>
+            <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>👁 Acceso Supervisor</h3>
+            <label style={S.lbl}>Tu Código Personal</label>
+            <input style={S.input} value={supCodigo} onChange={e=>setSupCodigo(e.target.value.toUpperCase())}
+              placeholder="Ej: PP01" autoCapitalize="characters"
+              onKeyDown={e=>e.key==="Enter"&&loginSupervisor()} />
+            {supError && <div style={S.err}>{supError}</div>}
+            <button onClick={loginSupervisor} style={{ ...S.btn, width:"100%", marginTop:14 }}>Ingresar →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════
+  // VISTA: SUPERVISOR (solo lectura)
+  // ═══════════════════════════════════════════════════════
+  if (vista==="supervisor" && supActivo) {
+    const cuadActiva = cuadrillas.find(c => c.supervisorId === supActivo.id);
+    const miembros = cuadActiva
+      ? trabajadores.filter(t => (cuadActiva.miembros||[]).includes(t.id) && t.activo)
+      : [];
+    const hoy = new Date().toISOString().slice(0,10);
+    const tabs = [
+      { k:"hoy",        l:"📍 Marcas Hoy" },
+      { k:"solicitudes",l:"📋 Solicitudes" },
+      { k:"anticipos",  l:"🏦 Anticipos" },
+      { k:"asistencia", l:"📅 Asistencia" },
+    ];
+    return (
+      <div style={S.app}>
+        <Hdr titulo={`CUADRILLA: ${cuadActiva?.nombre||"—"}`}
+          sub={`Supervisor: ${nombreCompleto(supActivo)}`}
+          onBack={()=>{ setVista("portada"); setSupActivo(null); }} />
+        {/* Tabs */}
+        <div style={{ padding:"0 8px", display:"flex", gap:4, flexWrap:"wrap", marginTop:8, overflowX:"auto" }}>
+          {tabs.map(t=>(
+            <button key={t.k} onClick={()=>setTabSup(t.k)} style={{
+              padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:13,
+              background: tabSup===t.k ? "#C9A84C" : "rgba(201,168,76,0.12)",
+              color: tabSup===t.k ? "#0A0A0A" : "#C9A84C", fontWeight: tabSup===t.k ? "bold" : "normal",
+              whiteSpace:"nowrap"
+            }}>{t.l}</button>
+          ))}
+        </div>
+        <div style={{ padding:"0 8px 48px" }}>
+
+          {/* ── MARCAS HOY ── */}
+          {tabSup==="hoy" && (
+            <div style={{ marginTop:12 }}>
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📍 Marcas del día — {hoy}</h3>
+                {miembros.length===0
+                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes en la cuadrilla</div>
+                  : <table style={S.tbl}><thead><tr>
+                      {["Trabajador","Entrada","Salida","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                    </tr></thead><tbody>
+                    {miembros.map(t => {
+                      const reg = registros.find(r => r.tId===t.id && r.fecha===hoy);
+                      const sinMarca = !reg;
+                      const soloEntrada = reg && !reg.salida;
+                      return (
+                        <tr key={t.id} style={{ background: sinMarca?"rgba(192,57,43,0.07)":soloEntrada?"rgba(230,126,34,0.07)":"rgba(39,174,96,0.05)" }}>
+                          <td style={S.td}><strong style={{ color:"#C9A84C" }}>{t.codigo}</strong> {nombreCompleto(t)}</td>
+                          <td style={S.td}>{reg?.entrada||<span style={{ color:"#c0392b" }}>—</span>}</td>
+                          <td style={S.td}>{reg?.salida||<span style={{ color:"#e67e22" }}>—</span>}</td>
+                          <td style={S.td}>
+                            {sinMarca
+                              ? <span style={S.bdg("#c0392b")}>Sin marca</span>
+                              : soloEntrada
+                              ? <span style={S.bdg("#e67e22")}>Solo entrada</span>
+                              : <span style={S.bdg("#27ae60")}>✓ Completo</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody></table>
+                }
+              </div>
+            </div>
+          )}
+
+          {/* ── SOLICITUDES ── */}
+          {tabSup==="solicitudes" && (
+            <div style={{ marginTop:12 }}>
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📋 Solicitudes de la Cuadrilla</h3>
+                {miembros.length===0
+                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes</div>
+                  : (() => {
+                      const sols = solicitudes.filter(s => miembros.some(m=>m.id===s.tId));
+                      if (sols.length===0) return <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin solicitudes</div>;
+                      return (
+                        <table style={S.tbl}><thead><tr>
+                          {["Trabajador","Tipo","Desde","Hasta","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                        </tr></thead><tbody>
+                        {[...sols].reverse().map(s => {
+                          const t = trabajadores.find(x=>x.id===s.tId);
+                          return (
+                            <tr key={s.id}>
+                              <td style={S.td}>{t?.codigo} {t?.apellido}</td>
+                              <td style={S.td}>{s.tipo}</td>
+                              <td style={S.td}>{s.fechaDesde}</td>
+                              <td style={S.td}>{s.fechaHasta}</td>
+                              <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
+                                {s.estado==="aprobado"?"✓ Aprobada":s.estado==="rechazado"?"✗ Rechazada":"● Pendiente"}
+                              </span></td>
+                            </tr>
+                          );
+                        })}
+                        </tbody></table>
+                      );
+                    })()
+                }
+              </div>
+            </div>
+          )}
+
+          {/* ── ANTICIPOS ── */}
+          {tabSup==="anticipos" && (
+            <div style={{ marginTop:12 }}>
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>🏦 Anticipos de la Cuadrilla</h3>
+                {miembros.length===0
+                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes</div>
+                  : (() => {
+                      const ants = anticipos.filter(a => miembros.some(m=>m.id===a.tId));
+                      if (ants.length===0) return <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin anticipos</div>;
+                      return (
+                        <table style={S.tbl}><thead><tr>
+                          {["Trabajador","Mes","Monto","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                        </tr></thead><tbody>
+                        {[...ants].reverse().map(a => {
+                          const t = trabajadores.find(x=>x.id===a.tId);
+                          return (
+                            <tr key={a.id}>
+                              <td style={S.td}>{t?.codigo} {t?.apellido}</td>
+                              <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
+                              <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>${Number(a.monto).toLocaleString("es-CL")}</td>
+                              <td style={S.td}><span style={S.bdg(a.estado==="aprobado"?"#27ae60":a.estado==="rechazado"?"#c0392b":"#e67e22")}>
+                                {a.estado==="aprobado"?"✓ Aprobado":a.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
+                              </span></td>
+                            </tr>
+                          );
+                        })}
+                        </tbody></table>
+                      );
+                    })()
+                }
+              </div>
+            </div>
+          )}
+
+          {/* ── ASISTENCIA ── */}
+          {tabSup==="asistencia" && (
+            <div style={{ marginTop:12 }}>
+              <div style={S.card}>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📅 Asistencia del Mes en Curso</h3>
+                {miembros.map(t => {
+                  const regsT = registros.filter(r=>r.tId===t.id&&r.fecha>=hoy.slice(0,7)+"-01"&&r.fecha<=hoy);
+                  return (
+                    <div key={t.id} style={{ marginBottom:16 }}>
+                      <div style={{ color:"#C9A84C", fontWeight:"bold", marginBottom:6 }}>{t.codigo} — {nombreCompleto(t)}</div>
+                      {regsT.length===0
+                        ? <div style={{ color:"#9A8A6A", fontSize:12 }}>Sin registros este mes</div>
+                        : <table style={S.tbl}><thead><tr>
+                            {["Fecha","Entrada","Salida","H.Normales","H.Extra"].map(h=><th key={h} style={S.th}>{h}</th>)}
+                          </tr></thead><tbody>
+                          {regsT.map(r => {
+                            const h = calcularHoras(r.entrada,r.salida,r.fecha);
+                            return (
+                              <tr key={r.id}>
+                                <td style={S.td}>{r.fecha}</td>
+                                <td style={S.td}>{r.entrada}</td>
+                                <td style={S.td}>{r.salida||"—"}</td>
+                                <td style={{ ...S.td, color:"#27ae60" }}>{r.salida?h.normal+"h":"—"}</td>
+                                <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>{r.salida&&h.extra>0?h.extra+"h":"—"}</td>
+                              </tr>
+                            );
+                          })}
+                          </tbody></table>
+                      }
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    );
+  }
 
   // ═══════════════════════════════════════════════════════
   // VISTA: LOGIN TRABAJADOR
@@ -3274,6 +3637,7 @@ export default function App() {
     { k:"compensat",    l:"📅 Compensatorios" },
     { k:"calendario",   l:"🗓 Calendario" },
     { k:"dashboard",    l:"📊 Dashboard" },
+    { k:"cuadrillas",   l:"👥 Cuadrillas" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
@@ -4864,6 +5228,20 @@ export default function App() {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ── TAB: CUADRILLAS ───────────────────────────────── */}
+        {tabAdmin==="cuadrillas" && (
+          <div style={{ marginTop:4 }}>
+            <CuadrillasAdmin
+              trabajadores={trabajadores}
+              cuadrillas={cuadrillas}
+              onGuardar={guardarCuadrilla}
+              onEliminar={eliminarCuadrilla}
+              S={S}
+              nombreCompleto={nombreCompleto}
+            />
           </div>
         )}
 
