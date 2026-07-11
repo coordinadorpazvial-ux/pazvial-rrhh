@@ -122,6 +122,13 @@ const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
 const esCompensable = d => esDomingo(d) || esFeriado(d); // genera día compensatorio (sábado NO genera)
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 
+// Helper formato fecha DD/MM/AAAA
+function fmtFecha(f) {
+  if (!f) return "—";
+  const [y,m,d] = f.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
@@ -2924,7 +2931,7 @@ export default function App() {
           {tabSup==="hoy" && (
             <div style={{ marginTop:12 }}>
               <div style={S.card}>
-                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📍 Marcas del día — {hoy}</h3>
+                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📍 Marcas del día — {fmtFecha(hoy)}</h3>
                 {miembros.length===0
                   ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes en la cuadrilla</div>
                   : <table style={S.tbl}><thead><tr>
@@ -2975,8 +2982,8 @@ export default function App() {
                             <tr key={s.id}>
                               <td style={S.td}>{t?.codigo} {t?.apellido}</td>
                               <td style={S.td}>{s.tipo}</td>
-                              <td style={S.td}>{s.fechaDesde}</td>
-                              <td style={S.td}>{s.fechaHasta}</td>
+                              <td style={S.td}>{fmtFecha(s.fechaDesde)}</td>
+                              <td style={S.td}>{fmtFecha(s.fechaHasta)}</td>
                               <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
                                 {s.estado==="aprobado"?"✓ Aprobada":s.estado==="rechazado"?"✗ Rechazada":"● Pendiente"}
                               </span></td>
@@ -3042,14 +3049,17 @@ export default function App() {
                             {["Fecha","Entrada","Salida","H.Normales","H.Extra"].map(h=><th key={h} style={S.th}>{h}</th>)}
                           </tr></thead><tbody>
                           {regsT.map(r => {
-                            const h = calcularHoras(r.entrada,r.salida,r.fecha);
+                            const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida);
+                            const heAprobada = esEspecial(r.fecha)
+                              ? r.estado==="aprobado" ? h.extra : 0
+                              : h.extra;
                             return (
                               <tr key={r.id}>
-                                <td style={S.td}>{r.fecha}</td>
-                                <td style={S.td}>{r.entrada}</td>
+                                <td style={S.td}>{fmtFecha(r.fecha)}</td>
+                                <td style={S.td}>{r.entrada||"—"}</td>
                                 <td style={S.td}>{r.salida||"—"}</td>
-                                <td style={{ ...S.td, color:"#27ae60" }}>{r.salida?h.normal+"h":"—"}</td>
-                                <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>{r.salida&&h.extra>0?h.extra+"h":"—"}</td>
+                                <td style={{ ...S.td, color:"#27ae60" }}>{r.salida?+(h.normales).toFixed(2)+"h":"—"}</td>
+                                <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>{heAprobada>0?heAprobada+"h":"—"}</td>
                               </tr>
                             );
                           })}
