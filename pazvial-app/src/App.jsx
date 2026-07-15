@@ -18,7 +18,7 @@ const db = getFirestore(firebaseApp);
 // ── Helpers Firebase ──────────────────────────────────────────────────────
 const DB_DOC = "pazvial/datos";
 
-async function guardarEnFirebase(datos) {
+async function guardarEnFirebase(datos, intentos = 0) {
   try {
     const [col, docId] = DB_DOC.split("/");
 
@@ -64,7 +64,12 @@ async function guardarEnFirebase(datos) {
     // Nota: el flag escribiendoEnFirebase lo maneja el auto-guardado externamente
   } catch(e) {
     console.error("Error guardando en Firebase:", e);
-    throw e; // Re-lanzar para que el reintento funcione
+    if (intentos < 3) {
+      // Reintento automático con backoff exponencial
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, intentos)));
+      return guardarEnFirebase(datos, intentos + 1);
+    }
+    throw e;
   }
 }
 
@@ -1641,6 +1646,7 @@ export default function App() {
           trabajadores, registros,
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
+          cuadrillas,
           codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
