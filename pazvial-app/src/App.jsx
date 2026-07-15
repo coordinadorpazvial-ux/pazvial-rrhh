@@ -52,6 +52,11 @@ async function guardarEnFirebase(datos, intentos = 0) {
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
       datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
 
+      // Merge de cuadrillas: si local tiene datos, usar local; si no, conservar remoto
+      if ((datos.cuadrillas||[]).length === 0 && (remoto.cuadrillas||[]).length > 0) {
+        datos = { ...datos, cuadrillas: remoto.cuadrillas };
+      }
+
       // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
       const codigosLocal = new Set(datos.codigosUsados || []);
       const codigosRemotos = (remoto.codigosUsados || []).filter(c => !codigosLocal.has(c));
@@ -1666,7 +1671,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, codigosUsados]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
