@@ -252,7 +252,7 @@ function nombreCompleto(t) {
   return [t.nombre, t.apellido, t.apellidoM].filter(Boolean).join(" ");
 }
 
-function hoy() { return new Date().toISOString().split("T")[0]; }
+function hoy() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function horaActual() { return new Date().toTimeString().slice(0,5); }
 function nowId() { return Date.now() + Math.random(); }
 
@@ -1666,7 +1666,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, codigosUsados]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
@@ -2910,7 +2910,7 @@ export default function App() {
           ((cuadActiva.miembros||[]).includes(t.id) || t.id === supActivo.id) && t.activo
         ))
       : [supActivo].filter(Boolean);
-    const hoy = new Date().toISOString().slice(0,10);
+    const d=new Date(); const hoy=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
     const tabs = [
       { k:"hoy",        l:"📍 Marcas Hoy" },
       { k:"solicitudes",l:"📋 Solicitudes" },
