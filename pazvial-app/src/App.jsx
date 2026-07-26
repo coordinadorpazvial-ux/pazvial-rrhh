@@ -1936,6 +1936,11 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.");
   }
+  function reabrirExtra(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado", motivoRechazo:""} : r));
+    const r = registros.find(x => x.id===id);
+    if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " han sido aprobadas (corrección).");
+  }
   function abrirRechazoExtra(id) {
     setMotivoModal({ tipo:"extra", id, accion:"rechazar", motivo:"" });
   }
@@ -1961,6 +1966,11 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
+  function reabrirHEEntrada(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado", motivoRechazoEntrada:""} : r));
+    const r = registros.find(x => x.id===id);
+    if (r) pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${r.fecha} han sido aprobadas (corrección).`);
+  }
 
   // ── HE salida posterior ──
   function aprobarHESalida(id) {
@@ -1984,6 +1994,15 @@ export default function App() {
     }));
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+  }
+  function reabrirHESalida(id) {
+    setRegistros(p => p.map(r => {
+      if (r.id!==id) return r;
+      const estadoGeneral = r.estadoEntrada==="aprobado" ? "aprobado" : "pendiente";
+      return {...r, estadoSalida:"aprobado", motivoRechazoSalida:"", estado:estadoGeneral};
+    }));
+    const r = registros.find(x => x.id===id);
+    if (r) pushNotif(r.tId, `✅ Tus HE de salida del ${r.fecha} han sido aprobadas (corrección).`);
   }
 
   // ── Admin: aprobar/rechazar solicitud ─────────────────
@@ -3772,7 +3791,7 @@ export default function App() {
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
-                      <td style={S.td}>{r.fecha}</td>
+                      <td style={S.td}><span style={{fontWeight:"bold"}}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(r.fecha+"T12:00:00").getDay()]}</span> {r.fecha}</td>
                       <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{r.entrada}</td>
                       <td style={S.td}>
                         <button onClick={()=>setEntradaAnticModal({id:r.id,horaCorregida:"08:00"})} style={{...S.btnB,fontSize:12}}>
@@ -3808,7 +3827,7 @@ export default function App() {
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>
-                        {r.fecha}
+                        <span style={{fontWeight:"bold",marginRight:4}}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(r.fecha+"T12:00:00").getDay()]}</span>{r.fecha}
                         {esDiaEsp && <span style={{...S.bdg("#8e44ad"),marginLeft:4,fontSize:10}}>
                           {esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}
                         </span>}
@@ -3832,13 +3851,16 @@ export default function App() {
                         ) : r.estadoEntrada==="aprobado" ? (
                           <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
                         ) : r.estadoEntrada==="rechazado" ? (
-                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                            <button onClick={()=>reabrirHEEntrada(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
+                          </div>
                         ) : <span style={{color:"#aaa"}}>—</span>}
                       </td>
 
                       {/* ── Columna HE Salida ── */}
                       <td style={S.td}>
-                        {esDiaEsp ? (
+                        {esDiaEsp && r.estado==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extra}h (día especial)
@@ -3848,6 +3870,13 @@ export default function App() {
                               <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
                             </div>
                           </div>
+                        ) : esDiaEsp && r.estado==="rechazado" ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <span style={{color:"#e74c3c",fontSize:11}}>✗ {hBruto.extra}h rechazadas</span>
+                            <button onClick={()=>reabrirExtra(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
+                          </div>
+                        ) : esDiaEsp && r.estado==="aprobado" ? (
+                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extra}h aprobadas</span>
                         ) : r.estadoSalida==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
@@ -3861,7 +3890,10 @@ export default function App() {
                         ) : r.estadoSalida==="aprobado" ? (
                           <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraSalida}h aprobadas</span>
                         ) : r.estadoSalida==="rechazado" ? (
-                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                            <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
+                            <button onClick={()=>reabrirHESalida(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
+                          </div>
                         ) : <span style={{color:"#aaa"}}>—</span>}
                       </td>
 
