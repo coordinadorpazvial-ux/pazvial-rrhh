@@ -1099,7 +1099,7 @@ function FichaForm({
             <button
               onClick={()=>{
                 setFichaMode("editar");
-                setFichaDraft({nombre:trabReal.nombre,apellido:trabReal.apellido,apellidoM:trabReal.apellidoM||"",rut:trabReal.rut,...trabReal.ficha});
+                setFichaDraft({nombre:trabReal.nombre,apellido:trabReal.apellido,apellidoM:trabReal.apellidoM||"",rut:trabReal.rut,...trabReal.ficha, tipoContrato:trabReal.ficha?.tipoContrato||"indefinido", vencimientoContrato:trabReal.ficha?.vencimientoContrato||"", planIsapreUF:trabReal.ficha?.planIsapreUF||0, apv:trabReal.ficha?.apv||0, sistSalud:trabReal.ficha?.sistSalud||trabReal.ficha?.prevision||"FONASA"});
                 setFichaGuardMsg({tipo:"",txt:""});
               }}
               style={{flex:1,background:"linear-gradient(135deg,rgba(41,128,185,0.3),rgba(41,128,185,0.15))",
@@ -1457,7 +1457,7 @@ function ParametrosAdmin({ params, onSave, S }) {
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
           <h3 style={{color:"#C9A84C", margin:0}}>⚙️ Parámetros del Sistema</h3>
           <div style={{display:"flex", gap:8}}>
-            <button onClick={restaurar} style={{fontSize:12, padding:"6px 12px", background:"rgba(201,168,76,0.15)", border:"1px solid #C9A84C", color:"#C9A84C", borderRadius:6, cursor:"pointer"}}>↩ Restaurar</button>
+            <button onClick={restaurar} style={{...S.btn, fontSize:12, padding:"6px 12px", background:"transparent", border:"1px solid rgba(201,168,76,0.4)"}}>↩ Restaurar</button>
             <button onClick={guardar} style={{...S.btnG, fontSize:12, padding:"6px 14px"}}>✓ Guardar</button>
           </div>
         </div>
