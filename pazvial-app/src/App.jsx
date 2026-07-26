@@ -4286,8 +4286,26 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                     <button onClick={cancelarEdicion} style={S.btnD}>✗</button>
                                   </div>
                                 ) : (
-                                  <div style={{display:"flex",gap:4}}>
+                                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                                     <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
+                                    {(r.estado==="rechazado"||(r.estadoEntrada==="rechazado"||r.estadoSalida==="rechazado")) && (
+                                      <button
+                                        title="Reenviar HE a pendiente para re-aprobación"
+                                        onClick={()=>{
+                                          setRegistros(p=>p.map(x=>{
+                                            if(x.id!==r.id) return x;
+                                            return {...x,
+                                              estado: x.estado==="rechazado"?"pendiente":x.estado,
+                                              estadoEntrada: x.estadoEntrada==="rechazado"?"pendiente":x.estadoEntrada,
+                                              estadoSalida: x.estadoSalida==="rechazado"?"pendiente":x.estadoSalida,
+                                              motivoRechazo:"",motivoRechazoEntrada:"",motivoRechazoSalida:"",
+                                            };
+                                          }));
+                                          if(t) pushNotif(r.tId,`🔄 Tu solicitud de HE del ${r.fecha} fue reenviada a revisión.`);
+                                        }}
+                                        style={{...S.btnG,fontSize:11,padding:"4px 10px"}}
+                                      >↩ HE</button>
+                                    )}
                                     <button
                                       onClick={()=>{
                                         if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
@@ -4492,14 +4510,14 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                     <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${h.extra}h`:"—"}</td>
                                     <td style={{...S.td,fontSize:10,color:obsColor}}>
                                       {obsLabel}
-                                      {reg&&esEspecial(fecha)&&h&&h.extra>0&&reg.estado==="rechazado" && (
-                                        <button onClick={()=>reabrirExtra(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar HE</button>
+                                      {h&&h.extra>0&&reg&&reg.estado==="rechazado" && (
+                                        <button onClick={()=>reabrirExtra(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
                                       )}
-                                      {reg&&!esEspecial(fecha)&&h&&h.extraEntrada>0&&reg.estadoEntrada==="rechazado" && (
-                                        <button onClick={()=>reabrirHEEntrada(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ HE Entrada</button>
+                                      {h&&(h.extraEntrada>0||h.extraSalida>0)&&reg&&reg.estadoEntrada==="rechazado" && (
+                                        <button onClick={()=>reabrirHEEntrada(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Entrada</button>
                                       )}
-                                      {reg&&!esEspecial(fecha)&&h&&h.extraSalida>0&&reg.estadoSalida==="rechazado" && (
-                                        <button onClick={()=>reabrirHESalida(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ HE Salida</button>
+                                      {h&&h.extraSalida>0&&reg&&reg.estadoSalida==="rechazado" && (
+                                        <button onClick={()=>reabrirHESalida(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Salida</button>
                                       )}
                                     </td>
                                   </tr>
