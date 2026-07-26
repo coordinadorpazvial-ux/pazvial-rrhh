@@ -4503,6 +4503,16 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                         style={{...S.btnG,fontSize:11,padding:"4px 10px"}}
                                       >↩ HE</button>
                                     )}
+                                    {esEspecial(r.fecha) && (
+                                      <button
+                                        title={r.esContingencia?"Quitar contingencia":"Marcar como contingencia (viático $50.000)"}
+                                        onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:!x.esContingencia}:x))}
+                                        style={{background:r.esContingencia?"rgba(230,126,34,0.3)":"transparent",
+                                          border:`1px solid ${r.esContingencia?"#e67e22":"rgba(230,126,34,0.4)"}`,
+                                          color:r.esContingencia?"#e67e22":"#9A8A6A",
+                                          borderRadius:4,fontSize:11,padding:"4px 8px",cursor:"pointer"}}
+                                      >{r.esContingencia?"⚠️ Cont.":"⚠️"}</button>
+                                    )}
                                     <button
                                       onClick={()=>{
                                         if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
