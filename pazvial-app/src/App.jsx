@@ -1457,7 +1457,7 @@ function ParametrosAdmin({ params, onSave, S }) {
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
           <h3 style={{color:"#C9A84C", margin:0}}>⚙️ Parámetros del Sistema</h3>
           <div style={{display:"flex", gap:8}}>
-            <button onClick={restaurar} style={{...S.btn, fontSize:12, padding:"6px 12px", background:"transparent", border:"1px solid rgba(201,168,76,0.4)"}}>↩ Restaurar</button>
+            <button onClick={restaurar} style={{fontSize:12, padding:"6px 12px", background:"rgba(201,168,76,0.15)", border:"1px solid #C9A84C", color:"#C9A84C", borderRadius:6, cursor:"pointer"}}>↩ Restaurar</button>
             <button onClick={guardar} style={{...S.btnG, fontSize:12, padding:"6px 14px"}}>✓ Guardar</button>
           </div>
         </div>
@@ -3258,22 +3258,27 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       rut:       fmtRut(d.rut),
       ficha: {
         ...t.ficha,
-        direccion:          d.direccion,
-        telefono:           d.telefono,
-        correo:             d.correo,
-        cargo:              d.cargo,
-        contactoEmergencia: d.contactoEmergencia,
-        telefonoEmergencia: d.telefonoEmergencia,
-        prevision:          d.prevision || "FONASA",
-        afp:                d.afp,
-        sueldoPactado:      d.sueldoPactado,
-        gratificacion:      d.gratificacion,
-        colacion:           Number(d.colacion) || 0,
-        movilizacion:       Number(d.movilizacion) || 0,
-        fechaIngreso:       d.fechaIngreso,
-        fechaSalida:        d.fechaSalida,
-        motivoSalida:       d.motivoSalida,
-        observaciones:      d.observaciones,
+        direccion:            d.direccion,
+        telefono:             d.telefono,
+        correo:               d.correo,
+        cargo:                d.cargo,
+        contactoEmergencia:   d.contactoEmergencia,
+        telefonoEmergencia:   d.telefonoEmergencia,
+        prevision:            d.prevision || "FONASA",
+        sistSalud:            d.sistSalud || d.prevision || "FONASA",
+        afp:                  d.afp,
+        tipoContrato:         d.tipoContrato || "indefinido",
+        vencimientoContrato:  d.vencimientoContrato || "",
+        planIsapreUF:         Number(d.planIsapreUF) || 0,
+        apv:                  Number(d.apv) || 0,
+        sueldoPactado:        d.sueldoPactado,
+        gratificacion:        d.gratificacion,
+        colacion:             Number(d.colacion) || 0,
+        movilizacion:         Number(d.movilizacion) || 0,
+        fechaIngreso:         d.fechaIngreso,
+        fechaSalida:          d.fechaSalida,
+        motivoSalida:         d.motivoSalida,
+        observaciones:        d.observaciones,
       },
     } : t));
     setFichaMode("ver");
