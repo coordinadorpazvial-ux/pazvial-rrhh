@@ -262,7 +262,63 @@ function esDiaContingencia(fecha, contingencias) {
 function nowId() { return Date.now() + Math.random(); }
 
 // Tasas AFP 2026
-const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
+// ── Parámetros por defecto (editables desde el panel admin) ──
+const PARAMS_DEFAULT = {
+  // Legales
+  jornadaSemanal: 42,          // horas semanales vigentes
+  diasBaseMensual: 30,
+  recargHE: 1.5,               // factor hora extra (50% sobre ordinaria)
+  IMM: 510000,                 // Ingreso Mínimo Mensual vigente
+  topeGratifIMM: 4.75,         // tope gratificación anual en IMM
+  topeAFPSaludUF: 90,          // tope cotización AFP/salud en UF
+  topeAFCuf: 135.2,            // tope AFC en UF
+  // Tasas legales
+  tasaAFP: 0.10,               // cotización obligatoria AFP
+  tasaSalud: 0.07,             // tasa salud legal
+  tasaAFCindefinido: 0.006,    // AFC trabajador contrato indefinido
+  tasaAFCplazoFijo: 0.0,       // AFC trabajador contrato plazo fijo
+  // Valores del mes (actualizar mensualmente)
+  valorUF: 39700,
+  valorUTM: 71506,
+  // AFP y sus comisiones totales (tasa obligatoria + comisión)
+  afps: [
+    { nombre:"Capital",   comision:0.0144 },
+    { nombre:"Provida",   comision:0.0145 },
+    { nombre:"Habitat",   comision:0.0127 },
+    { nombre:"Cuprum",    comision:0.0144 },
+    { nombre:"PlanVital", comision:0.0116 },
+    { nombre:"Uno",       comision:0.0046 },
+    { nombre:"Modelo",    comision:0.0058 },
+  ],
+  // Tabla impuesto único (tramos en UTM)
+  tablaImpuesto: [
+    { desde:0,   hasta:13.5, factor:0,     rebaja:0    },
+    { desde:13.5,hasta:30,   factor:0.04,  rebaja:0.54 },
+    { desde:30,  hasta:50,   factor:0.08,  rebaja:1.74 },
+    { desde:50,  hasta:70,   factor:0.135, rebaja:4.49 },
+    { desde:70,  hasta:90,   factor:0.23,  rebaja:11.14},
+    { desde:90,  hasta:120,  factor:0.304, rebaja:17.8 },
+    { desde:120, hasta:310,  factor:0.35,  rebaja:23.32},
+    { desde:310, hasta:999999,factor:0.4,  rebaja:38.82},
+  ],
+};
+
+function getAfpComision(afpNombre, params) {
+  const p = params || PARAMS_DEFAULT;
+  const afp = (p.afps||[]).find(a => a.nombre.toUpperCase()===afpNombre?.toUpperCase());
+  return afp ? afp.comision : 0.0144;
+}
+
+function calcularImpuesto(baseTributable, params) {
+  const p = params || PARAMS_DEFAULT;
+  const utm = p.valorUTM || 71506;
+  const baseUTM = baseTributable / utm;
+  const tabla = p.tablaImpuesto || PARAMS_DEFAULT.tablaImpuesto;
+  const tramo = tabla.find(t => baseUTM >= t.desde && baseUTM < t.hasta)
+    || tabla[tabla.length-1];
+  if (!tramo || tramo.factor === 0) return 0;
+  return Math.max(0, Math.round(baseTributable * tramo.factor - tramo.rebaja * utm));
+}
 
 function getRemuneracionVigente(ficha, mes, anio) {
   // Busca el registro del historial vigente para el período dado
@@ -298,86 +354,136 @@ function periodoLiquidacion(mes, anio) {
   return { desde, hasta };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, params) {
+  const P = params || PARAMS_DEFAULT;
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
-  const sueldoBase = remVigente.sueldoPactado;
-  const pctAFP = TASAS_AFP[ficha.afp?.toUpperCase()] || 0.1144;
-  const pctSalud = 0.07;
-  const colacion = remVigente.colacion;
-  const movilizacion = remVigente.movilizacion;
+  const sueldoBase = remVigente.sueldoPactado || 0;
+  const colacion = remVigente.colacion || 0;
+  const movilizacion = remVigente.movilizacion || 0;
+  const tipoContrato = ficha.tipoContrato || "indefinido"; // "indefinido" | "plazoFijo"
+  const sistSalud = (ficha.sistSalud || "FONASA").toUpperCase();
+  const planIsapreUF = Number(ficha.planIsapreUF) || 0;
+  const apvRegB = Number(ficha.apv) || 0;
 
-  // Días trabajados del período (26 mes anterior → 25 mes actual)
+  // ── Parámetros ──────────────────────────────────────────
+  const jornadaSem = P.jornadaSemanal || 42;
+  const diasBase = P.diasBaseMensual || 30;
+  const IMM = P.IMM || 510000;
+  const ufValor = P.valorUF || 39700;
+  const utmValor = P.valorUTM || 71506;
+  const topeAFPSaludCLP = (P.topeAFPSaludUF || 90) * ufValor;
+  const topeAFCclp = (P.topeAFCuf || 135.2) * ufValor;
+  const comisionAFP = getAfpComision(ficha.afp, P);
+  const tasaAFP = (P.tasaAFP || 0.10) + comisionAFP;
+  const tasaSalud = P.tasaSalud || 0.07;
+  const tasaAFC = tipoContrato === "indefinido"
+    ? (P.tasaAFCindefinido || 0.006)
+    : (P.tasaAFCplazoFijo || 0);
+
+  // ── Período y registros ──────────────────────────────────
   const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
-  const regs = registros.filter(r => {
-    return r.tId===trab.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida;
-  });
-  const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
+  const regs = registros.filter(r =>
+    r.tId===trab.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida
+  );
+  const diasTrab = regs.filter(r => !esEspecial(r.fecha)).length;
 
-  // Horas extra aprobadas del mes → valor
-  const diasMes = new Date(anio, mes+1, 0).getDate();
-  const horasJornadaDia = 45/5; // 9h/día promedio
-  const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
-  let totalMinExtra = 0;
+  // ── Valor hora extra (método DT 42h): sueldo/30 × 28 / (jornadaSem×4) × 1.5 ──
+  const divisorHora = jornadaSem * 4; // 168 para 42h
+  const valorHoraOrd = sueldoBase > 0 ? (sueldoBase / diasBase * 28) / divisorHora : 0;
+  const valorHoraExtra = valorHoraOrd * (P.recargHE || 1.5);
+
+  // ── HE aprobadas ─────────────────────────────────────────
+  let totalHorasExtra = 0;
   let totalViaticosContingencia = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
       if (r.estado==="aprobado") {
         if (r.esContingencia) {
-          // Día contingencia: usar horasExtraAprobadas (ya descontadas las 10h del viático)
           const heAprobadas = r.horasExtraAprobadas !== undefined
             ? r.horasExtraAprobadas
             : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10);
-          totalMinExtra += heAprobadas * 60;
+          totalHorasExtra += heAprobadas;
           totalViaticosContingencia += 50000;
         } else {
-          totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+          totalHorasExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra;
         }
       }
     } else {
-      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
-      totalMinExtra += h.extra * 60;
+      const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null);
+      totalHorasExtra += h.extra;
     }
   });
-  const horasExtra = +(totalMinExtra/60).toFixed(2);
-  const valorHHExtra = Math.round(horasExtra * valorHoraBase * 1.5);
+  const horasExtra = +totalHorasExtra.toFixed(2);
+  const valorHHExtra = Math.round(horasExtra * valorHoraExtra);
 
-  // Gratificación legal mensual (25% sueldo base / 12, tope 4.75 IMM)
-  const IMM = 500000; // Ingreso Mínimo Mensual referencial
-  const gratif = remVigente.gratificacion ? Math.min(Math.round(sueldoBase*0.25/12), Math.round(IMM*4.75/12)) : 0;
+  // ── Gratificación (art. 50): 25% sueldo base, tope 4.75 IMM anual / 12 ──
+  const topeGratifMensual = Math.round((P.topeGratifIMM||4.75) * IMM / 12);
+  const gratif = remVigente.gratificacion
+    ? Math.min(Math.round(sueldoBase * 0.25 / 12), topeGratifMensual)
+    : 0;
 
-  // Haberes
+  // ── Haberes imponibles ───────────────────────────────────
   const totalImponible = sueldoBase + valorHHExtra + gratif;
+
+  // ── Haberes no imponibles ────────────────────────────────
   const viaticosContingencia = totalViaticosContingencia;
   const totalNoImponible = colacion + movilizacion + viaticosContingencia;
   const totalHaberes = totalImponible + totalNoImponible;
 
-  // Descuentos
-  const prevision = Math.round(totalImponible * pctAFP);
-  const salud = Math.round(totalImponible * pctSalud);
-  const segCesantia = 0;
+  // ── Bases cotizables con tope ────────────────────────────
+  const baseCotizableAFP = Math.min(totalImponible, topeAFPSaludCLP);
+  const baseCotizableAFC = Math.min(totalImponible, topeAFCclp);
+
+  // ── Descuentos legales ───────────────────────────────────
+  // AFP (obligatoria 10% + comisión AFP)
+  const afpOblig = Math.round(baseCotizableAFP * (P.tasaAFP || 0.10));
+  const comisionAFPmonto = Math.round(baseCotizableAFP * comisionAFP);
+  const prevision = afpOblig + comisionAFPmonto;
+
+  // Salud: FONASA 7% o Isapre (mayor entre 7% y plan UF)
+  const saludLegal = Math.round(baseCotizableAFP * tasaSalud);
+  const saludIsapre = planIsapreUF > 0
+    ? Math.max(saludLegal, Math.round(planIsapreUF * ufValor))
+    : saludLegal;
+  const salud = sistSalud === "FONASA" ? saludLegal : saludIsapre;
+
+  // AFC (solo indefinido)
+  const segCesantia = Math.round(baseCotizableAFC * tasaAFC);
+
   const totalDescLegales = prevision + salud + segCesantia;
 
-  // Anticipo aprobado del mes
+  // ── Impuesto único segunda categoría ─────────────────────
+  const baseTributable = Math.max(0, totalImponible - afpOblig - salud - apvRegB);
+  const impuesto = calcularImpuesto(baseTributable, P);
+
+  // ── Anticipo aprobado del mes ─────────────────────────────
   const anticMes = anticipos.filter(a =>
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
-  ).reduce((s,a)=>s+Number(a.monto),0);
+  ).reduce((s,a) => s+Number(a.monto), 0);
 
   const totalOtrosDesc = anticMes;
-  const totalDescuentos = totalDescLegales + totalOtrosDesc;
+  const totalDescuentos = totalDescLegales + impuesto + totalOtrosDesc;
   const alcanceLiquido = totalHaberes - totalDescuentos;
-
-  // Tributable
-  const tributable = totalImponible - prevision - salud;
 
   return {
     tId:trab.id, nombre:nombreCompleto(trab), rut:trab.rut, codigo:trab.codigo,
-    afp:ficha.afp||"", prevision:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
+    afp: ficha.afp||"", sistSalud, tipoContrato,
+    pctAFP: ((P.tasaAFP||0.10)*100).toFixed(1),
+    comisionAFP: (comisionAFP*100).toFixed(2),
     diasTrab, horasExtra, mes, anio,
+    valorHoraOrd: +valorHoraOrd.toFixed(0),
+    valorHoraExtra: +valorHoraExtra.toFixed(0),
     sueldoBase, valorHHExtra, gratif,
-    totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
-    prevision_monto:prevision, salud_monto:salud, segCesantia, totalDescLegales,
-    anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
+    totalImponible,
+    colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
+    baseCotizableAFP, baseCotizableAFC,
+    afpOblig, comisionAFPmonto, prevision,
+    salud_monto: salud, segCesantia,
+    totalDescLegales,
+    baseTributable, impuesto,
+    anticipo: anticMes, totalOtrosDesc,
+    totalDescuentos, alcanceLiquido,
     cc:"001",
   };
 }
@@ -762,6 +868,69 @@ function FichaForm({
               <input type="date" readOnly={!enEdicion} style={fi}
                 value={val("fechaSalida")}
                 onChange={e => enEdicion && setD("fechaSalida", e.target.value)}/>
+            </div>
+          </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Tipo de Contrato</FichaLBL>
+              <select disabled={!enEdicion} style={fs}
+                value={val("tipoContrato")||"indefinido"}
+                onChange={e => enEdicion && setD("tipoContrato", e.target.value)}>
+                <option value="indefinido">Indefinido</option>
+                <option value="plazoFijo">Plazo Fijo</option>
+              </select>
+            </div>
+            {(val("tipoContrato")||"indefinido")==="plazoFijo" && (
+              <div>
+                <FichaLBL>Vencimiento Contrato</FichaLBL>
+                <input type="date" readOnly={!enEdicion} style={fi}
+                  value={val("vencimientoContrato")||""}
+                  onChange={e => enEdicion && setD("vencimientoContrato", e.target.value)}/>
+              </div>
+            )}
+          </FichaRow>
+
+          {(val("tipoContrato")||"indefinido")==="plazoFijo" && val("vencimientoContrato") && (() => {
+            const venc = new Date(val("vencimientoContrato")+"T12:00:00");
+            const hoyD = new Date();
+            const diasRestantes = Math.ceil((venc - hoyD) / 86400000);
+            const vencido = diasRestantes < 0;
+            return (
+              <div style={{background:vencido?"rgba(192,57,43,0.1)":"rgba(255,215,0,0.07)",
+                border:`1px solid ${vencido?"#c0392b":"rgba(255,215,0,0.3)"}`,
+                borderRadius:8, padding:"10px 14px", fontSize:12, marginBottom:8}}>
+                {vencido
+                  ? <span style={{color:"#e74c3c"}}>⚠️ Contrato vencido hace {Math.abs(diasRestantes)} día(s)</span>
+                  : <span style={{color:"#C9A84C"}}>📅 Vence en {diasRestantes} día(s) — {val("vencimientoContrato")}</span>}
+                {enEdicion && (
+                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                    <button type="button" onClick={()=>{setD("tipoContrato","indefinido");setD("vencimientoContrato","");}}
+                      style={{...S.btnG,fontSize:11,padding:"3px 10px"}}>→ Convertir a Indefinido</button>
+                    <button type="button" onClick={()=>setD("vencimientoContrato","")}
+                      style={{...S.btn,fontSize:11,padding:"3px 10px"}}>↻ Nueva Fecha</button>
+                    <button type="button" onClick={()=>setD("motivoSalida","Término de contrato")}
+                      style={{...S.btnD,fontSize:11,padding:"3px 10px"}}>✗ Terminar</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Plan Isapre (UF)</FichaLBL>
+              <input type="number" readOnly={!enEdicion} style={fi}
+                value={val("planIsapreUF")||""}
+                onChange={e => enEdicion && setD("planIsapreUF", e.target.value)}
+                placeholder="Solo si tiene Isapre"/>
+            </div>
+            <div>
+              <FichaLBL>APV Régimen B (CLP/mes)</FichaLBL>
+              <input type="number" readOnly={!enEdicion} style={fi}
+                value={val("apv")||""}
+                onChange={e => enEdicion && setD("apv", e.target.value)}
+                placeholder="0"/>
             </div>
           </FichaRow>
 
@@ -1243,6 +1412,186 @@ function ModalMotivo({ motivoModal, setMotivoModal, onConfirmar }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// COMPONENTE: PARÁMETROS ADMIN
+// ═══════════════════════════════════════════════════════════
+function ParametrosAdmin({ params, onSave, S }) {
+  const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(params)));
+  const [msg, setMsg] = useState("");
+  const [tabP, setTabP] = useState("general");
+
+  function upd(key, val) { setDraft(p => ({...p, [key]: val})); }
+  function updAfp(idx, key, val) {
+    setDraft(p => {
+      const afps = [...(p.afps||[])];
+      afps[idx] = {...afps[idx], [key]: key==="comision" ? Number(val) : val};
+      return {...p, afps};
+    });
+  }
+  function updTabla(idx, key, val) {
+    setDraft(p => {
+      const t = [...(p.tablaImpuesto||[])];
+      t[idx] = {...t[idx], [key]: Number(val)};
+      return {...p, tablaImpuesto: t};
+    });
+  }
+  function guardar() {
+    onSave(draft);
+    setMsg("✅ Parámetros guardados");
+    setTimeout(() => setMsg(""), 3000);
+  }
+  function restaurar() {
+    setDraft(JSON.parse(JSON.stringify(PARAMS_DEFAULT)));
+    setMsg("↩ Valores restaurados a por defecto");
+    setTimeout(() => setMsg(""), 3000);
+  }
+
+  const tabs = [
+    {k:"general", l:"⚙️ General"},
+    {k:"afp",     l:"🏦 AFP"},
+    {k:"impuesto",l:"📊 Impuesto"},
+  ];
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
+          <h3 style={{color:"#C9A84C", margin:0}}>⚙️ Parámetros del Sistema</h3>
+          <div style={{display:"flex", gap:8}}>
+            <button onClick={restaurar} style={{...S.btn, fontSize:12, padding:"6px 12px", background:"transparent", border:"1px solid rgba(201,168,76,0.4)"}}>↩ Restaurar</button>
+            <button onClick={guardar} style={{...S.btnG, fontSize:12, padding:"6px 14px"}}>✓ Guardar</button>
+          </div>
+        </div>
+        {msg && <div style={{color:"#27ae60", fontSize:12, marginBottom:12}}>{msg}</div>}
+
+        {/* Sub-tabs */}
+        <div style={{display:"flex", gap:6, marginBottom:16, flexWrap:"wrap"}}>
+          {tabs.map(t => (
+            <button key={t.k} onClick={() => setTabP(t.k)} style={{
+              padding:"6px 14px", borderRadius:16, border:"none", cursor:"pointer", fontSize:12,
+              background: tabP===t.k ? "#C9A84C" : "rgba(201,168,76,0.12)",
+              color: tabP===t.k ? "#0A0A0A" : "#C9A84C", fontWeight: tabP===t.k ? "bold" : "normal",
+            }}>{t.l}</button>
+          ))}
+        </div>
+
+        {/* General */}
+        {tabP==="general" && (
+          <div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12}}>
+              <div>
+                <label style={S.lbl}>Jornada semanal (horas)</label>
+                <input type="number" style={S.input} value={draft.jornadaSemanal||42}
+                  onChange={e=>upd("jornadaSemanal", Number(e.target.value))}/>
+                <div style={{color:"#9A8A6A",fontSize:11,marginTop:3}}>Actualmente: {draft.jornadaSemanal}h — divisor hora = {(draft.jornadaSemanal||42)*4}</div>
+              </div>
+              <div>
+                <label style={S.lbl}>Ingreso Mínimo Mensual ($)</label>
+                <input type="number" style={S.input} value={draft.IMM||510000}
+                  onChange={e=>upd("IMM", Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Valor UF del mes ($)</label>
+                <input type="number" style={S.input} value={draft.valorUF||39700}
+                  onChange={e=>upd("valorUF", Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Valor UTM del mes ($)</label>
+                <input type="number" style={S.input} value={draft.valorUTM||71506}
+                  onChange={e=>upd("valorUTM", Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Tope AFP/Salud (UF)</label>
+                <input type="number" style={S.input} value={draft.topeAFPSaludUF||90}
+                  onChange={e=>upd("topeAFPSaludUF", Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Tope AFC (UF)</label>
+                <input type="number" style={S.input} value={draft.topeAFCuf||135.2}
+                  onChange={e=>upd("topeAFCuf", Number(e.target.value))}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Tasa AFP obligatoria (%)</label>
+                <input type="number" step="0.01" style={S.input} value={((draft.tasaAFP||0.10)*100).toFixed(1)}
+                  onChange={e=>upd("tasaAFP", Number(e.target.value)/100)}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Tasa salud legal (%)</label>
+                <input type="number" step="0.01" style={S.input} value={((draft.tasaSalud||0.07)*100).toFixed(1)}
+                  onChange={e=>upd("tasaSalud", Number(e.target.value)/100)}/>
+              </div>
+              <div>
+                <label style={S.lbl}>AFC contrato indefinido (%)</label>
+                <input type="number" step="0.001" style={S.input} value={((draft.tasaAFCindefinido||0.006)*100).toFixed(1)}
+                  onChange={e=>upd("tasaAFCindefinido", Number(e.target.value)/100)}/>
+              </div>
+              <div>
+                <label style={S.lbl}>Tope gratificación (× IMM)</label>
+                <input type="number" step="0.01" style={S.input} value={draft.topeGratifIMM||4.75}
+                  onChange={e=>upd("topeGratifIMM", Number(e.target.value))}/>
+              </div>
+            </div>
+            <div style={{background:"rgba(201,168,76,0.08)",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#9A8A6A"}}>
+              <strong style={{color:"#C9A84C"}}>Fórmula valor hora extra:</strong> Sueldo / {draft.diasBaseMensual||30} × 28 / {(draft.jornadaSemanal||42)*4} × {draft.recargHE||1.5} = ${draft.jornadaSemanal ? Math.round(510000/30*28/((draft.jornadaSemanal)*4)*1.5).toLocaleString("es-CL") : "—"} /h (ejemplo con $510.000)
+            </div>
+          </div>
+        )}
+
+        {/* AFP */}
+        {tabP==="afp" && (
+          <div>
+            <p style={{color:"#9A8A6A",fontSize:12,marginTop:0}}>Ingresar solo la comisión de la AFP (sin incluir el 10% obligatorio). El sistema suma automáticamente 10% + comisión.</p>
+            <table style={S.tbl}><thead><tr>
+              {["AFP","Comisión (%)","Tasa total (%)"].map(h=><th key={h} style={S.th}>{h}</th>)}
+            </tr></thead><tbody>
+            {(draft.afps||[]).map((a,i) => (
+              <tr key={i}>
+                <td style={S.td}>
+                  <input style={{...S.input,padding:"4px 8px",fontSize:12}} value={a.nombre}
+                    onChange={e=>updAfp(i,"nombre",e.target.value)}/>
+                </td>
+                <td style={S.td}>
+                  <input type="number" step="0.01" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={(a.comision*100).toFixed(2)}
+                    onChange={e=>updAfp(i,"comision",Number(e.target.value)/100)}/>
+                </td>
+                <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>
+                  {(((draft.tasaAFP||0.10)+a.comision)*100).toFixed(2)}%
+                </td>
+              </tr>
+            ))}
+            </tbody></table>
+          </div>
+        )}
+
+        {/* Impuesto */}
+        {tabP==="impuesto" && (
+          <div>
+            <p style={{color:"#9A8A6A",fontSize:12,marginTop:0}}>Tabla impuesto único segunda categoría. UTM vigente: ${(draft.valorUTM||71506).toLocaleString("es-CL")}.</p>
+            <table style={S.tbl}><thead><tr>
+              {["Desde UTM","Hasta UTM","Factor","Rebaja UTM"].map(h=><th key={h} style={S.th}>{h}</th>)}
+            </tr></thead><tbody>
+            {(draft.tablaImpuesto||[]).map((t,i) => (
+              <tr key={i}>
+                <td style={S.td}>{t.desde}</td>
+                <td style={S.td}>{t.hasta >= 999999 ? "∞" : t.hasta}</td>
+                <td style={S.td}>
+                  <input type="number" step="0.001" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={t.factor}
+                    onChange={e=>updTabla(i,"factor",e.target.value)}/>
+                </td>
+                <td style={S.td}>
+                  <input type="number" step="0.01" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={t.rebaja}
+                    onChange={e=>updTabla(i,"rebaja",e.target.value)}/>
+                </td>
+              </tr>
+            ))}
+            </tbody></table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // COMPONENTE: CONTINGENCIAS ADMIN
 // ═══════════════════════════════════════════════════════════
 function ContingenciasAdmin({ contingencias, onGuardar, onEliminar, S }) {
@@ -1520,8 +1869,10 @@ export default function App() {
   const [tabSup, setTabSup] = useState("hoy");
 
   // ── Contingencias ─────────────────────────────────────
-  // [{id, desde, hasta, descripcion}]
   const [contingencias, setContingencias] = useState([]);
+
+  // ── Parámetros del sistema ─────────────────────────────
+  const [params, setParams] = useState(PARAMS_DEFAULT);
 
   // ── Marca asistencia ───────────────────────────────────
   const [tipoMarca,   setTipoMarca]   = useState("entrada");
@@ -1745,6 +2096,7 @@ export default function App() {
         setAnticipos(data.anticipos || []);
     setCuadrillas(data.cuadrillas || []);
     setContingencias(data.contingencias || []);
+    if (data.params) setParams({...PARAMS_DEFAULT, ...data.params});
         setCodigosUsados(data.codigosUsados || []);
         setTimeout(() => {
           cargandoDesdeFirebase.current = false;
@@ -1784,6 +2136,7 @@ export default function App() {
           notificaciones, liquidaciones, anticipos,
           cuadrillas,
           contingencias,
+          params,
           codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
@@ -1803,7 +2156,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, contingencias, codigosUsados]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, contingencias, params, codigosUsados]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
@@ -2228,7 +2581,7 @@ export default function App() {
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params);
     setLiqPreview(datos);
   }
 
@@ -2360,18 +2713,19 @@ export default function App() {
       <span>Días trabajados: <strong>${d.diasTrab}</strong></span>
       <span>HH Extras: <strong>${d.horasExtra}h</strong></span>
       <span>Imponible: <strong>$${d.totalImponible.toLocaleString("es-CL")}</strong></span>
-      <span>Tributable: <strong>$${d.tributable.toLocaleString("es-CL")}</strong></span>
+      <span>Base tributable: <strong>$${(d.baseTributable||d.tributable||0).toLocaleString("es-CL")}</strong></span>
     </div>
     <table>
-      <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td>Previsión AFP (${d.pctAFP}%)</td><td style="text-align:right">$${d.prevision_monto.toLocaleString("es-CL")}</td></tr>
-      ${d.valorHHExtra>0?`<tr><td>Horas Extra 50% <span style="color:#888;font-size:10px">(${d.horasExtra}h)</span></td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
+      <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS LEGALES</th><th style="text-align:right">MONTO</th></tr>
+      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td>AFP ${d.afp||""} − Cotiz. Oblig. (${d.pctAFP}%)</td><td style="text-align:right">$${(d.afpOblig||d.prevision_monto||0).toLocaleString("es-CL")}</td></tr>
+      ${d.valorHHExtra>0?`<tr><td>Horas Extra (${d.horasExtra}h × $${(d.valorHoraExtra||0).toLocaleString("es-CL")}/h)</td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td>AFP Comisión (${d.comisionAFP||"0"}%)</td><td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td></tr>`:""}
       ${d.gratif>0?`<tr><td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`:`<tr><td></td><td></td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`}
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
       <tr><td>Asig. Colación</td><td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td><td class="tot">TOTAL DESC. LEGALES</td><td class="tot" style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td></tr>
-      <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${d.anticipo>0?`<td>Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
+      <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${(d.impuesto||0)>0?`<td>Impuesto Único 2ª Cat.</td><td style="text-align:right">$${d.impuesto.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
       ${d.viaticosContingencia>0?`<tr><td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
-      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL OTROS DESC.</td><td style="text-align:right">$${d.totalOtrosDesc.toLocaleString("es-CL")}</td></tr>
+      ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td></tr>`:""}
+      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL DESCUENTOS</td><td style="text-align:right">$${d.totalDescuentos.toLocaleString("es-CL")}</td></tr>
     </table>
     <div class="totbar">
       <span>TOTAL HABERES: <strong>$${d.totalHaberes.toLocaleString("es-CL")}</strong></span>
@@ -3990,6 +4344,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     { k:"dashboard",    l:"📊 Dashboard" },
     { k:"cuadrillas",   l:"👥 Cuadrillas" },
     { k:"contingencias",l:"⚠️ Contingencias" },
+    { k:"parametros",   l:"⚙️ Parámetros" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
@@ -5684,6 +6039,13 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
               onEliminar={(id) => setContingencias(p=>p.filter(c=>c.id!==id))}
               S={S}
             />
+          </div>
+        )}
+
+        {/* ── TAB: PARÁMETROS ────────────────────────────────── */}
+        {tabAdmin==="parametros" && (
+          <div style={{ marginTop:4 }}>
+            <ParametrosAdmin params={params} onSave={setParams} S={S} />
           </div>
         )}
 
