@@ -2343,7 +2343,95 @@ export default function App() {
     setEntradaAnticModal(null);
   }
 
-  // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
+  // ── REPORTE HE POR TRABAJADOR ────────────────────────
+function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
+  const { desde, hasta } = periodoLiquidacion(mes, anio);
+  const diasNombres = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const trabActivos = trabajadores.filter(t => t.activo && t.id !== 999);
+
+  let filas = "";
+  trabActivos.forEach(t => {
+    const regs = registros.filter(r =>
+      r.tId === t.id && r.fecha >= desde && r.fecha <= hasta && r.salida
+    );
+    const conHE = regs.filter(r => {
+      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
+      return h.extra > 0 || h.extraEntrada > 0 || h.extraSalida > 0;
+    });
+    if (conHE.length === 0) return;
+
+    let totalHE = 0;
+    let filasT = "";
+    conHE.forEach(r => {
+      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
+      const esp = esEspecial(r.fecha);
+      const heTotal = esp ? (r.estado==="aprobado" ? h.extra : 0) : h.extra;
+      const estado = esp ? r.estado : (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "aprobado" : r.estadoEntrada==="rechazado"&&r.estadoSalida==="rechazado" ? "rechazado" : "pendiente";
+      const diaSem = new Date(r.fecha+"T12:00:00").getDay();
+      const tipo = esFeriado(r.fecha) ? "Feriado" : diaSem===0 ? "Domingo" : diaSem===6 ? "Sábado" : "Día Normal";
+      const color = estado==="aprobado" ? "#27ae60" : estado==="rechazado" ? "#c0392b" : "#e67e22";
+      totalHE += heTotal;
+      filasT += `<tr>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee">${diasNombres[diaSem]} ${r.fecha}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${tipo}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${r.entrada}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${r.salida}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#e67e22">${h.extra > 0 ? h.extra+"h" : "—"}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${color};font-weight:bold">${estado==="aprobado"?"✓ Aprobada":estado==="rechazado"?"✗ Rechazada":"⏳ Pendiente"}</td>
+        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#27ae60">${heTotal > 0 ? heTotal+"h" : "—"}</td>
+      </tr>`;
+    });
+
+    filas += `
+    <div style="margin-bottom:24px;page-break-inside:avoid">
+      <div style="background:#f0f0f0;padding:8px 12px;font-weight:bold;font-size:14px;border-left:4px solid #e67e22">
+        ${t.apellido} ${t.nombre} — Código: ${t.codigo} — Total HE aprobadas: ${totalHE.toFixed(2)}h
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#e67e22;color:#fff">
+          <th style="padding:6px 8px;text-align:left">Fecha</th>
+          <th style="padding:6px 8px">Tipo día</th>
+          <th style="padding:6px 8px">Entrada</th>
+          <th style="padding:6px 8px">Salida</th>
+          <th style="padding:6px 8px">H. Extra</th>
+          <th style="padding:6px 8px">Estado</th>
+          <th style="padding:6px 8px">H.E. Aprobadas</th>
+        </tr></thead>
+        <tbody>${filasT}</tbody>
+      </table>
+    </div>`;
+  });
+
+  if (!filas) filas = '<p style="text-align:center;color:#999;padding:40px">Sin registros de horas extras en el período seleccionado.</p>';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Reporte HE — ${mesNombre(mes)} ${anio}</title>
+  <style>body{font-family:Arial,sans-serif;padding:20px;color:#333}
+  @media print{body{padding:10px}.no-print{display:none}}</style>
+  </head><body>
+  <div style="display:flex;align-items:center;gap:16;margin-bottom:20px;border-bottom:2px solid #e67e22;padding-bottom:12px">
+    <img src="${LOGO_SRC}" alt="Paz Vial" style="width:60px;height:60px;object-fit:contain"/>
+    <div>
+      <div style="font-weight:bold;font-size:18px">PAZ VIAL SpA</div>
+      <div style="color:#666;font-size:12px">RUT: 78.351.313-7</div>
+    </div>
+    <div style="margin-left:auto;text-align:right">
+      <div style="font-weight:bold;font-size:16px">REPORTE DE HORAS EXTRAS</div>
+      <div style="color:#e67e22;font-size:13px">Período: ${desde} al ${hasta}</div>
+    </div>
+  </div>
+  ${filas}
+  <div style="margin-top:20px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:8px">
+    Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL")} — ${window.location.origin}
+  </div>
+  <script>window.onload=()=>{window.print()}<\/script>
+  </body></html>`;
+
+  const w = window.open("","_blank");
+  if(w){ w.document.open(); w.document.write(html); w.document.close(); }
+}
+
+// ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
   function generarHojaAsistenciaPDF(tId, mes, anio) {
     const trab = tId ? trabajadores.find(t=>t.id===Number(tId)) : null;
     const titulo = trab
@@ -4402,7 +4490,18 @@ export default function App() {
                                     <td style={{...S.td,textAlign:"center"}}>{reg&&reg.salida?reg.salida:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h?"#27ae60":"#aaa"}}>{h?`${h.normales}h`:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${h.extra}h`:"—"}</td>
-                                    <td style={{...S.td,fontSize:10,color:obsColor}}>{obsLabel}</td>
+                                    <td style={{...S.td,fontSize:10,color:obsColor}}>
+                                      {obsLabel}
+                                      {h&&h.extra>0&&reg&&reg.estado==="rechazado" && (
+                                        <button onClick={()=>reabrirExtra(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
+                                      )}
+                                      {h&&(h.extraEntrada>0||h.extraSalida>0)&&reg&&reg.estadoEntrada==="rechazado" && (
+                                        <button onClick={()=>reabrirHEEntrada(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Entrada</button>
+                                      )}
+                                      {h&&h.extraSalida>0&&reg&&reg.estadoSalida==="rechazado" && (
+                                        <button onClick={()=>reabrirHESalida(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Salida</button>
+                                      )}
+                                    </td>
                                   </tr>
                                 );
                               })}
@@ -5155,6 +5254,7 @@ export default function App() {
                 </select>
               </div>
               <div style={{ marginLeft:"auto", color:"#C9A84C", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
+              <button onClick={()=>generarReporteHEPDF(trabajadores,registros,dMes,dAnio,LOGO_SRC)} style={{...S.btn,fontSize:12,padding:"6px 14px"}}>📊 Reporte HE PDF</button>
             </div>
 
             {/* KPIs */}
