@@ -1457,7 +1457,7 @@ function ParametrosAdmin({ params, onSave, S }) {
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
           <h3 style={{color:"#C9A84C", margin:0}}>⚙️ Parámetros del Sistema</h3>
           <div style={{display:"flex", gap:8}}>
-            <button onClick={restaurar} style={{...S.btn, fontSize:12, padding:"6px 12px", background:"transparent", border:"1px solid rgba(201,168,76,0.4)"}}>↩ Restaurar</button>
+            <button onClick={restaurar} style={{fontSize:12, padding:"6px 12px", background:"rgba(201,168,76,0.15)", border:"1px solid #C9A84C", color:"#C9A84C", borderRadius:6, cursor:"pointer"}}>↩ Restaurar</button>
             <button onClick={guardar} style={{...S.btnG, fontSize:12, padding:"6px 14px"}}>✓ Guardar</button>
           </div>
         </div>
@@ -3200,7 +3200,12 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
         contactoEmergencia:    d.contactoEmergencia,
         telefonoEmergencia:    d.telefonoEmergencia,
         prevision:             d.prevision || "FONASA",
+        sistSalud:             d.sistSalud || d.prevision || "FONASA",
         afp:                   d.afp,
+        tipoContrato:          d.tipoContrato || "indefinido",
+        vencimientoContrato:   d.vencimientoContrato || "",
+        planIsapreUF:          Number(d.planIsapreUF) || 0,
+        apv:                   Number(d.apv) || 0,
         sueldoPactado:         d.sueldoPactado,
         gratificacion:         d.gratificacion,
         colacion:              Number(d.colacion) || 0,
@@ -5515,11 +5520,12 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
                         ["Sueldo Base", liqPreview.sueldoBase],
-                        ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+liqPreview.horasExtra+"h)", liqPreview.valorHHExtra]]:[]),
+                        ...(liqPreview.valorHHExtra>0?[["Horas Extra ("+liqPreview.horasExtra+"h × $"+(liqPreview.valorHoraExtra||0).toLocaleString("es-CL")+"/h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
                         ["Asig. Colación", liqPreview.colacion],
                         ["Asig. Movilización", liqPreview.movilizacion],
+                        ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
