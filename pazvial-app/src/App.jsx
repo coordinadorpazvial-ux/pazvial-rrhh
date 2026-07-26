@@ -254,6 +254,11 @@ function nombreCompleto(t) {
 
 function hoy() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function horaActual() { return new Date().toTimeString().slice(0,5); }
+function esDiaContingencia(fecha, contingencias) {
+  if (!contingencias || !fecha) return false;
+  return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
+}
+
 function nowId() { return Date.now() + Math.random(); }
 
 // Tasas AFP 2026
@@ -314,12 +319,21 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const horasJornadaDia = 45/5; // 9h/día promedio
   const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
   let totalMinExtra = 0;
+  let totalViaticosContingencia = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
-      // Días especiales: usar estado general
-      if (r.estado==="aprobado") totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+      if (r.estado==="aprobado") {
+        const hBruto = calcularHoras(r.entrada,r.salida,r.fecha).extra;
+        if (r.esContingencia) {
+          // Día contingencia: viático cubre primeras 10h, resto va como HE
+          const hExtra = Math.max(0, hBruto - 10);
+          totalMinExtra += hExtra * 60;
+          totalViaticosContingencia += 50000; // viático fijo por día
+        } else {
+          totalMinExtra += hBruto * 60;
+        }
+      }
     } else {
-      // Días normales: sumar HE entrada y HE salida según sus estados independientes
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
       totalMinExtra += h.extra * 60;
     }
@@ -333,7 +347,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
 
   // Haberes
   const totalImponible = sueldoBase + valorHHExtra + gratif;
-  const totalNoImponible = colacion + movilizacion;
+  const viaticosContingencia = totalViaticosContingencia;
+  const totalNoImponible = colacion + movilizacion + viaticosContingencia;
   const totalHaberes = totalImponible + totalNoImponible;
 
   // Descuentos
@@ -359,7 +374,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
     afp:ficha.afp||"", prevision:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
     diasTrab, horasExtra, mes, anio,
     sueldoBase, valorHHExtra, gratif,
-    totalImponible, colacion, movilizacion, totalNoImponible, totalHaberes,
+    totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     prevision_monto:prevision, salud_monto:salud, segCesantia, totalDescLegales,
     anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
     cc:"001",
@@ -1227,6 +1242,120 @@ function ModalMotivo({ motivoModal, setMotivoModal, onConfirmar }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// COMPONENTE: CONTINGENCIAS ADMIN
+// ═══════════════════════════════════════════════════════════
+function ContingenciasAdmin({ contingencias, onGuardar, onEliminar, S }) {
+  const [form, setForm] = useState({ id:null, desde:"", hasta:"", descripcion:"" });
+  const [editId, setEditId] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  function abrir(c) {
+    setForm(c ? {...c} : { id:null, desde:"", hasta:"", descripcion:"" });
+    setEditId(c ? c.id : "nueva");
+    setMsg("");
+  }
+  function cerrar() { setEditId(null); setMsg(""); }
+
+  function guardar() {
+    if (!form.desde || !form.hasta) { setMsg("Debes indicar fecha desde y hasta."); return; }
+    if (form.desde > form.hasta) { setMsg("La fecha inicio debe ser anterior o igual al término."); return; }
+    onGuardar(form);
+    cerrar();
+  }
+
+  const hoy = new Date().toISOString().slice(0,10);
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <h3 style={{ color:"#e67e22", margin:0 }}>⚠️ Períodos de Contingencia</h3>
+          <button onClick={()=>abrir(null)} style={{...S.btn, fontSize:12, padding:"6px 14px"}}>+ Nuevo Período</button>
+        </div>
+        <p style={{ color:"#9A8A6A", fontSize:12, marginTop:0 }}>
+          Los días dentro de un período de contingencia activan el viático de $50.000 para fines de semana y feriados trabajados. El split nocturno requiere confirmación del trabajador.
+        </p>
+        {contingencias.length === 0
+          ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay períodos de contingencia activos</div>
+          : contingencias.map(c => {
+              const activo = hoy >= c.desde && hoy <= c.hasta;
+              const futuro = hoy < c.desde;
+              return (
+                <div key={c.id} style={{ border:`1px solid ${activo?"#e67e22":futuro?"rgba(201,168,76,0.3)":"rgba(255,255,255,0.1)"}`,
+                  borderRadius:10, padding:"12px 16px", marginBottom:10,
+                  background: activo?"rgba(230,126,34,0.08)":"transparent" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                        <span style={{ fontSize:20 }}>{activo?"🔴":"futuro"?"🟡":"⚪"}</span>
+                        <span style={{ color: activo?"#e67e22":futuro?"#C9A84C":"#9A8A6A",
+                          fontWeight:"bold", fontSize:14 }}>
+                          {activo?"ACTIVO":futuro?"PRÓXIMO":"FINALIZADO"}
+                        </span>
+                      </div>
+                      <div style={{ color:"#d0e0ff", fontSize:13 }}>
+                        📅 {c.desde} → {c.hasta}
+                      </div>
+                      {c.descripcion && <div style={{ color:"#9A8A6A", fontSize:12, marginTop:4 }}>{c.descripcion}</div>}
+                    </div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button onClick={()=>abrir(c)} style={{...S.btn, fontSize:11, padding:"4px 10px"}}>✏ Editar</button>
+                      <button onClick={()=>onEliminar(c.id)} style={{...S.btnD, fontSize:11, padding:"4px 10px"}}>🗑</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+        }
+      </div>
+
+      {/* Modal crear/editar */}
+      {editId !== null && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:999,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div style={{ ...S.card, maxWidth:420, width:"100%", border:"2px solid #e67e22" }}>
+            <h3 style={{ color:"#e67e22", marginTop:0 }}>
+              {editId==="nueva" ? "Nuevo Período de Contingencia" : "Editar Período"}
+            </h3>
+
+            <label style={S.lbl}>Descripción (opcional)</label>
+            <input style={S.input} value={form.descripcion}
+              onChange={e=>setForm(p=>({...p,descripcion:e.target.value}))}
+              placeholder="Ej: Emergencia vial Ruta 5 Norte" />
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:12 }}>
+              <div>
+                <label style={S.lbl}>Fecha inicio</label>
+                <input type="date" style={S.input} value={form.desde}
+                  onChange={e=>setForm(p=>({...p,desde:e.target.value}))} />
+              </div>
+              <div>
+                <label style={S.lbl}>Fecha término</label>
+                <input type="date" style={S.input} value={form.hasta}
+                  onChange={e=>setForm(p=>({...p,hasta:e.target.value}))} />
+              </div>
+            </div>
+
+            <div style={{ background:"rgba(230,126,34,0.1)", border:"1px solid rgba(230,126,34,0.3)",
+              borderRadius:8, padding:"10px 12px", marginTop:12, fontSize:12, color:"#e67e22" }}>
+              ⚠️ Durante este período: fines de semana y feriados generan viático de <strong>$50.000</strong>.
+              El split nocturno requiere confirmación del trabajador.
+            </div>
+
+            {msg && <div style={S.err}>{msg}</div>}
+
+            <div style={{ display:"flex", gap:10, marginTop:16 }}>
+              <button onClick={guardar} style={{...S.btnG, flex:1}}>✓ Guardar</button>
+              <button onClick={cerrar} style={{...S.btnD, flex:1}}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 // COMPONENTE: CUADRILLAS ADMIN
 // ═══════════════════════════════════════════════════════════
 function CuadrillasAdmin({ trabajadores, cuadrillas, onGuardar, onEliminar, S, nombreCompleto }) {
@@ -1389,6 +1518,10 @@ export default function App() {
   const [cuadrillas, setCuadrillas] = useState([]);
   const [tabSup, setTabSup] = useState("hoy");
 
+  // ── Contingencias ─────────────────────────────────────
+  // [{id, desde, hasta, descripcion}]
+  const [contingencias, setContingencias] = useState([]);
+
   // ── Marca asistencia ───────────────────────────────────
   const [tipoMarca,   setTipoMarca]   = useState("entrada");
   const [marcaMsg,    setMarcaMsg]    = useState({ tipo:"", txt:"" });
@@ -1485,6 +1618,7 @@ export default function App() {
   const [marcaConfirm,   setMarcaConfirm]   = useState(null);   // {tipo, hora, fecha} | null
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
+  const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy} — pendiente de respuesta contingencia
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
 
   // ── Liquidaciones ──────────────────────────────────────
@@ -1609,6 +1743,7 @@ export default function App() {
         setLiquidaciones(data.liquidaciones || []);
         setAnticipos(data.anticipos || []);
     setCuadrillas(data.cuadrillas || []);
+    setContingencias(data.contingencias || []);
         setCodigosUsados(data.codigosUsados || []);
         setTimeout(() => {
           cargandoDesdeFirebase.current = false;
@@ -1647,6 +1782,7 @@ export default function App() {
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
           cuadrillas,
+          contingencias,
           codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
@@ -1666,7 +1802,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, codigosUsados]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, contingencias, codigosUsados]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
@@ -1734,6 +1870,28 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   // ACCIONES
   // ═══════════════════════════════════════════════════════
+
+  // ── CONFIRMAR TURNO NOCTURNO (contingencia o no) ────
+  function confirmarTurnoNocturno(esContingencia) {
+    if (!modalContingencia) return;
+    const { hora, fecha, regHoy } = modalContingencia;
+    setModalContingencia(null);
+
+    if (!esContingencia) {
+      setMarcaMsg({ tipo:"err", txt:"⛔ Marca no permitida. Comuníquese con su supervisor." });
+      return;
+    }
+
+    // Es contingencia: hacer el split + marcar como contingencia
+    const { reg1, reg2 } = splitTurnoNocturno(regHoy, hora);
+    const reg1c = { ...reg1, esContingencia: true };
+    const reg2c = { ...reg2, esContingencia: true, estado:"pendiente" };
+    const yaExisteSig = registros.find(r => r.tId === trabVigente.id && r.fecha === reg2c.fecha);
+    let nuevosRegistros = registros.map(r => r.id === regHoy.id ? reg1c : r);
+    if (!yaExisteSig) nuevosRegistros = [...nuevosRegistros, reg2c];
+    setRegistros(nuevosRegistros);
+    setMarcaMsg({ tipo:"ok", txt:`✅ Turno nocturno de contingencia registrado. Cierre ${fecha} a 23:59 y apertura ${reg2c.fecha} desde 00:00 hasta ${hora}. Pendiente de aprobación.` });
+  }
 
   // ── LOGIN SUPERVISOR ──────────────────────────────────
   function loginSupervisor() {
@@ -2197,6 +2355,7 @@ export default function App() {
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
       <tr><td>Asig. Colación</td><td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td><td class="tot">TOTAL DESC. LEGALES</td><td class="tot" style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td></tr>
       <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${d.anticipo>0?`<td>Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
+      ${d.viaticosContingencia>0?`<tr><td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
       <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL OTROS DESC.</td><td style="text-align:right">$${d.totalOtrosDesc.toLocaleString("es-CL")}</td></tr>
     </table>
     <div class="totbar">
@@ -3275,6 +3434,43 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
 
+              {/* Modal de contingencia nocturna */}
+              {modalContingencia && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#1a0a00,#2d1500)", border:"3px solid #e67e22",
+                    borderRadius:20, padding:32, maxWidth:380, width:"100%", textAlign:"center" }}>
+                    <div style={{ fontSize:48, marginBottom:12 }}>⚠️</div>
+                    <div style={{ color:"#e67e22", fontSize:20, fontWeight:"bold", marginBottom:8 }}>
+                      Marca fuera de horario
+                    </div>
+                    <div style={{ color:"#fff", fontSize:15, marginBottom:6 }}>
+                      Tu salida es a las <strong style={{color:"#FFD700"}}>{modalContingencia.hora}</strong>
+                    </div>
+                    <div style={{ color:"#9A8A6A", fontSize:13, marginBottom:24 }}>
+                      Esta marca corresponde al día siguiente.<br/>
+                      ¿Estás trabajando en <strong style={{color:"#e67e22"}}>contingencia</strong>?
+                    </div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <button
+                        onClick={()=>confirmarTurnoNocturno(false)}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#fff",
+                          border:"1px solid rgba(255,255,255,0.3)", borderRadius:12,
+                          padding:"14px 0", cursor:"pointer", fontSize:15 }}>
+                        ✗ No
+                      </button>
+                      <button
+                        onClick={()=>confirmarTurnoNocturno(true)}
+                        style={{ flex:2, background:"linear-gradient(135deg,#e67e22,#d35400)",
+                          color:"#fff", border:"none", borderRadius:12,
+                          padding:"14px 0", cursor:"pointer", fontSize:15, fontWeight:"bold" }}>
+                        ✓ Sí, estoy en contingencia
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Modal de confirmación */}
               {marcaConfirm && (
                 <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
@@ -3763,6 +3959,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     { k:"calendario",   l:"🗓 Calendario" },
     { k:"dashboard",    l:"📊 Dashboard" },
     { k:"cuadrillas",   l:"👥 Cuadrillas" },
+    { k:"contingencias",l:"⚠️ Contingencias" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
@@ -5409,6 +5606,18 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
               onEliminar={eliminarCuadrilla}
               S={S}
               nombreCompleto={nombreCompleto}
+            />
+          </div>
+        )}
+
+        {/* ── TAB: CONTINGENCIAS ────────────────────────────── */}
+        {tabAdmin==="contingencias" && (
+          <div style={{ marginTop:4 }}>
+            <ContingenciasAdmin
+              contingencias={contingencias}
+              onGuardar={(c) => setContingencias(p => c.id ? p.map(x=>x.id===c.id?c:x) : [...p,{...c,id:Date.now()}])}
+              onEliminar={(id) => setContingencias(p=>p.filter(c=>c.id!==id))}
+              S={S}
             />
           </div>
         )}
