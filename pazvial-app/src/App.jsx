@@ -323,14 +323,15 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
       if (r.estado==="aprobado") {
-        const hBruto = calcularHoras(r.entrada,r.salida,r.fecha).extra;
         if (r.esContingencia) {
-          // Día contingencia: viático cubre primeras 10h, resto va como HE
-          const hExtra = Math.max(0, hBruto - 10);
-          totalMinExtra += hExtra * 60;
-          totalViaticosContingencia += 50000; // viático fijo por día
+          // Día contingencia: usar horasExtraAprobadas (ya descontadas las 10h del viático)
+          const heAprobadas = r.horasExtraAprobadas !== undefined
+            ? r.horasExtraAprobadas
+            : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10);
+          totalMinExtra += heAprobadas * 60;
+          totalViaticosContingencia += 50000;
         } else {
-          totalMinExtra += hBruto * 60;
+          totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
         }
       }
     } else {
@@ -2090,14 +2091,28 @@ export default function App() {
   // ── Admin: aprobar/rechazar extra ─────────────────────
   // ── HE clásica (días especiales: sáb/dom/feriado) ──
   function aprobarExtra(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado"} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.");
+    if (!r) return;
+    const hBruto = calcularHoras(r.entrada, r.salida, r.fecha);
+    // Si es contingencia: viático cubre primeras 10h, solo se aprueban las adicionales
+    const heAprobadas = r.esContingencia ? Math.max(0, hBruto.extra - 10) : hBruto.extra;
+    setRegistros(p => p.map(x => x.id===id
+      ? {...x, estado:"aprobado", horasExtraAprobadas: heAprobadas}
+      : x));
+    const msg = r.esContingencia
+      ? `✅ Contingencia aprobada. Viático $50.000 cubre 10h. ${heAprobadas > 0 ? `HE adicionales: ${heAprobadas}h.` : "Sin HE adicionales."}`
+      : "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.";
+    pushNotif(r.tId, msg);
   }
   function reabrirExtra(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado", motivoRechazo:""} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " han sido aprobadas (corrección).");
+    if (!r) return;
+    const hBruto = calcularHoras(r.entrada, r.salida, r.fecha);
+    const heAprobadas = r.esContingencia ? Math.max(0, hBruto.extra - 10) : hBruto.extra;
+    setRegistros(p => p.map(x => x.id===id
+      ? {...x, estado:"aprobado", motivoRechazo:"", horasExtraAprobadas: heAprobadas}
+      : x));
+    pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " han sido aprobadas (corrección).");
   }
   function abrirRechazoExtra(id) {
     setMotivoModal({ tipo:"extra", id, accion:"rechazar", motivo:"" });
@@ -2515,6 +2530,14 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     );
     const conHE = regs.filter(r => {
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
+      const esp = esEspecial(r.fecha);
+      if (esp) {
+        if (r.estado !== "aprobado") return false;
+        const hePag = r.esContingencia
+          ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10))
+          : calcularHoras(r.entrada,r.salida,r.fecha).extra;
+        return hePag > 0;
+      }
       return h.extra > 0 || h.extraEntrada > 0 || h.extraSalida > 0;
     });
     if (conHE.length === 0) return;
@@ -2524,7 +2547,14 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     conHE.forEach(r => {
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
       const esp = esEspecial(r.fecha);
-      const heTotal = esp ? (r.estado==="aprobado" ? h.extra : 0) : h.extra;
+      const heBruta = esp ? calcularHoras(r.entrada,r.salida,r.fecha).extra : h.extra;
+      const heTotal = esp
+        ? (r.estado==="aprobado"
+            ? (r.esContingencia
+                ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, heBruta - 10))
+                : heBruta)
+            : 0)
+        : h.extra;
       const estado = esp ? r.estado : (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "aprobado" : r.estadoEntrada==="rechazado"&&r.estadoSalida==="rechazado" ? "rechazado" : "pendiente";
       const diaSem = new Date(r.fecha+"T12:00:00").getDay();
       const tipo = esFeriado(r.fecha) ? "Feriado" : diaSem===0 ? "Domingo" : diaSem===6 ? "Sábado" : "Día Normal";
@@ -4147,9 +4177,30 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <td style={S.td}>
                         {esDiaEsp && r.estado==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
-                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
-                              ⏱ {hBruto.extra}h (día especial)
-                            </span>
+                            {r.esContingencia ? (
+                              <div>
+                                <span style={{...S.bdg("#e67e22"),fontSize:10,display:"block",marginBottom:3}}>⚠️ Contingencia</span>
+                                {hBruto.extra > 10 ? (
+                                  <>
+                                    <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                                      {hBruto.extra}h brutas · {hBruto.extra-10}h pagables
+                                    </span>
+                                    <span style={{color:"#9A8A6A",fontSize:10,display:"block"}}>Viático $50.000 cubre primeras 10h</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span style={{color:"#27ae60",fontSize:11,fontWeight:"bold"}}>
+                                      ✓ Viático $50.000 — sin HE adicionales
+                                    </span>
+                                    <span style={{color:"#9A8A6A",fontSize:10,display:"block"}}>{hBruto.extra}h trabajadas (≤10h)</span>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                                ⏱ {hBruto.extra}h (día especial)
+                              </span>
+                            )}
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>aprobarExtra(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
                               <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
@@ -4161,7 +4212,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                             <button onClick={()=>reabrirExtra(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
                           </div>
                         ) : esDiaEsp && r.estado==="aprobado" ? (
-                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extra}h aprobadas</span>
+                          <span style={{color:"#27ae60",fontSize:11}}>
+                            ✓ {r.esContingencia
+                              ? `${r.horasExtraAprobadas!==undefined?r.horasExtraAprobadas:Math.max(0,hBruto.extra-10)}h + viático`
+                              : `${hBruto.extra}h aprobadas`}
+                          </span>
                         ) : r.estadoSalida==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
