@@ -321,25 +321,77 @@ function calcularImpuesto(baseTributable, params) {
 }
 
 function getRemuneracionVigente(ficha, mes, anio) {
-  // Busca el registro del historial vigente para el período dado
-  const fechaPeriodo = `${anio}-${String(mes+1).padStart(2,"0")}-01`;
+  // Período de liquidación: 26 del mes anterior al 25 del mes actual
+  const mesAnterior = mes === 0 ? 11 : mes - 1;
+  const anioAnterior = mes === 0 ? anio - 1 : anio;
+  const pDesde = `${anioAnterior}-${String(mesAnterior+1).padStart(2,"0")}-26`;
+  const pHasta = `${anio}-${String(mes+1).padStart(2,"0")}-25`;
+
   const historial = (ficha.historialRemuneraciones||[])
-    .filter(h => h.desde <= fechaPeriodo)
-    .sort((a,b) => b.desde.localeCompare(a.desde));
-  if (historial.length > 0) {
-    return {
-      sueldoPactado: historial[0].sueldo,
-      colacion:      historial[0].colacion,
-      movilizacion:  historial[0].movilizacion,
-      gratificacion: historial[0].gratificacion,
-    };
-  }
-  // Fallback: datos actuales de la ficha
-  return {
+    .sort((a,b) => a.desde.localeCompare(b.desde));
+
+  // Fallback base
+  const fallback = {
     sueldoPactado: Number(ficha.sueldoPactado)||0,
     colacion:      Number(ficha.colacion)||0,
     movilizacion:  Number(ficha.movilizacion)||0,
     gratificacion: ficha.gratificacion||false,
+  };
+
+  if (historial.length === 0) return fallback;
+
+  // Construir tramos de remuneración dentro del período
+  // Para cada día del período, determinar qué sueldo aplica
+  const toMs = f => new Date(f+"T12:00:00").getTime();
+  const diasPeriodo = Math.round((toMs(pHasta) - toMs(pDesde)) / 86400000) + 1;
+
+  // Para cada tramo del historial que se superpone con el período
+  let totalSueldo = 0, totalColacion = 0, totalMovilizacion = 0;
+  let diasContados = 0;
+  let ultimaGratif = false;
+
+  // Ordenar tramos: [desde_vigencia, hasta_vigencia)
+  for (let i = 0; i < historial.length; i++) {
+    const h = historial[i];
+    const hDesde = h.desde > pDesde ? h.desde : pDesde;
+    const hHasta = i+1 < historial.length
+      ? (historial[i+1].desde <= pHasta ? historial[i+1].desde : null)
+      : null;
+    const tramoHasta = hHasta
+      ? (new Date(hHasta+"T12:00:00").setDate(new Date(hHasta+"T12:00:00").getDate()-1),
+         new Date(new Date(hHasta+"T12:00:00").getTime()-86400000).toISOString().slice(0,10))
+      : pHasta;
+
+    if (hDesde > pHasta) continue; // tramo fuera del período
+
+    const dDesde = hDesde < pDesde ? pDesde : hDesde;
+    const dHasta = tramoHasta > pHasta ? pHasta : tramoHasta;
+    if (dDesde > dHasta) continue;
+
+    const dias = Math.round((toMs(dHasta) - toMs(dDesde)) / 86400000) + 1;
+    totalSueldo     += (Number(h.sueldo)||0) * dias;
+    totalColacion   += (Number(h.colacion)||0) * dias;
+    totalMovilizacion += (Number(h.movilizacion)||0) * dias;
+    diasContados    += dias;
+    ultimaGratif     = h.gratificacion || false;
+  }
+
+  if (diasContados === 0) return fallback;
+
+  // Si hay días del período sin historial (antes del primer tramo), usar el fallback
+  const diasSinHistorial = diasPeriodo - diasContados;
+  if (diasSinHistorial > 0) {
+    totalSueldo       += fallback.sueldoPactado * diasSinHistorial;
+    totalColacion     += fallback.colacion * diasSinHistorial;
+    totalMovilizacion += fallback.movilizacion * diasSinHistorial;
+    diasContados      += diasSinHistorial;
+  }
+
+  return {
+    sueldoPactado: Math.round(totalSueldo / diasContados),
+    colacion:      Math.round(totalColacion / diasContados),
+    movilizacion:  Math.round(totalMovilizacion / diasContados),
+    gratificacion: ultimaGratif,
   };
 }
 
