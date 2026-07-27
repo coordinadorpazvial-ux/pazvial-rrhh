@@ -2741,7 +2741,15 @@ export default function App() {
       .firmas{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
       .firma-box{border:1px solid #ccc;border-radius:6px;padding:10px;font-size:10px;}
       .firma-box strong{display:block;margin-bottom:6px;font-size:11px;color:#2D2D2D;}
-      @media print{body{padding:10px;} .no-print{display:none;}}
+      @media print{
+        body{padding:10px;}
+        .no-print{display:none;}
+        *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
+        th{background:#2D2D2D !important; color:#fff !important;}
+        .tot{background:#f2f2f2 !important;}
+        .totbar{background:#2D2D2D !important; color:#fff !important;}
+        .alc{background:#1E6B2E !important; color:#fff !important;}
+      }
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
       <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
@@ -2759,7 +2767,7 @@ export default function App() {
     <h2>LIQUIDACIÓN DE SUELDO</h2>
     <h3>REMUNERACIONES MES DE: ${mesNombre(d.mes).toUpperCase()} ${d.anio}</h3>
     <div class="row"><span>Trabajador:</span><span>${d.nombre}</span></div>
-    <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>${d.cc}</span></div>
+    <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>Remuneraciones</span></div>
     <div class="row"><span>AFP:</span><span>${d.afp} (${d.pctAFP}%)</span><span>Previsión Salud:</span><span>${d.prevision} (7%)</span></div>
     <div class="row">
       <span>Días trabajados: <strong>${d.diasTrab}</strong></span>
@@ -3022,21 +3030,21 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
   <script>window.onload=()=>{window.print()}<\/script>
   </body></html>`;
 
-  const blob = new Blob([html], {type:"text/html;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
   const ifrId = "__pv_liq_frame__";
   let ifr = document.getElementById(ifrId);
   if(ifr) ifr.remove();
   ifr = document.createElement("iframe");
   ifr.id = ifrId;
-  ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
-  ifr.src = url;
-  ifr.onload = () => {
+  ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
+  document.body.appendChild(ifr);
+  ifr.contentDocument.open();
+  ifr.contentDocument.write(html);
+  ifr.contentDocument.close();
+  setTimeout(() => {
     ifr.contentWindow.focus();
     ifr.contentWindow.print();
-    setTimeout(() => { ifr.remove(); URL.revokeObjectURL(url); }, 3000);
-  };
-  document.body.appendChild(ifr);
+    setTimeout(() => ifr.remove(), 2000);
+  }, 500);
 }
 
 // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
@@ -3181,21 +3189,21 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const blob2 = new Blob([html], {type:"text/html;charset=utf-8"});
-    const url2 = URL.createObjectURL(blob2);
     const ifrId2 = "__pv_asist_frame__";
     let ifr2 = document.getElementById(ifrId2);
     if(ifr2) ifr2.remove();
     ifr2 = document.createElement("iframe");
     ifr2.id = ifrId2;
-    ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
-    ifr2.src = url2;
-    ifr2.onload = () => {
+    ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
+    document.body.appendChild(ifr2);
+    ifr2.contentDocument.open();
+    ifr2.contentDocument.write(html);
+    ifr2.contentDocument.close();
+    setTimeout(() => {
       ifr2.contentWindow.focus();
       ifr2.contentWindow.print();
-      setTimeout(() => { ifr2.remove(); URL.revokeObjectURL(url2); }, 3000);
-    };
-    document.body.appendChild(ifr2);
+      setTimeout(() => ifr2.remove(), 2000);
+    }, 500);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
@@ -5614,15 +5622,13 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
                       {[
-                        [`AFP ${liqPreview.afp||""} Cotiz. (${liqPreview.pctAFP}%)`, liqPreview.afpOblig||0],
-                        [`AFP Comisión (${liqPreview.comisionAFP||""}%)`, liqPreview.comisionAFPmonto||0],
-                        [`Salud ${liqPreview.sistSalud||"FONASA"}`, liqPreview.salud_monto||0],
-                        ...(liqPreview.segCesantia>0?[["Seg. Cesantía AFC", liqPreview.segCesantia]]:[]),
+                        [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
+                        ["Salud (7%)", liqPreview.salud_monto],
+                        ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
-                        ...(liqPreview.impuesto>0?[["Impuesto Único 2ª Cat.", liqPreview.impuesto]]:[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
+                        ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
-                        ["Base Tributable", liqPreview.baseTributable||0],
                       ].map(([l,v,b,c])=>(
                         <div key={l} style={{ display:"flex", justifyContent:"space-between", fontWeight:b?"bold":"normal", color:c||"#fff", borderTop:b?"1px solid rgba(255,255,255,0.1)":"none", paddingTop:b?4:0, marginTop:b?4:2 }}>
                           <span>{l}</span><span>${(v||0).toLocaleString("es-CL")}</span>
