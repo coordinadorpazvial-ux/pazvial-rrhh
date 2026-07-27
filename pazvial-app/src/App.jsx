@@ -2798,14 +2798,17 @@ export default function App() {
     </div>
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
-    const blob = new Blob([html], { type:"text/html;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.target   = "_blank";
-    a.rel      = "noopener";
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    const _blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const _url = URL.createObjectURL(_blob);
+    const _ifr = document.createElement("iframe");
+    _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+    _ifr.src = _url;
+    _ifr.onload = () => {
+      _ifr.contentWindow.focus();
+      _ifr.contentWindow.print();
+      setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
+    };
+    document.body.appendChild(_ifr);
   }
 
   // ── REGISTRO MANUAL ──────────────────────────────────
@@ -5622,13 +5625,15 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
                       {[
-                        [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
-                        ["Salud (7%)", liqPreview.salud_monto],
-                        ["Seguro Cesantía", liqPreview.segCesantia],
+                        [`AFP ${liqPreview.afp||""} Cotiz. (${liqPreview.pctAFP}%)`, liqPreview.afpOblig||0],
+                        [`AFP Comisión (${liqPreview.comisionAFP||""}%)`, liqPreview.comisionAFPmonto||0],
+                        [`Salud ${liqPreview.sistSalud||"FONASA"}`, liqPreview.salud_monto||0],
+                        ...(liqPreview.segCesantia>0?[["Seg. Cesantía AFC", liqPreview.segCesantia]]:[]),
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
+                        ...(liqPreview.impuesto>0?[["Impuesto Único 2ª Cat.", liqPreview.impuesto]]:[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
-                        ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
+                        ["Base Tributable", liqPreview.baseTributable||0],
                       ].map(([l,v,b,c])=>(
                         <div key={l} style={{ display:"flex", justifyContent:"space-between", fontWeight:b?"bold":"normal", color:c||"#fff", borderTop:b?"1px solid rgba(255,255,255,0.1)":"none", paddingTop:b?4:0, marginTop:b?4:2 }}>
                           <span>{l}</span><span>${(v||0).toLocaleString("es-CL")}</span>
