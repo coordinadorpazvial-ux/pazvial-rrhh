@@ -5222,7 +5222,8 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                   return tFilt.map(t=>{
                     const regsT=registros.filter(r=>r.tId===t.id);
                     const diasEnMes=new Date(hojaAsistAnio,hojaAsistMes+1,0).getDate();
-                    const regsDelMes=regsT.filter(r=>{const d=new Date(r.fecha+"T12:00:00");return d.getMonth()===hojaAsistMes&&d.getFullYear()===hojaAsistAnio;});
+                    const {desde:_pD,hasta:_pH}=periodoLiquidacion(hojaAsistMes,hojaAsistAnio);
+                    const regsDelMes=regsT.filter(r=>r.fecha>=_pD&&r.fecha<=_pH);
                     let totalExt=0;
                     // Solo sumar horas extra aprobadas (con estados independientes para días normales)
                     regsDelMes.forEach(r=>{
