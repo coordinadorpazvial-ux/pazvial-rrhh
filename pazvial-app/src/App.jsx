@@ -52,6 +52,19 @@ async function guardarEnFirebase(datos, intentos = 0) {
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
       datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
 
+      // Merge de cuadrillas
+      if ((datos.cuadrillas||[]).length === 0 && (remoto.cuadrillas||[]).length > 0) {
+        datos = { ...datos, cuadrillas: remoto.cuadrillas };
+      }
+      // Merge de contingencias
+      if ((datos.contingencias||[]).length === 0 && (remoto.contingencias||[]).length > 0) {
+        datos = { ...datos, contingencias: remoto.contingencias };
+      }
+      // Merge de params
+      if (!datos.params && remoto.params) {
+        datos = { ...datos, params: remoto.params };
+      }
+
       // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
       const codigosLocal = new Set(datos.codigosUsados || []);
       const codigosRemotos = (remoto.codigosUsados || []).filter(c => !codigosLocal.has(c));
@@ -131,7 +144,7 @@ const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 function fmtFecha(f) {
   if (!f) return "—";
   const [y,m,d] = f.split("-");
-  return `${d}/${m}/${y}`;
+  return `${d}-${m}-${y}`;
 }
 
 function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
@@ -406,7 +419,7 @@ function periodoLiquidacion(mes, anio) {
   return { desde, hasta };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio, params) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[]) {
   const P = params || PARAMS_DEFAULT;
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
@@ -438,7 +451,46 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params) {
   const regs = registros.filter(r =>
     r.tId===trab.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida
   );
-  const diasTrab = regs.filter(r => !esEspecial(r.fecha)).length;
+  // Días hábiles del período (L-V, excluye feriados)
+  const diasHabiles = [];
+  let dCur = new Date(pDesde + "T12:00:00");
+  const dFin = new Date(pHasta + "T12:00:00");
+  while (dCur <= dFin) {
+    const f = dCur.toISOString().slice(0,10);
+    const diaSem = dCur.getDay();
+    if (diaSem !== 0 && diaSem !== 6 && !esFeriado(f)) diasHabiles.push(f);
+    dCur.setDate(dCur.getDate()+1);
+  }
+  // Días con marca (días normales trabajados)
+  const diasConMarca = new Set(regs.filter(r => !esEspecial(r.fecha)).map(r => r.fecha));
+  // Días con permiso aprobado en el período
+  const diasConPermiso = new Set(
+    solicitudes.filter(s =>
+      s.tId === trab.id && s.estado === "aprobado" &&
+      s.fechaDesde && s.fechaHasta
+    ).flatMap(s => {
+      const dias = [];
+      let cur = new Date(s.fechaDesde + "T12:00:00");
+      const fin = new Date(s.fechaHasta + "T12:00:00");
+      while (cur <= fin) {
+        dias.push(cur.toISOString().slice(0,10));
+        cur.setDate(cur.getDate()+1);
+      }
+      return dias;
+    })
+  );
+  // Días con compensatorio tomado en el período
+  const diasConCompensatorio = new Set(
+    compensatorios.filter(c =>
+      c.tId === trab.id && c.fechaTomado &&
+      c.fechaTomado >= pDesde && c.fechaTomado <= pHasta
+    ).map(c => c.fechaTomado)
+  );
+  // Días ausentes injustificados = hábiles sin marca, sin permiso, sin compensatorio
+  const diasAusentesInjust = diasHabiles.filter(f =>
+    !diasConMarca.has(f) && !diasConPermiso.has(f) && !diasConCompensatorio.has(f)
+  ).length;
+  const diasTrab = diasHabiles.length - diasAusentesInjust;
 
   // ── Valor hora extra (método DT 42h): sueldo/30 × 28 / (jornadaSem×4) × 1.5 ──
   const divisorHora = jornadaSem * 4; // 168 para 42h
@@ -2633,7 +2685,7 @@ export default function App() {
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios);
     setLiqPreview(datos);
   }
 
@@ -2827,6 +2879,7 @@ export default function App() {
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     const tieneHEEntradaMan = !esDiaEspMan && minEntradaMan < 420; // antes de 07:00
     const tieneHESalidaMan  = !esDiaEspMan && regManSalida && toMin(regManSalida) > finMan;
+    const esDiaEspManual = esEspecial(regManFecha);
     const nuevo = {
       id:nowId(), tId:Number(regManTrabId), fecha:regManFecha,
       entrada:regManEntrada, salida:regManSalida||null,
@@ -2835,6 +2888,7 @@ export default function App() {
       estadoSalida:  tieneHESalidaMan  ? "pendiente" : null,
       motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
       entradaAnticipada: tieneHEEntradaMan,
+      esContingencia: esDiaEspManual && esDiaContingencia(regManFecha, contingencias),
       manual:true
     };
     setRegistros(p=>[...p,nuevo]);
@@ -3167,7 +3221,12 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       .trab-info{background:#f2f2f2;padding:7px 12px;border-radius:4px;margin-bottom:10px;font-size:11px;display:flex;gap:20px;flex-wrap:wrap;}
       .firmas{display:flex;gap:40px;margin-top:30px;}
       .firma{text-align:center;border-top:1px solid #333;padding-top:6px;width:200px;font-size:10px;}
-      @media print{body{padding:10px;}.no-print{display:none;}.trabajador-bloque{page-break-inside:avoid;}}
+      @media print{
+        body{padding:10px;}
+        .no-print{display:none;}
+        .trabajador-bloque{page-break-inside:avoid;}
+        *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
+      }
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
       <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
@@ -3177,7 +3236,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       <div class="empresa-info"><strong>PAZ VIAL SpA</strong>RUT: 78.351.313-7<br/>Gestión de Personas</div>
     </div>
     <h2>HOJA DE ASISTENCIA MENSUAL</h2>
-    <h3>${mesNombre(mes).toUpperCase()} ${anio}</h3>
+    <h3>PERÍODO: ${pDesde.split("-").reverse().join("-")} AL ${pHasta.split("-").reverse().join("-")}</h3>
     ${trab?`<div class="trab-info">
       <span><strong>Trabajador:</strong> ${nombreCompleto(trab)}</span>
       <span><strong>RUT:</strong> ${trab.rut}</span>
@@ -3192,21 +3251,17 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const ifrId2 = "__pv_asist_frame__";
-    let ifr2 = document.getElementById(ifrId2);
-    if(ifr2) ifr2.remove();
-    ifr2 = document.createElement("iframe");
-    ifr2.id = ifrId2;
-    ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
-    document.body.appendChild(ifr2);
-    ifr2.contentDocument.open();
-    ifr2.contentDocument.write(html);
-    ifr2.contentDocument.close();
-    setTimeout(() => {
-      ifr2.contentWindow.focus();
-      ifr2.contentWindow.print();
-      setTimeout(() => ifr2.remove(), 2000);
-    }, 500);
+    const _blob2 = new Blob([html], {type:"text/html;charset=utf-8"});
+    const _url2 = URL.createObjectURL(_blob2);
+    const _ifr2 = document.createElement("iframe");
+    _ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+    _ifr2.src = _url2;
+    _ifr2.onload = () => {
+      _ifr2.contentWindow.focus();
+      _ifr2.contentWindow.print();
+      setTimeout(() => { _ifr2.remove(); URL.revokeObjectURL(_url2); }, 3000);
+    };
+    document.body.appendChild(_ifr2);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
