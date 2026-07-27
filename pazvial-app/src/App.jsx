@@ -2790,18 +2790,14 @@ export default function App() {
     </div>
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-    } else {
-      const blob = new Blob([html], { type:"text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "liquidacion.html"; a.click();
-      setTimeout(()=>URL.revokeObjectURL(url), 10000);
-    }
+    const blob = new Blob([html], { type:"text/html;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }
 
   // ── REGISTRO MANUAL ──────────────────────────────────
@@ -3026,8 +3022,21 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
   <script>window.onload=()=>{window.print()}<\/script>
   </body></html>`;
 
-  const w = window.open("","_blank");
-  if(w){ w.document.open(); w.document.write(html); w.document.close(); }
+  const ifrId = "__pv_liq_frame__";
+  let ifr = document.getElementById(ifrId);
+  if(ifr) ifr.remove();
+  ifr = document.createElement("iframe");
+  ifr.id = ifrId;
+  ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
+  document.body.appendChild(ifr);
+  ifr.contentDocument.open();
+  ifr.contentDocument.write(html);
+  ifr.contentDocument.close();
+  setTimeout(() => {
+    ifr.contentWindow.focus();
+    ifr.contentWindow.print();
+    setTimeout(() => ifr.remove(), 2000);
+  }, 500);
 }
 
 // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
@@ -3172,14 +3181,21 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const blob = new Blob([html],{type:"text/html;charset=utf-8"});
-    const url  = URL.createObjectURL(blob);
-    const w = window.open(url, "_blank");
-    if(!w) {
-      const a = document.createElement("a");
-      a.href = url; a.download = "hoja-asistencia.html"; a.click();
-    }
-    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+    const ifrId2 = "__pv_asist_frame__";
+    let ifr2 = document.getElementById(ifrId2);
+    if(ifr2) ifr2.remove();
+    ifr2 = document.createElement("iframe");
+    ifr2.id = ifrId2;
+    ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
+    document.body.appendChild(ifr2);
+    ifr2.contentDocument.open();
+    ifr2.contentDocument.write(html);
+    ifr2.contentDocument.close();
+    setTimeout(() => {
+      ifr2.contentWindow.focus();
+      ifr2.contentWindow.print();
+      setTimeout(() => ifr2.remove(), 2000);
+    }, 500);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
@@ -5598,15 +5614,13 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
                       {[
-                        [`AFP ${liqPreview.afp||""} − Cotiz. (${liqPreview.pctAFP}%)`, liqPreview.afpOblig||liqPreview.prevision_monto||0],
-                        [`AFP Comisión (${liqPreview.comisionAFP||""}%)`, liqPreview.comisionAFPmonto||0],
-                        [`Salud ${liqPreview.sistSalud||"FONASA"} (7%)`, liqPreview.salud_monto||0],
-                        ...(liqPreview.segCesantia>0?[["Seg. Cesantía AFC", liqPreview.segCesantia]]:[]),
+                        [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
+                        ["Salud (7%)", liqPreview.salud_monto],
+                        ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
-                        ...(liqPreview.impuesto>0?[["Impuesto Único 2ª Cat.", liqPreview.impuesto]]:[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
+                        ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
-                        ["Base Tributable", liqPreview.baseTributable||0],
                       ].map(([l,v,b,c])=>(
                         <div key={l} style={{ display:"flex", justifyContent:"space-between", fontWeight:b?"bold":"normal", color:c||"#fff", borderTop:b?"1px solid rgba(255,255,255,0.1)":"none", paddingTop:b?4:0, marginTop:b?4:2 }}>
                           <span>{l}</span><span>${(v||0).toLocaleString("es-CL")}</span>
