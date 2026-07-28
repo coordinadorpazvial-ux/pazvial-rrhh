@@ -2020,10 +2020,11 @@ export default function App() {
   const [subTabNomina, setSubTabNomina] = useState("lista");
 
   // ── Filtros registro asistencia ───────────────────────
-  const [filtroRegTrab, setFiltroRegTrab] = useState("");
-  const [filtroRegMes,  setFiltroRegMes]  = useState("");
-  const [filtroRegAnio, setFiltroRegAnio] = useState(String(new Date().getFullYear()));
-  const [regOrden,      setRegOrden]      = useState("desc"); // "asc" | "desc"
+  const [filtroRegTrab,  setFiltroRegTrab]  = useState("");
+  const [filtroRegMes,   setFiltroRegMes]   = useState("");
+  const [filtroRegAnio,  setFiltroRegAnio]  = useState(String(new Date().getFullYear()));
+  const [filtroRegFecha, setFiltroRegFecha] = useState("");
+  const [regOrden,       setRegOrden]       = useState("desc");
 
   // ── Hoja de asistencia mensual ─────────────────────────
   const [hojaAsistMes,    setHojaAsistMes]    = useState(new Date().getMonth());
@@ -4970,6 +4971,24 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     </select>
                   </div>
                   <div>
+                    <label style={S.lbl}>Día específico</label>
+                    <input type="date" style={{...S.input,width:"100%"}}
+                      value={filtroRegFecha}
+                      onChange={e=>{
+                        setFiltroRegFecha(e.target.value);
+                        if(e.target.value){
+                          const d=new Date(e.target.value+"T12:00:00");
+                          setFiltroRegMes(String(d.getMonth()));
+                          setFiltroRegAnio(String(d.getFullYear()));
+                        }
+                      }}
+                    />
+                    {filtroRegFecha && <button onClick={()=>setFiltroRegFecha("")}
+                      style={{fontSize:10,padding:"2px 6px",background:"transparent",border:"1px solid #9A8A6A",color:"#9A8A6A",borderRadius:4,cursor:"pointer",marginTop:4}}>
+                      ✕ Limpiar día
+                    </button>}
+                  </div>
+                  <div>
                     <label style={S.lbl}>Orden por fecha</label>
                     <select style={{...S.sel,width:"100%"}} value={regOrden} onChange={e=>setRegOrden(e.target.value)}>
                       <option value="desc">↓ Más reciente primero</option>
@@ -4987,6 +5006,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       {[...registros]
                         .filter(r=>{
                           if(filtroRegTrab && r.tId!==Number(filtroRegTrab)) return false;
+                          if(filtroRegFecha) return r.fecha===filtroRegFecha;
                           if(filtroRegMes!=="" && new Date(r.fecha+"T12:00:00").getMonth()!==Number(filtroRegMes)) return false;
                           if(filtroRegAnio && new Date(r.fecha+"T12:00:00").getFullYear()!==Number(filtroRegAnio)) return false;
                           return true;
@@ -5222,8 +5242,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                   return tFilt.map(t=>{
                     const regsT=registros.filter(r=>r.tId===t.id);
                     const diasEnMes=new Date(hojaAsistAnio,hojaAsistMes+1,0).getDate();
-                    const {desde:_pD,hasta:_pH}=periodoLiquidacion(hojaAsistMes,hojaAsistAnio);
-                    const regsDelMes=regsT.filter(r=>r.fecha>=_pD&&r.fecha<=_pH);
+                    const regsDelMes=regsT.filter(r=>{const d=new Date(r.fecha+"T12:00:00");return d.getMonth()===hojaAsistMes&&d.getFullYear()===hojaAsistAnio;});
                     let totalExt=0;
                     // Solo sumar horas extra aprobadas (con estados independientes para días normales)
                     regsDelMes.forEach(r=>{
