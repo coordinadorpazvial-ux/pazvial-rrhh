@@ -348,7 +348,7 @@ function getRemuneracionVigente(ficha, mes, anio) {
     sueldoPactado: Number(ficha.sueldoPactado)||0,
     colacion:      Number(ficha.colacion)||0,
     movilizacion:  Number(ficha.movilizacion)||0,
-    gratificacion: ficha.gratificacion||false,
+    gratificacion: ficha.gratificacion !== undefined ? ficha.gratificacion : true,
   };
 
   if (historial.length === 0) return fallback;
@@ -386,7 +386,7 @@ function getRemuneracionVigente(ficha, mes, anio) {
     totalColacion   += (Number(h.colacion)||0) * dias;
     totalMovilizacion += (Number(h.movilizacion)||0) * dias;
     diasContados    += dias;
-    ultimaGratif     = h.gratificacion || false;
+    ultimaGratif     = h.gratificacion !== undefined ? h.gratificacion : true;
   }
 
   if (diasContados === 0) return fallback;
@@ -521,10 +521,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
   const horasExtra = +totalHorasExtra.toFixed(2);
   const valorHHExtra = Math.round(horasExtra * valorHoraExtra);
 
-  // ── Gratificación (art. 50): 25% sueldo base, tope 4.75 IMM anual / 12 ──
+  // ── Gratificación (art. 50 proporcional): 25% sueldo mensual, tope 4.75 IMM / 12 ──
+  // El empleador paga mensualmente como anticipo de gratificación legal
+  // Si el trabajador tiene activada la gratificación en su ficha
   const topeGratifMensual = Math.round((P.topeGratifIMM||4.75) * IMM / 12);
   const gratif = remVigente.gratificacion
-    ? Math.min(Math.round(sueldoBase * 0.25 / 12), topeGratifMensual)
+    ? Math.min(Math.round(sueldoBase * 0.25), topeGratifMensual)
     : 0;
 
   // ── Haberes imponibles ───────────────────────────────────
@@ -3046,7 +3048,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     filas += `
     <div style="margin-bottom:24px;page-break-inside:avoid">
       <div style="background:#f0f0f0;padding:8px 12px;font-weight:bold;font-size:14px;border-left:4px solid #e67e22">
-        ${t.apellido} ${t.nombre} — Código: ${t.codigo} — Total HE aprobadas: ${totalHE.toFixed(2)}h
+        ${t.apellido} ${t.nombre} — Código: ${t.codigo} — RUT: ${t.rut||"—"} — Total HE aprobadas: ${totalHE.toFixed(2)}h
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:#e67e22;color:#fff">
