@@ -419,7 +419,7 @@ function periodoLiquidacion(mes, anio) {
   return { desde, hasta };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[]) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[], diasManualOverride=null) {
   const P = params || PARAMS_DEFAULT;
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
@@ -490,11 +490,18 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
   const diasAusentesInjust = diasHabiles.filter(f =>
     !diasConMarca.has(f) && !diasConPermiso.has(f) && !diasConCompensatorio.has(f)
   ).length;
-  const diasTrab = diasHabiles.length - diasAusentesInjust;
+  // Base 30 días: días efectivos = 30 - ausencias injustificadas
+  const diasEfectivos = Math.max(0, 30 - diasAusentesInjust);
+  const diasTrab = diasEfectivos; // se muestra en liquidación, editable manualmente
 
-  // ── Valor hora extra (método DT 42h): sueldo/30 × 28 / (jornadaSem×4) × 1.5 ──
+  // ── Sueldo proporcional (base 30 días) ──────────────────
+  // diasTrab puede ser sobreescrito manualmente desde la UI
+  const diasTrabFinal = diasManualOverride !== null ? Number(diasManualOverride) : diasTrab;
+  const sueldoProporcional = Math.round(sueldoBase / 30 * diasTrabFinal);
+
+  // ── Valor hora extra (método DT 42h sobre sueldo proporcional) ──
   const divisorHora = jornadaSem * 4; // 168 para 42h
-  const valorHoraOrd = sueldoBase > 0 ? (sueldoBase / diasBase * 28) / divisorHora : 0;
+  const valorHoraOrd = sueldoProporcional > 0 ? (sueldoProporcional / diasBase * 28) / divisorHora : 0;
   const valorHoraExtra = valorHoraOrd * (P.recargHE || 1.5);
 
   // ── HE aprobadas ─────────────────────────────────────────
@@ -523,14 +530,19 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
 
   // ── Gratificación (art. 50 proporcional): 25% sueldo mensual, tope 4.75 IMM / 12 ──
   // El empleador paga mensualmente como anticipo de gratificación legal
-  // Si el trabajador tiene activada la gratificación en su ficha
+  // Gratificación legal art. 50: 25% sueldo, tope 4.75 IMM/12
+  // Se paga siempre que el trabajador tenga sueldo (es derecho legal irrenunciable)
   const topeGratifMensual = Math.round((P.topeGratifIMM||4.75) * IMM / 12);
-  const gratif = remVigente.gratificacion
+  const gratif = sueldoBase > 0
     ? Math.min(Math.round(sueldoBase * 0.25), topeGratifMensual)
     : 0;
 
   // ── Haberes imponibles ───────────────────────────────────
-  const totalImponible = sueldoBase + valorHHExtra + gratif;
+  // Gratificación sobre sueldo proporcional
+  const gratifProp = sueldoProporcional > 0
+    ? Math.min(Math.round(sueldoProporcional * 0.25), topeGratifMensual)
+    : 0;
+  const totalImponible = sueldoProporcional + valorHHExtra + gratifProp;
 
   // ── Haberes no imponibles ────────────────────────────────
   const viaticosContingencia = totalViaticosContingencia;
@@ -580,7 +592,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
     diasTrab, horasExtra, mes, anio,
     valorHoraOrd: +valorHoraOrd.toFixed(0),
     valorHoraExtra: +valorHoraExtra.toFixed(0),
-    sueldoBase, valorHHExtra, gratif,
+    sueldoBase, sueldoProporcional, diasTrabFinal, valorHHExtra, gratif: gratifProp,
     totalImponible,
     colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     baseCotizableAFP, baseCotizableAFC,
@@ -1089,7 +1101,7 @@ function FichaForm({
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr>
-                      {["Desde","Sueldo","Colación","Moviliz.","Gratif.","Motivo","Registrado"].map(h=>(
+                      {["Desde","Sueldo","Colación","Moviliz.","Gratif.","Motivo","Registrado","Acciones"].map(h=>(
                         <th key={h} style={{background:"rgba(5,4,2,0.6)",padding:"7px 9px",
                           textAlign:"left",color:"#C9A84C",fontSize:10,textTransform:"uppercase",
                           letterSpacing:1,borderBottom:"1px solid rgba(255,215,0,0.2)"}}>
@@ -1120,6 +1132,26 @@ function FichaForm({
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
                           <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{h.registradoEn}</td>
+                          <td style={{padding:"7px 9px"}}>
+                            <button
+                              title="Eliminar este registro"
+                              onClick={()=>{
+                                if(!window.confirm(`¿Eliminar el registro desde ${h.desde}?`)) return;
+                                setTrabajadores(p=>p.map(t=>{
+                                  if(t.id!==trabReal.id) return t;
+                                  const hist = (t.ficha?.historialRemuneraciones||[]).filter(x=>x.id!==h.id);
+                                  const vig = [...hist].sort((a,b)=>b.desde.localeCompare(a.desde))[0];
+                                  return {...t, ficha:{...t.ficha,
+                                    historialRemuneraciones: hist,
+                                    sueldoPactado: vig ? String(vig.sueldo) : t.ficha?.sueldoPactado,
+                                    colacion: vig ? vig.colacion : t.ficha?.colacion,
+                                    movilizacion: vig ? vig.movilizacion : t.ficha?.movilizacion,
+                                  }};
+                                }));
+                              }}
+                              style={{background:"rgba(192,57,43,0.2)",border:"1px solid #c0392b",color:"#e74c3c",borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}
+                            >🗑</button>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -2077,7 +2109,8 @@ export default function App() {
   const [marcaConfirm,   setMarcaConfirm]   = useState(null);   // {tipo, hora, fecha} | null
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
-  const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy} — pendiente de respuesta contingencia
+  const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy}
+  const [modalSobretiempo, setModalSobretiempo] = useState(null); // {hora, fecha, regHoy, fin}
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
 
   // ── Liquidaciones ──────────────────────────────────────
@@ -2095,6 +2128,7 @@ export default function App() {
   const [liqMes,     setLiqMes]     = useState(new Date().getMonth());
   const [liqAnio,    setLiqAnio]    = useState(new Date().getFullYear());
   const [liqPreview, setLiqPreview] = useState(null);
+  const [liqDiasManual, setLiqDiasManual] = useState(null); // null = usar calculado
   const [liqMsg,     setLiqMsg]     = useState({tipo:"",txt:""});
 
   // ── UI firma trabajador ────────────────────────────────
@@ -2332,6 +2366,26 @@ export default function App() {
   // ACCIONES
   // ═══════════════════════════════════════════════════════
 
+  // ── CONFIRMAR SOBRETIEMPO (con motivo) ──────────────
+  function confirmarSobretiempo(motivo) {
+    if (!modalSobretiempo) return;
+    const { hora, fecha, regHoy } = modalSobretiempo;
+    setModalSobretiempo(null);
+    const nuevosRegistros = registros.map(r => {
+      if (r.id !== regHoy.id) return r;
+      return {
+        ...r,
+        salida: hora,
+        estadoSalida: "pendiente",
+        motivoSobretiempo: motivo.trim(),
+        motivoRechazoSalida: r.motivoRechazoSalida || "",
+      };
+    });
+    setRegistros(nuevosRegistros);
+    setSyncEstado("guardando");
+    setMarcaMsg({ tipo:"ok", txt:`⚠️ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación.` });
+  }
+
   // ── CONFIRMAR TURNO NOCTURNO (contingencia o no) ────
   function confirmarTurnoNocturno(esContingencia) {
     if (!modalContingencia) return;
@@ -2484,15 +2538,21 @@ export default function App() {
       nuevosRegistros = [...registros, nuevoReg];
     } else {
       // Al marcar salida: detectar si genera HE de salida
+      const toMinS2 = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const finS2 = esViernes(fecha) ? 840 : 1080;
+      const tieneHESalidaS2 = !esEspecial(fecha) && toMinS2(hora) > finS2;
+      if (tieneHESalidaS2) {
+        // Pedir motivo antes de registrar
+        setMarcaConfirm(null);
+        setModalSobretiempo({ hora, fecha, regHoy });
+        return;
+      }
       nuevosRegistros = registros.map(r => {
         if (r.id !== regHoy.id) return r;
-        const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-        const fin = esViernes(fecha) ? 840 : 1080;
-        const tieneHESalida = !esEspecial(fecha) && toMin(hora) > fin;
         return {
           ...r,
           salida: hora,
-          estadoSalida: tieneHESalida ? "pendiente" : null,
+          estadoSalida: null,
           motivoRechazoSalida: r.motivoRechazoSalida || "",
         };
       });
@@ -2683,12 +2743,13 @@ export default function App() {
   // ── Export / Import ───────────────────────────────────
   // ── LIQUIDACIONES ────────────────────────────────────
   function generarPreviewLiq() {
+    setLiqDiasManual(null); // resetear ajuste manual al recalcular
     setLiqMsg({tipo:"",txt:""});
     if(!liqTrabId){ setLiqMsg({tipo:"err",txt:"Selecciona un trabajador."}); return; }
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual);
     setLiqPreview(datos);
   }
 
@@ -2832,7 +2893,8 @@ export default function App() {
     </div>
     <table>
       <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS LEGALES</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td>AFP ${d.afp||""} − Cotiz. Oblig. (${d.pctAFP}%)</td><td style="text-align:right">$${(d.afpOblig||d.prevision_monto||0).toLocaleString("es-CL")}</td></tr>
+      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td style="color:#888;font-size:10px">${d.sueldoProporcional!==d.sueldoBase?`Proporcional ${d.diasTrabFinal||d.diasTrab}/30 días`:""}</td><td></td></tr>
+      ${d.sueldoProporcional!==d.sueldoBase?`<tr><td>Sueldo Proporcional</td><td style="text-align:right;color:#C9A84C">$${d.sueldoProporcional.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}<td>AFP ${d.afp||""} − Cotiz. Oblig. (${d.pctAFP}%)</td><td style="text-align:right">$${(d.afpOblig||d.prevision_monto||0).toLocaleString("es-CL")}</td></tr>
       ${d.valorHHExtra>0?`<tr><td>Horas Extra (${d.horasExtra}h × $${(d.valorHoraExtra||0).toLocaleString("es-CL")}/h)</td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td>AFP Comisión (${d.comisionAFP||"0"}%)</td><td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td></tr>`:""}
       ${d.gratif>0?`<tr><td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`:`<tr><td></td><td></td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`}
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
@@ -3923,15 +3985,28 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     const misSolicitudes = solicitudes.filter(s => s.tId===trabActivo.id);
     const noLeidas     = misNotifs.filter(n=>!n.leida).length;
 
-    // Dashboard personal
+    // Dashboard personal — período 26-25
     const mesActual = new Date().getMonth();
     const anioActual = new Date().getFullYear();
-    const regMes = misRegistros.filter(r => {
-      const d = new Date(r.fecha+"T12:00:00");
-      return d.getMonth()===mesActual && d.getFullYear()===anioActual && r.salida;
-    });
+    const { desde: pDash, hasta: pDashH } = periodoLiquidacion(mesActual, anioActual);
+    const regMes = misRegistros.filter(r => r.fecha >= pDash && r.fecha <= pDashH && r.salida);
     let extraAcum = 0;
-    regMes.forEach(r => { if(r.estado==="aprobado") extraAcum += calcularHoras(r.entrada,r.salida,r.fecha).extra; });
+    regMes.forEach(r => {
+      const esp = esEspecial(r.fecha);
+      if (esp) {
+        // Día especial: solo si está aprobado
+        if (r.estado === "aprobado") {
+          const he = r.esContingencia
+            ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10))
+            : calcularHoras(r.entrada,r.salida,r.fecha).extra;
+          extraAcum += he;
+        }
+      } else {
+        // Día normal: sumar HE aprobadas (entrada y/o salida)
+        const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+        extraAcum += h.extra;
+      }
+    });
 
     const tabsTrab = [
       { k:"marcar",    l:"🕐 Marcar Asistencia" },
@@ -3968,6 +4043,62 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           {/* ── TAB: MARCAR ──────────────────────────────── */}
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
+
+              {/* Modal de sobretiempo — pide motivo al marcar salida con HE */}
+              {modalSobretiempo && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#0d1a0d,#1a2d1a)", border:"3px solid #e67e22",
+                    borderRadius:20, padding:28, maxWidth:400, width:"100%" }}>
+                    <div style={{ fontSize:40, textAlign:"center", marginBottom:8 }}>⏱</div>
+                    <div style={{ color:"#e67e22", fontSize:18, fontWeight:"bold", textAlign:"center", marginBottom:8 }}>
+                      Sobretiempo detectado
+                    </div>
+                    <div style={{ color:"#d0e0ff", fontSize:13, textAlign:"center", marginBottom:16 }}>
+                      Tu salida a las <strong style={{color:"#FFD700"}}>{modalSobretiempo.hora}</strong> supera
+                      el horario normal.<br/>Por favor indica el motivo del sobretiempo:
+                    </div>
+                    {(()=>{
+                      const [motivo, setMotivo] = React.useState("");
+                      return (
+                        <>
+                          <textarea
+                            value={motivo}
+                            onChange={e=>setMotivo(e.target.value)}
+                            placeholder="Ej: Término de faena pendiente, espera de materiales..."
+                            maxLength={200}
+                            style={{ width:"100%", minHeight:80, background:"rgba(0,0,0,0.3)",
+                              border:"1px solid rgba(230,126,34,0.5)", borderRadius:8,
+                              color:"#fff", padding:"10px 12px", fontSize:13,
+                              resize:"vertical", boxSizing:"border-box" }}
+                          />
+                          <div style={{ color:"#9A8A6A", fontSize:11, marginBottom:14, textAlign:"right" }}>
+                            {motivo.length}/200
+                          </div>
+                          <div style={{ display:"flex", gap:10 }}>
+                            <button
+                              onClick={()=>{ setModalSobretiempo(null); setMarcaMsg({tipo:"err",txt:"Marca cancelada. Debes indicar el motivo del sobretiempo."}); }}
+                              style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                                border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
+                                padding:"12px 0", cursor:"pointer", fontSize:14 }}>
+                              Cancelar
+                            </button>
+                            <button
+                              disabled={!motivo.trim()}
+                              onClick={()=>confirmarSobretiempo(motivo)}
+                              style={{ flex:2, background: motivo.trim()?"linear-gradient(135deg,#e67e22,#d35400)":"rgba(100,80,50,0.4)",
+                                color:"#fff", border:"none", borderRadius:10,
+                                padding:"12px 0", cursor: motivo.trim()?"pointer":"not-allowed",
+                                fontSize:14, fontWeight:"bold" }}>
+                              ✓ Registrar salida
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
 
               {/* Modal de contingencia nocturna */}
               {modalContingencia && (
@@ -4187,15 +4318,20 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       {["Fecha","Entrada","Salida","H. Extra","Estado","Nota"].map(h=><th key={h} style={S.th}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {[...misRegistros].reverse().slice(0,30).map(r => {
-                        const h = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha) : null;
+                      {[...misRegistros].filter(r=>r.fecha>=pDash&&r.fecha<=pDashH).reverse().slice(0,60).map(r => {
+                        const espT = esEspecial(r.fecha);
+                        const h = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha, r.estadoEntrada||null, r.estadoSalida||null) : null;
+                        const hBrutoT = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha) : null;
+                        const heDisplay = espT
+                          ? (r.estado==="aprobado" ? (r.esContingencia ? (r.horasExtraAprobadas||0) : hBrutoT?.extra||0) : 0)
+                          : (h?.extra||0);
                         const esp = esEspecial(r.fecha);
                         return (
                           <tr key={r.id} style={{ background:esp?"rgba(142,68,173,0.1)":"transparent" }}>
                             <td style={S.td}>{r.fecha} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
                             <td style={S.td}>{r.entrada}</td>
                             <td style={S.td}>{r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
-                            <td style={{...S.td, color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
+                            <td style={{...S.td, color:heDisplay>0?"#FFD700":"#aaa"}}>{r.salida?(heDisplay>0?heDisplay+"h":"—"):"—"}</td>
                             <td style={S.td}>
                               <span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":"#e67e22")}>
                                 {r.estado==="aprobado"?"✓ Aprobado":r.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
@@ -4728,6 +4864,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extraSalida}h posteriores
                             </span>
+                            {r.motivoSobretiempo && (
+                              <div style={{background:"rgba(230,126,34,0.1)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#e67e22"}}>
+                                💬 {r.motivoSobretiempo}
+                              </div>
+                            )}
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
                               <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
@@ -5685,6 +5826,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
                         ["Sueldo Base", liqPreview.sueldoBase],
+                        ...(liqPreview.sueldoProporcional!==liqPreview.sueldoBase?[[`Sueldo Proporcional (${liqPreview.diasTrabFinal||liqPreview.diasTrab}/30 días)`,liqPreview.sueldoProporcional]]:[]),
                         ...(liqPreview.valorHHExtra>0?[["Horas Extra ("+liqPreview.horasExtra+"h × $"+(liqPreview.valorHoraExtra||0).toLocaleString("es-CL")+"/h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
