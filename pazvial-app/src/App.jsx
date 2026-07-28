@@ -2884,7 +2884,7 @@ export default function App() {
     <h3>REMUNERACIONES MES DE: ${mesNombre(d.mes).toUpperCase()} ${d.anio}</h3>
     <div class="row"><span>Trabajador:</span><span>${d.nombre}</span></div>
     <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>Remuneraciones</span></div>
-    <div class="row"><span>AFP:</span><span>${d.afp} (${d.pctAFP}%)</span><span>Previsión Salud:</span><span>${d.prevision} (7%)</span></div>
+    <div class="row"><span>AFP:</span><span>${d.afp||"—"} (${d.pctAFP}% + ${d.comisionAFP}% com.)</span><span>Previsión Salud:</span><span>${d.sistSalud||"FONASA"} (7%)</span></div>
     <div class="row">
       <span>Días trabajados: <strong>${d.diasTrab}</strong></span>
       <span>HH Extras: <strong>${d.horasExtra}h</strong></span>
@@ -2892,17 +2892,80 @@ export default function App() {
       <span>Base tributable: <strong>$${(d.baseTributable||d.tributable||0).toLocaleString("es-CL")}</strong></span>
     </div>
     <table>
-      <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS LEGALES</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td style="color:#888;font-size:10px">${d.sueldoProporcional!==d.sueldoBase?`Proporcional ${d.diasTrabFinal||d.diasTrab}/30 días`:""}</td><td></td></tr>
-      ${d.sueldoProporcional!==d.sueldoBase?`<tr><td>Sueldo Proporcional</td><td style="text-align:right;color:#C9A84C">$${d.sueldoProporcional.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}<td>AFP ${d.afp||""} − Cotiz. Oblig. (${d.pctAFP}%)</td><td style="text-align:right">$${(d.afpOblig||d.prevision_monto||0).toLocaleString("es-CL")}</td></tr>
-      ${d.valorHHExtra>0?`<tr><td>Horas Extra (${d.horasExtra}h × $${(d.valorHoraExtra||0).toLocaleString("es-CL")}/h)</td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td>AFP Comisión (${d.comisionAFP||"0"}%)</td><td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td></tr>`:""}
-      ${d.gratif>0?`<tr><td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`:`<tr><td></td><td></td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`}
-      <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
-      <tr><td>Asig. Colación</td><td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td><td class="tot">TOTAL DESC. LEGALES</td><td class="tot" style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td></tr>
-      <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${(d.impuesto||0)>0?`<td>Impuesto Único 2ª Cat.</td><td style="text-align:right">$${d.impuesto.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
-      ${d.viaticosContingencia>0?`<tr><td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
-      ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td></tr>`:""}
-      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL DESCUENTOS</td><td style="text-align:right">$${d.totalDescuentos.toLocaleString("es-CL")}</td></tr>
+      <tr>
+        <th style="width:35%">HABERES</th>
+        <th style="text-align:right;width:15%">MONTO</th>
+        <th style="width:35%">DESCUENTOS</th>
+        <th style="text-align:right;width:15%">MONTO</th>
+      </tr>
+      <tr>
+        <td>Sueldo Base</td>
+        <td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td>
+        <td>AFP ${d.afp||"—"} − Cotiz. Oblig. (${d.pctAFP}%)</td>
+        <td style="text-align:right">$${(d.afpOblig||0).toLocaleString("es-CL")}</td>
+      </tr>
+      ${d.sueldoProporcional!==d.sueldoBase?`
+      <tr>
+        <td style="color:#C9A84C">Sueldo Proporcional (${d.diasTrabFinal||d.diasTrab}/30 días)</td>
+        <td style="text-align:right;color:#C9A84C">$${d.sueldoProporcional.toLocaleString("es-CL")}</td>
+        <td>AFP Comisión (${d.comisionAFP||"0"}%)</td>
+        <td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td>
+      </tr>`:`
+      <tr>
+        <td></td><td></td>
+        <td>AFP Comisión (${d.comisionAFP||"0"}%)</td>
+        <td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td>
+      </tr>`}
+      ${d.valorHHExtra>0?`
+      <tr>
+        <td>Horas Extra (${d.horasExtra}h × $${(d.valorHoraExtra||0).toLocaleString("es-CL")}/h)</td>
+        <td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td>
+        <td>Salud ${d.sistSalud||"FONASA"} (7%)</td>
+        <td style="text-align:right">$${(d.salud_monto||0).toLocaleString("es-CL")}</td>
+      </tr>`:`
+      <tr>
+        <td></td><td></td>
+        <td>Salud ${d.sistSalud||"FONASA"} (7%)</td>
+        <td style="text-align:right">$${(d.salud_monto||0).toLocaleString("es-CL")}</td>
+      </tr>`}
+      <tr>
+        ${d.gratif>0?`<td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
+        ${(d.segCesantia||0)>0?`<td>Seg. Cesantía AFC</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
+      </tr>
+      ${(d.impuesto||0)>0?`
+      <tr>
+        <td></td><td></td>
+        <td>Impuesto Único 2ª Cat.</td>
+        <td style="text-align:right">$${d.impuesto.toLocaleString("es-CL")}</td>
+      </tr>`:""}
+      <tr class="tot">
+        <td>TOTAL IMPONIBLE</td>
+        <td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td>
+        <td>TOTAL DESC. LEGALES</td>
+        <td style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td>
+      </tr>
+      <tr>
+        <td>Asig. Colación</td>
+        <td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td>
+        ${(d.anticipo||0)>0?`<td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
+      </tr>
+      <tr>
+        <td>Asig. Movilización</td>
+        <td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>
+        <td></td><td></td>
+      </tr>
+      ${d.viaticosContingencia>0?`
+      <tr>
+        <td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td>
+        <td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td>
+        <td></td><td></td>
+      </tr>`:""}
+      <tr class="tot">
+        <td>TOTAL NO IMPONIBLE</td>
+        <td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td>
+        <td>TOTAL DESCUENTOS</td>
+        <td style="text-align:right">$${d.totalDescuentos.toLocaleString("es-CL")}</td>
+      </tr>
     </table>
     <div class="totbar">
       <span>TOTAL HABERES: <strong>$${d.totalHaberes.toLocaleString("es-CL")}</strong></span>
@@ -5812,8 +5875,42 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>
                         Vista Previa — {liqPreview.nombre}
                       </div>
-                      <div style={{ color:"#9A8A6A", fontSize:12 }}>
-                        {mesNombre(liqPreview.mes)} {liqPreview.anio} · {liqPreview.diasTrab} días trabajados · {liqPreview.horasExtra}h extra
+                      <div style={{ color:"#9A8A6A", fontSize:12, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                        <span>{mesNombre(liqPreview.mes)} {liqPreview.anio}</span>
+                        <span>·</span>
+                        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+                          <span>Días:</span>
+                          <input type="number" min="0" max="30"
+                            value={liqDiasManual !== null ? liqDiasManual : (liqPreview.diasTrabFinal ?? liqPreview.diasTrab)}
+                            onChange={e => {
+                              const v = Math.min(30, Math.max(0, Number(e.target.value)));
+                              setLiqDiasManual(v);
+                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
+                              if (t2) {
+                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, v);
+                                setLiqPreview(d2);
+                              }
+                            }}
+                            style={{ width:46, padding:"1px 4px", background:"rgba(201,168,76,0.15)",
+                              border:"1px solid #C9A84C", borderRadius:4, color:"#C9A84C",
+                              fontSize:12, textAlign:"center" }}
+                          />
+                          <span>/30</span>
+                          {liqDiasManual !== null && (
+                            <button onClick={() => {
+                              setLiqDiasManual(null);
+                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
+                              if (t2) {
+                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, null);
+                                setLiqPreview(d2);
+                              }
+                            }} style={{ fontSize:10, padding:"1px 5px", background:"transparent",
+                              border:"1px solid #9A8A6A", color:"#9A8A6A", borderRadius:3, cursor:"pointer" }}>
+                              ↩ Auto
+                            </button>
+                          )}
+                        </span>
+                        <span>· {liqPreview.horasExtra}h extra</span>
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
