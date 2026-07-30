@@ -2414,7 +2414,9 @@ export default function App() {
     });
     setRegistros(nuevosRegistros);
     setMotivoSobretiempo("");
-    setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación del administrador.` });
+    setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación.` });
+    // Limpiar mensaje después de 4 segundos para despejar la pantalla
+    setTimeout(() => setMarcaMsg({ tipo:"", txt:"" }), 4000);
   }
 
   // ── CONFIRMAR TURNO NOCTURNO (contingencia o no) ────
