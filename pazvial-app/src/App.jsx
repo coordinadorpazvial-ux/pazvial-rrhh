@@ -418,10 +418,13 @@ function getRemuneracionVigente(ficha, mes, anio) {
     }
   }
 
+  const colacionResult = Math.round(totalColacion / diasContados);
+  const movilizacionResult = Math.round(totalMovilizacion / diasContados);
   return {
     sueldoPactado: Math.round(totalSueldo / diasContados),
-    colacion:      Math.round(totalColacion / diasContados),
-    movilizacion:  Math.round(totalMovilizacion / diasContados),
+    // Si el historial no tiene colación registrada, usar la ficha directa
+    colacion:      colacionResult > 0 ? colacionResult : fallback.colacion,
+    movilizacion:  movilizacionResult > 0 ? movilizacionResult : fallback.movilizacion,
     gratificacion: ultimaGratif,
   };
 }
@@ -519,7 +522,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
 
   // ── Valor hora extra (método DT 42h sobre sueldo proporcional) ──
   const divisorHora = jornadaSem * 4; // 168 para 42h
-  const valorHoraOrd = sueldoProporcional > 0 ? (sueldoProporcional / diasBase * 28) / divisorHora : 0;
+  const valorHoraOrd = sueldoBase > 0 ? (sueldoBase / diasBase * 28) / divisorHora : 0; // sobre sueldo BASE completo
   const valorHoraExtra = valorHoraOrd * (P.recargHE || 1.5);
 
   // ── HE aprobadas ─────────────────────────────────────────
