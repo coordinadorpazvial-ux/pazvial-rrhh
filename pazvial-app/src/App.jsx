@@ -382,9 +382,9 @@ function getRemuneracionVigente(ficha, mes, anio) {
     if (dDesde > dHasta) continue;
 
     const dias = Math.round((toMs(dHasta) - toMs(dDesde)) / 86400000) + 1;
-    totalSueldo     += (Number(h.sueldo)||0) * dias;
-    totalColacion   += (Number(h.colacion)||0) * dias;
-    totalMovilizacion += (Number(h.movilizacion)||0) * dias;
+    totalSueldo       += (Number(h.sueldo)||0) * dias;
+    totalColacion     += (h.colacion !== undefined ? Number(h.colacion) : fallback.colacion) * dias;
+    totalMovilizacion += (h.movilizacion !== undefined ? Number(h.movilizacion) : fallback.movilizacion) * dias;
     diasContados    += dias;
     ultimaGratif     = h.gratificacion !== undefined ? h.gratificacion : true;
   }
@@ -410,8 +410,9 @@ function getRemuneracionVigente(ficha, mes, anio) {
     if (ultimo) {
       return {
         sueldoPactado: Number(ultimo.sueldo)||0,
-        colacion:      Number(ultimo.colacion)||0,
-        movilizacion:  Number(ultimo.movilizacion)||0,
+        // Usar colación/movilización del historial; si no tiene, usar el fallback de la ficha
+        colacion:      ultimo.colacion !== undefined ? Number(ultimo.colacion) : fallback.colacion,
+        movilizacion:  ultimo.movilizacion !== undefined ? Number(ultimo.movilizacion) : fallback.movilizacion,
         gratificacion: ultimo.gratificacion !== undefined ? ultimo.gratificacion : true,
       };
     }
