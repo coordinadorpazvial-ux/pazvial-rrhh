@@ -2140,6 +2140,7 @@ export default function App() {
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
   const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy}
   const [modalSobretiempo, setModalSobretiempo] = useState(null); // {hora, fecha, regHoy, fin}
+  const [motivoSobretiempo, setMotivoSobretiempo] = useState("");
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
 
   // ── Liquidaciones ──────────────────────────────────────
@@ -2412,8 +2413,8 @@ export default function App() {
       };
     });
     setRegistros(nuevosRegistros);
-    setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación del administrador.` });
     setMotivoSobretiempo("");
+    setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación del administrador.` });
   }
 
   // ── CONFIRMAR TURNO NOCTURNO (contingencia o no) ────
@@ -2574,7 +2575,7 @@ export default function App() {
       if (tieneHESalidaS2) {
         // Pedir motivo antes de registrar
         setMarcaConfirm(null);
-        setModalSobretiempo({ hora, fecha, regHoy });
+        setModalSobretiempo({ hora, fecha, regHoy }); setMotivoSobretiempo("");
         return;
       }
       nuevosRegistros = registros.map(r => {
@@ -4156,44 +4157,37 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       Tu salida a las <strong style={{color:"#FFD700"}}>{modalSobretiempo.hora}</strong> supera
                       el horario normal.<br/>Por favor indica el motivo del sobretiempo:
                     </div>
-                    {(()=>{
-                      const [motivo, setMotivo] = React.useState("");
-                      return (
-                        <>
-                          <textarea
-                            value={motivo}
-                            onChange={e=>setMotivo(e.target.value)}
-                            placeholder="Ej: Término de faena pendiente, espera de materiales..."
-                            maxLength={200}
-                            style={{ width:"100%", minHeight:80, background:"rgba(0,0,0,0.3)",
-                              border:"1px solid rgba(230,126,34,0.5)", borderRadius:8,
-                              color:"#fff", padding:"10px 12px", fontSize:13,
-                              resize:"vertical", boxSizing:"border-box" }}
-                          />
-                          <div style={{ color:"#9A8A6A", fontSize:11, marginBottom:14, textAlign:"right" }}>
-                            {motivo.length}/200
-                          </div>
-                          <div style={{ display:"flex", gap:10 }}>
-                            <button
-                              onClick={()=>{ setModalSobretiempo(null); setMarcaMsg({tipo:"err",txt:"Marca cancelada. Debes indicar el motivo del sobretiempo."}); }}
-                              style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
-                                border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
-                                padding:"12px 0", cursor:"pointer", fontSize:14 }}>
-                              Cancelar
-                            </button>
-                            <button
-                              disabled={!motivo.trim()}
-                              onClick={()=>confirmarSobretiempo(motivo)}
-                              style={{ flex:2, background: motivo.trim()?"linear-gradient(135deg,#e67e22,#d35400)":"rgba(100,80,50,0.4)",
-                                color:"#fff", border:"none", borderRadius:10,
-                                padding:"12px 0", cursor: motivo.trim()?"pointer":"not-allowed",
-                                fontSize:14, fontWeight:"bold" }}>
-                              ✓ Registrar salida
-                            </button>
-                          </div>
-                        </>
-                      );
-                    })()}
+                    <textarea
+                      value={motivoSobretiempo}
+                      onChange={e=>setMotivoSobretiempo(e.target.value)}
+                      placeholder="Ej: Término de faena pendiente, espera de materiales..."
+                      maxLength={200}
+                      style={{ width:"100%", minHeight:80, background:"rgba(0,0,0,0.3)",
+                        border:"1px solid rgba(230,126,34,0.5)", borderRadius:8,
+                        color:"#fff", padding:"10px 12px", fontSize:13,
+                        resize:"vertical", boxSizing:"border-box" }}
+                    />
+                    <div style={{ color:"#9A8A6A", fontSize:11, marginBottom:14, textAlign:"right" }}>
+                      {motivoSobretiempo.length}/200
+                    </div>
+                    <div style={{ display:"flex", gap:10 }}>
+                      <button
+                        onClick={()=>{ setModalSobretiempo(null); setMotivoSobretiempo(""); setMarcaMsg({tipo:"err",txt:"Marca cancelada."}); }}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
+                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>
+                        Cancelar
+                      </button>
+                      <button
+                        disabled={!motivoSobretiempo.trim()}
+                        onClick={()=>confirmarSobretiempo(motivoSobretiempo)}
+                        style={{ flex:2, background: motivoSobretiempo.trim()?"linear-gradient(135deg,#e67e22,#d35400)":"rgba(100,80,50,0.4)",
+                          color:"#fff", border:"none", borderRadius:10,
+                          padding:"12px 0", cursor: motivoSobretiempo.trim()?"pointer":"not-allowed",
+                          fontSize:14, fontWeight:"bold" }}>
+                        ✓ Registrar salida
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
