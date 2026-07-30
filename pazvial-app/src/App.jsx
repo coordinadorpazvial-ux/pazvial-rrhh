@@ -400,6 +400,23 @@ function getRemuneracionVigente(ficha, mes, anio) {
     diasContados      += diasSinHistorial;
   }
 
+  // Si solo hay un tramo vigente (no hubo cambio dentro del período),
+  // usar ese sueldo directamente sin prorratear
+  if (historial.filter(h => h.desde >= pDesde && h.desde <= pHasta).length <= 1
+      && diasSinHistorial === 0) {
+    // Todo el período con el mismo sueldo — retornar sin prorrateo
+    const ultimo = [...historial].filter(h => h.desde <= pHasta)
+      .sort((a,b) => b.desde.localeCompare(a.desde))[0];
+    if (ultimo) {
+      return {
+        sueldoPactado: Number(ultimo.sueldo)||0,
+        colacion:      Number(ultimo.colacion)||0,
+        movilizacion:  Number(ultimo.movilizacion)||0,
+        gratificacion: ultimo.gratificacion !== undefined ? ultimo.gratificacion : true,
+      };
+    }
+  }
+
   return {
     sueldoPactado: Math.round(totalSueldo / diasContados),
     colacion:      Math.round(totalColacion / diasContados),
@@ -2952,16 +2969,21 @@ export default function App() {
         <td>TOTAL DESC. LEGALES</td>
         <td style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td>
       </tr>
-      <tr>
+      ${(d.colacion||0)>0?`<tr>
         <td>Asig. Colación</td>
         <td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td>
         ${(d.anticipo||0)>0?`<td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
-      </tr>
-      <tr>
+      </tr>`:""}
+      ${(d.movilizacion||0)>0?`<tr>
         <td>Asig. Movilización</td>
         <td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>
+        ${(d.colacion||0)===0&&(d.anticipo||0)>0?`<td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
+      </tr>`:""}
+      ${(d.colacion||0)===0&&(d.movilizacion||0)===0&&(d.anticipo||0)>0?`<tr>
         <td></td><td></td>
-      </tr>
+        <td style="color:#c0392b">Anticipo de Remuneración</td>
+        <td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>
+      </tr>`:""}
       ${d.viaticosContingencia>0?`
       <tr>
         <td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td>
@@ -5955,8 +5977,8 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         ...(liqPreview.valorHHExtra>0?[["Horas Extra ("+liqPreview.horasExtra+"h × $"+(liqPreview.valorHoraExtra||0).toLocaleString("es-CL")+"/h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
-                        ["Asig. Colación", liqPreview.colacion],
-                        ["Asig. Movilización", liqPreview.movilizacion],
+                        ...((liqPreview.colacion||0)>0?[["Asig. Colación", liqPreview.colacion]]:[]),
+                        ...((liqPreview.movilizacion||0)>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
                         ...((liqPreview.viaticosOperacional||0)>0?[[`⚙️ Viático Operacional (${liqPreview.horasExtraExcedentes}h exc.)`, liqPreview.viaticosOperacional]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
