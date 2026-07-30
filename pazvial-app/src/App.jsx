@@ -445,8 +445,9 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
   const sueldoBase = remVigente.sueldoPactado || 0;
-  const colacion = remVigente.colacion || 0;
-  const movilizacion = remVigente.movilizacion || 0;
+  // Colación y movilización siempre desde la ficha directa (no dependen del historial)
+  const colacion = Number(ficha.colacion) || 0;
+  const movilizacion = Number(ficha.movilizacion) || 0;
   const tipoContrato = ficha.tipoContrato || "indefinido"; // "indefinido" | "plazoFijo"
   const sistSalud = (ficha.sistSalud || "FONASA").toUpperCase();
   const planIsapreUF = Number(ficha.planIsapreUF) || 0;
