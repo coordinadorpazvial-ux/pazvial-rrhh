@@ -419,7 +419,7 @@ function periodoLiquidacion(mes, anio) {
   return { desde, hasta };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[], diasManualOverride=null) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[], diasManualOverride=null, immOverride=null) {
   const P = params || PARAMS_DEFAULT;
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
@@ -525,28 +525,33 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
       totalHorasExtra += h.extra;
     }
   });
-  const horasExtra = +totalHorasExtra.toFixed(2);
-  const valorHHExtra = Math.round(horasExtra * valorHoraExtra);
+  // ── Tope legal 48 HE por período ────────────────────────
+  const TOPE_HE_LEGAL = 48;
+  const horasExtraTotal = +totalHorasExtra.toFixed(2);
+  const horasExtraImponibles = Math.min(horasExtraTotal, TOPE_HE_LEGAL);
+  const horasExtraExcedentes = Math.max(0, +(horasExtraTotal - TOPE_HE_LEGAL).toFixed(2));
+  const horasExtra = horasExtraImponibles; // para mostrar en liquidación
 
-  // ── Gratificación (art. 50 proporcional): 25% sueldo mensual, tope 4.75 IMM / 12 ──
-  // El empleador paga mensualmente como anticipo de gratificación legal
-  // Gratificación legal art. 50: 25% sueldo, tope 4.75 IMM/12
-  // Se paga siempre que el trabajador tenga sueldo (es derecho legal irrenunciable)
-  const topeGratifMensual = Math.round((P.topeGratifIMM||4.75) * IMM / 12);
-  const gratif = sueldoBase > 0
-    ? Math.min(Math.round(sueldoBase * 0.25), topeGratifMensual)
+  // HE imponibles (hasta 48h)
+  const valorHHExtra = Math.round(horasExtraImponibles * valorHoraExtra);
+  // Viático operacional: HE sobre 48h × valor HE (no imponible)
+  const viaticosOperacional = Math.round(horasExtraExcedentes * valorHoraExtra);
+
+  // ── Gratificación legal: 25% (sueldo proporcional + HE imponibles), tope 4.75 IMM ──
+  const IMMliq = immOverride !== null ? Number(immOverride) : (P.IMM || 510000);
+  const topeGratifAnual = Math.round((P.topeGratifIMM || 4.75) * IMMliq);
+  const topeGratifMensual = Math.round(topeGratifAnual / 12);
+  const baseGratif = sueldoProporcional + valorHHExtra;
+  const gratifProp = baseGratif > 0
+    ? Math.min(Math.round(baseGratif * 0.25), topeGratifMensual)
     : 0;
 
-  // ── Haberes imponibles ───────────────────────────────────
-  // Gratificación sobre sueldo proporcional
-  const gratifProp = sueldoProporcional > 0
-    ? Math.min(Math.round(sueldoProporcional * 0.25), topeGratifMensual)
-    : 0;
+  // ── Haberes imponibles ────────────────────────────────────
   const totalImponible = sueldoProporcional + valorHHExtra + gratifProp;
 
-  // ── Haberes no imponibles ────────────────────────────────
+  // ── Haberes no imponibles ─────────────────────────────────
   const viaticosContingencia = totalViaticosContingencia;
-  const totalNoImponible = colacion + movilizacion + viaticosContingencia;
+  const totalNoImponible = colacion + movilizacion + viaticosContingencia + viaticosOperacional;
   const totalHaberes = totalImponible + totalNoImponible;
 
   // ── Bases cotizables con tope ────────────────────────────
@@ -593,8 +598,10 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, soli
     valorHoraOrd: +valorHoraOrd.toFixed(0),
     valorHoraExtra: +valorHoraExtra.toFixed(0),
     sueldoBase, sueldoProporcional, diasTrabFinal, valorHHExtra, gratif: gratifProp,
+    horasExtraTotal, horasExtraImponibles, horasExtraExcedentes,
+    viaticosOperacional,
     totalImponible,
-    colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
+    colacion, movilizacion, viaticosContingencia, viaticosOperacional, totalNoImponible, totalHaberes,
     baseCotizableAFP, baseCotizableAFC,
     afpOblig, comisionAFPmonto, prevision,
     salud_monto: salud, segCesantia,
@@ -2129,6 +2136,7 @@ export default function App() {
   const [liqAnio,    setLiqAnio]    = useState(new Date().getFullYear());
   const [liqPreview, setLiqPreview] = useState(null);
   const [liqDiasManual, setLiqDiasManual] = useState(null); // null = usar calculado
+  const [liqIMM, setLiqIMM] = useState(null); // null = usar el de params
   const [liqMsg,     setLiqMsg]     = useState({tipo:"",txt:""});
 
   // ── UI firma trabajador ────────────────────────────────
@@ -2749,7 +2757,7 @@ export default function App() {
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual, liqIMM);
     setLiqPreview(datos);
   }
 
@@ -5887,7 +5895,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                               setLiqDiasManual(v);
                               const t2 = trabajadores.find(x => x.id === liqPreview.tId);
                               if (t2) {
-                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, v);
+                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, v, liqIMM);
                                 setLiqPreview(d2);
                               }
                             }}
@@ -5910,7 +5918,27 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                             </button>
                           )}
                         </span>
-                        <span>· {liqPreview.horasExtra}h extra</span>
+                        <span>· {liqPreview.horasExtraImponibles||liqPreview.horasExtra}h extra
+                          {(liqPreview.horasExtraExcedentes||0)>0 && <span style={{color:"#e67e22"}}> (+{liqPreview.horasExtraExcedentes}h viático operacional)</span>}
+                        </span>
+                        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+                          <span style={{color:"#9A8A6A"}}>· IMM $</span>
+                          <input type="number"
+                            value={liqIMM !== null ? liqIMM : (params?.IMM || 510000)}
+                            onChange={e => {
+                              const v = Math.max(0, Number(e.target.value));
+                              setLiqIMM(v);
+                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
+                              if (t2) {
+                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual, v);
+                                setLiqPreview(d2);
+                              }
+                            }}
+                            style={{ width:80, padding:"1px 4px", background:"rgba(201,168,76,0.15)",
+                              border:"1px solid #C9A84C", borderRadius:4, color:"#C9A84C",
+                              fontSize:12, textAlign:"center" }}
+                          />
+                        </span>
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
@@ -5930,6 +5958,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         ["Asig. Colación", liqPreview.colacion],
                         ["Asig. Movilización", liqPreview.movilizacion],
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
+                        ...((liqPreview.viaticosOperacional||0)>0?[[`⚙️ Viático Operacional (${liqPreview.horasExtraExcedentes}h exc.)`, liqPreview.viaticosOperacional]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
