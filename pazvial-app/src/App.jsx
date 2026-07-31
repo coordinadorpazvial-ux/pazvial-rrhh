@@ -4619,7 +4619,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                             <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16 }}>
                               Liquidación {mesNombre(liq.mes)} {liq.anio}
                             </div>
-                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${d.alcanceLiquido.toLocaleString("es-CL")}</strong></div>
+                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${(d.alcanceLiquido||0).toLocaleString("es-CL")}</strong></div>
                           </div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
@@ -4633,21 +4633,21 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${d.sueldoBase.toLocaleString("es-CL")}</span></div>
-                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${d.valorHHExtra.toLocaleString("es-CL")}</span></div>}
-                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${d.gratif.toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${d.totalImponible.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${d.colacion.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${d.movilizacion.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${(d.sueldoBase||0).toLocaleString("es-CL")}</span></div>
+                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${(d.valorHHExtra||0).toLocaleString("es-CL")}</span></div>}
+                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${(d.gratif||0).toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${(d.totalImponible||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${(d.colacion||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${(d.movilizacion||0).toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#C9A84C" }}><span>TOTAL HABERES</span><span>${d.totalHaberes.toLocaleString("es-CL")}</span></div>
                           </div>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${d.prevision_monto.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${d.salud_monto.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${d.totalDescLegales.toLocaleString("es-CL")}</span></div>
-                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${d.anticipo.toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${d.totalDescuentos.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${(d.prevision_monto||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${(d.salud_monto||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${(d.totalDescLegales||0).toLocaleString("es-CL")}</span></div>
+                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${(d.anticipo||0).toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${(d.totalDescuentos||0).toLocaleString("es-CL")}</span></div>
                           </div>
                         </div>
                         {/* Firma sello */}
