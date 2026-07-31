@@ -2853,7 +2853,7 @@ export default function App() {
   }
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
-    const d = liq.datos;
+    const d = liq.datos || {};
     const firmaEmpleador = `
       <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:11px;color:#1a1a2e;">
         ✅ <strong>Firmado Electrónicamente por María Paz Espinoza</strong><br/>
@@ -4142,7 +4142,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
         <div style={{ padding:"0 8px 40px" }}>
 
           {/* ── BANNER: LIQUIDACIÓN DISPONIBLE ─────────────── */}
-          {liquidaciones.some(l => l.tId===trabActivo.id && l.estado==="enviada" && !l.firmadaPor) && (
+          {liquidaciones.some(l => Number(l.tId)===Number(trabActivo.id) && l.estado==="enviada" && !l.firmadaPor) && (
             <div onClick={()=>setTabTrab("liquidacs")} style={{ margin:"12px 0 8px", padding:"14px 16px",
               background:"linear-gradient(135deg,rgba(39,174,96,0.2),rgba(39,174,96,0.08))",
               border:"2px solid #27ae60", borderRadius:12, cursor:"pointer",
@@ -4605,11 +4605,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           {tabTrab==="liquidacs" && (
             <div style={{ marginTop:16 }}>
               {firmaMsg.txt && <div style={{ ...firmaMsg.tipo==="err"?S.err:S.ok, marginBottom:12 }}>{firmaMsg.txt}</div>}
-              {liquidaciones.filter(l=>l.tId===trabActivo.id).length===0
+              {liquidaciones.filter(l=>Number(l.tId)===Number(trabActivo.id)).length===0
                 ? <div style={{ ...S.card, textAlign:"center", color:"#9A8A6A", padding:40 }}>
                     No tienes liquidaciones disponibles aún.
                   </div>
-                : [...liquidaciones.filter(l=>l.tId===trabActivo.id)].reverse().map(liq=>{
+                : [...liquidaciones.filter(l=>Number(l.tId)===Number(trabActivo.id))].reverse().map(liq=>{
                     const d = liq.datos || {};
                     return (
                       <div key={liq.id} style={{ ...S.card, border: liq.estado==="firmada"?"1px solid #27ae60":"1px solid rgba(255,215,0,0.3)" }}>
@@ -6044,7 +6044,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <thead><tr>{["Trabajador","Período","Total Haberes","Descuentos","Alcance Líquido","Estado","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                       <tbody>
                         {[...liquidaciones].reverse().map(liq=>{
-                          const d=liq.datos;
+                          const d=liq.datos||{};
                           const t=trabajadores.find(x=>x.id===liq.tId);
                           return(
                             <tr key={liq.id}>
