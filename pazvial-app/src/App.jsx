@@ -2575,7 +2575,6 @@ export default function App() {
       const finS2 = esViernes(fecha) ? 840 : 1080;
       const tieneHESalidaS2 = !esEspecial(fecha) && toMinS2(hora) > finS2;
       if (tieneHESalidaS2) {
-        // Pedir motivo antes de registrar
         setMarcaGuardando(false);
         setMarcaConfirm(null);
         setModalSobretiempo({ hora, fecha, regHoy }); setMotivoSobretiempo("");
@@ -4144,27 +4143,16 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
           {/* ── BANNER: LIQUIDACIÓN DISPONIBLE ─────────────── */}
           {liquidaciones.some(l => l.tId===trabActivo.id && l.estado==="enviada" && !l.firmadaPor) && (
-            <div
-              onClick={()=>setTabTrab("liquidacs")}
-              style={{
-                margin:"12px 0 8px",
-                padding:"14px 16px",
-                background:"linear-gradient(135deg,rgba(39,174,96,0.2),rgba(39,174,96,0.08))",
-                border:"2px solid #27ae60",
-                borderRadius:12,
-                cursor:"pointer",
-                display:"flex",
-                alignItems:"center",
-                gap:12,
-              }}>
+            <div onClick={()=>setTabTrab("liquidacs")} style={{ margin:"12px 0 8px", padding:"14px 16px",
+              background:"linear-gradient(135deg,rgba(39,174,96,0.2),rgba(39,174,96,0.08))",
+              border:"2px solid #27ae60", borderRadius:12, cursor:"pointer",
+              display:"flex", alignItems:"center", gap:12 }}>
               <div style={{ fontSize:28 }}>💰</div>
               <div style={{ flex:1 }}>
                 <div style={{ color:"#27ae60", fontWeight:"bold", fontSize:14, marginBottom:2 }}>
                   Liquidación de sueldo disponible
                 </div>
-                <div style={{ color:"#9A8A6A", fontSize:12 }}>
-                  Toca aquí para revisar y firmar tu liquidación
-                </div>
+                <div style={{ color:"#9A8A6A", fontSize:12 }}>Toca aquí para revisar y firmar</div>
               </div>
               <div style={{ color:"#27ae60", fontSize:20 }}>›</div>
             </div>
@@ -6071,7 +6059,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                 </span>
                                 {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{liq.firmadaFecha} {liq.firmadaHora}</div>}
                               </td>
-                              <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={{...S.btnB, border:"1px solid #C9A84C", color:"#C9A84C"}}>📄 Descargar PDF</button>🖨 PDF</button></td>
+                              <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={{...S.btnB,border:"1px solid #C9A84C",color:"#C9A84C"}}>📄 PDF</button></td>
                             </tr>
                           );
                         })}
