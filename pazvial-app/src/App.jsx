@@ -2998,6 +2998,12 @@ export default function App() {
         <td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td>
         <td></td><td></td>
       </tr>`:""}
+      ${(d.viaticosOperacional||0)>0?`
+      <tr>
+        <td style="color:#3498db;font-weight:bold">⚙️ Viático Operacional</td>
+        <td style="text-align:right;color:#3498db;font-weight:bold">$${(d.viaticosOperacional||0).toLocaleString("es-CL")}</td>
+        <td></td><td></td>
+      </tr>`:""}
       <tr class="tot">
         <td>TOTAL NO IMPONIBLE</td>
         <td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td>
