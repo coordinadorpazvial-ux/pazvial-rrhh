@@ -2139,6 +2139,7 @@ export default function App() {
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
   const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy}
+  const [modalSegundoTurno, setModalSegundoTurno] = useState(null);
   const [modalSobretiempo, setModalSobretiempo] = useState(null); // {hora, fecha, regHoy, fin}
   const [motivoSobretiempo, setMotivoSobretiempo] = useState("");
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
@@ -2397,6 +2398,21 @@ export default function App() {
   // ACCIONES
   // ═══════════════════════════════════════════════════════
 
+  function confirmarSegundoTurno() {
+    if (!modalSegundoTurno) return;
+    const { fechaHoy, hora, idReal } = modalSegundoTurno;
+    setModalSegundoTurno(null);
+    setRegistros(p => [...p, {
+      id: nowId(), tId: idReal, fecha: fechaHoy,
+      entrada: hora, salida: null, estado: "pendiente",
+      estadoEntrada: "pendiente", estadoSalida: null,
+      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+      entradaAnticipada: false, segundoTurno: true,
+    }]);
+    setMarcaMsg({ tipo:"ok", txt:`✅ Segundo turno iniciado a las ${hora}. Pendiente de aprobación.` });
+    setTimeout(() => setMarcaMsg({ tipo:"", txt:"" }), 4000);
+  }
+
   // ── CONFIRMAR SOBRETIEMPO (con motivo) ──────────────
   function confirmarSobretiempo(motivo) {
     if (!modalSobretiempo) return;
@@ -2501,14 +2517,23 @@ export default function App() {
           x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() && x.activo
         )?.id;
 
-    const regHoy = registros.find(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
+    const regsHoyAll = registros.filter(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
+    const regHoySinSalida = regsHoyAll.find(r => !r.salida);
+    const regHoyCompleto  = regsHoyAll.find(r => r.salida && !r.segundoTurno);
+    const regHoy = regHoySinSalida || regsHoyAll[regsHoyAll.length-1] || null;
 
     // Validaciones previas
     if (tipoMarca === "entrada") {
-      if (regHoy) { setMarcaMsg({ tipo:"err", txt:"Ya tiene registro de entrada hoy." }); return; }
+      if (regHoySinSalida) {
+        setMarcaMsg({ tipo:"err", txt:"Ya tiene una entrada sin salida registrada hoy." }); return;
+      }
+      if (regHoyCompleto) {
+        setModalSegundoTurno({ fechaHoy, hora, idReal: idReal ?? trabActivo.id });
+        return;
+      }
     } else {
-      if (!regHoy)       { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
-      if (regHoy.salida) { setMarcaMsg({ tipo:"err", txt:"Ya tiene salida registrada hoy." }); return; }
+      const regParaSalida = regsHoyAll.find(r => !r.salida);
+      if (!regParaSalida) { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
     }
     // Mostrar modal de confirmación con hora actual
     setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaHoy });
@@ -4217,6 +4242,62 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                 </div>
               )}
 
+              {/* Modal de segundo turno */}
+              {modalSegundoTurno && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#0d1a2d,#0d2d1a)", border:"3px solid #27ae60",
+                    borderRadius:20, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:8 }}>🔄</div>
+                    <div style={{ color:"#27ae60", fontSize:18, fontWeight:"bold", marginBottom:8 }}>Segundo turno</div>
+                    <div style={{ color:"#d0e0ff", fontSize:13, marginBottom:6 }}>Ya tienes una jornada completa hoy.</div>
+                    <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:24 }}>
+                      ¿Estás iniciando un segundo turno?<br/>Quedará pendiente de aprobación del administrador.
+                    </div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <button onClick={()=>setModalSegundoTurno(null)}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
+                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>✗ No</button>
+                      <button onClick={confirmarSegundoTurno}
+                        style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
+                          color:"#fff", border:"none", borderRadius:10,
+                          padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:"bold" }}>
+                        ✓ Sí, segundo turno
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de segundo turno */}
+              {modalSegundoTurno && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#0d1a2d,#0d2d1a)", border:"3px solid #27ae60",
+                    borderRadius:20, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:8 }}>🔄</div>
+                    <div style={{ color:"#27ae60", fontSize:18, fontWeight:"bold", marginBottom:8 }}>Segundo turno</div>
+                    <div style={{ color:"#d0e0ff", fontSize:13, marginBottom:6 }}>Ya tienes una jornada completa hoy.</div>
+                    <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:24 }}>
+                      ¿Estás iniciando un segundo turno?<br/>Quedará pendiente de aprobación del administrador.
+                    </div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <button onClick={()=>setModalSegundoTurno(null)}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
+                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>✗ No</button>
+                      <button onClick={confirmarSegundoTurno}
+                        style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
+                          color:"#fff", border:"none", borderRadius:10,
+                          padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:"bold" }}>
+                        ✓ Sí, segundo turno
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Modal de contingencia nocturna */}
               {modalContingencia && (
                 <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
@@ -4370,7 +4451,15 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
               {/* Estado del registro de hoy */}
               {(()=>{
-                const regHoy = registros.find(r=>r.tId===trabActivo.id&&r.fecha===hoy());
+                const regsHoy = registros.filter(r=>r.tId===trabActivo.id&&r.fecha===hoy());
+                const regSegundo = regsHoy.find(r=>r.segundoTurno&&!r.salida);
+                const regHoy = regsHoy.find(r=>!r.segundoTurno&&!r.salida) || regsHoy.find(r=>!r.segundoTurno) || null;
+                if(regSegundo) return (
+                  <div style={{ ...S.card, background:"rgba(39,174,96,0.1)", border:"1px solid rgba(39,174,96,0.3)", fontSize:13 }}>
+                    <div style={{ color:"#27ae60", fontWeight:"bold", marginBottom:4 }}>🔄 Segundo turno activo</div>
+                    <div style={{ color:"#9A8A6A" }}>Entrada: <strong style={{color:"#fff"}}>{regSegundo.entrada}</strong> — Recuerda marcar tu salida.</div>
+                  </div>
+                );
                 if(!regHoy) return (
                   <div style={{ ...S.card, background:"rgba(255,152,0,0.1)",
                     border:"1px solid rgba(255,152,0,0.3)", textAlign:"center", fontSize:13, color:"#ffddaa" }}>
