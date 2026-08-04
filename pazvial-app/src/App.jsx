@@ -2567,7 +2567,9 @@ export default function App() {
       return;
     }
 
-    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
+    // Buscar el registro sin salida (puede ser segundo turno u otro turno activo)
+    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha && !r.salida)
+      || registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
     const [hh] = hora.split(":").map(Number);
     const esAnticipada = hh < 8;
 
