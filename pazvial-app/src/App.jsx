@@ -2307,11 +2307,17 @@ export default function App() {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const blob = new Blob([html],{type:"text/html;charset=utf-8"});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href=url; a.target="_blank"; a.rel="noopener"; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),10000);
+    const _b2 = new Blob([html],{type:"text/html;charset=utf-8"});
+    const _u2 = URL.createObjectURL(_b2);
+    const _f2 = document.createElement("iframe");
+    _f2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+    _f2.src = _u2;
+    _f2.onload = () => {
+      _f2.contentWindow.focus();
+      _f2.contentWindow.print();
+      setTimeout(() => { _f2.remove(); URL.revokeObjectURL(_u2); }, 3000);
+    };
+    document.body.appendChild(_f2);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
