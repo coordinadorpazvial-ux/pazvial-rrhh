@@ -28,14 +28,30 @@ async function guardarEnFirebase(datos, intentos = 0) {
     if (snap.exists()) {
       const remoto = snap.data();
 
-      // Merge de registros: conservar remotos que no estén en local,
-      // pero respetar los que fueron eliminados explícitamente en esta sesión
-      const idsLocales = new Set((datos.registros || []).map(r => r.id));
+      // Merge de registros: unión bidireccional
+      // Local gana si tiene datos más completos (salida, estado aprobado)
+      // Remoto agrega registros que no existen en local (creados por otro dispositivo)
       const idsEliminados = datos._eliminados || new Set();
-      const registrosRemotos = (remoto.registros || []).filter(r =>
-        !idsLocales.has(r.id) && !idsEliminados.has(r.id)
-      );
-      datos = { ...datos, registros: [...datos.registros, ...registrosRemotos] };
+      const mapaLocal = new Map((datos.registros || []).map(r => [r.id, r]));
+      const mapaRemoto = new Map((remoto.registros || []).map(r => [r.id, r]));
+
+      // Agregar remotos que no están en local (nuevas marcas de otros dispositivos)
+      for (const [id, rRemoto] of mapaRemoto) {
+        if (!mapaLocal.has(id) && !idsEliminados.has(id)) {
+          mapaLocal.set(id, rRemoto);
+        } else if (mapaLocal.has(id)) {
+          // Mismo registro: ganar el que tiene más información
+          const rLocal = mapaLocal.get(id);
+          // Si local no tiene salida pero remoto sí, usar remoto
+          // Si local tiene salida aprobada/pendiente, usar local
+          const localMasCompleto = rLocal.salida || rLocal.estadoEntrada === 'aprobado'
+            || rLocal.estadoSalida === 'aprobado' || rLocal.segundoTurno;
+          if (!localMasCompleto && rRemoto.salida) {
+            mapaLocal.set(id, rRemoto);
+          }
+        }
+      }
+      datos = { ...datos, registros: Array.from(mapaLocal.values()) };
 
       // Merge de solicitudes
       const idsSolicLocal = new Set((datos.solicitudes || []).map(s => s.id));
@@ -2261,7 +2277,22 @@ export default function App() {
       if (tieneReales) {
         cargandoDesdeFirebase.current = true;
         setTrabajadores(tFirebase);
-        setRegistros(data.registros || []);
+        // Merge de registros: preservar marcas locales que aún no llegaron a Firebase
+        setRegistros(prev => {
+          const fbRegs = data.registros || [];
+          const idsFB = new Set(fbRegs.map(r => r.id));
+          // Registros locales que no están en Firebase (marcas recientes no guardadas aún)
+          const localesNuevos = prev.filter(r => !idsFB.has(r.id));
+          // Para registros en ambos: si local tiene salida y remoto no, conservar local
+          const merged = fbRegs.map(rFB => {
+            const rLocal = prev.find(r => r.id === rFB.id);
+            if (!rLocal) return rFB;
+            if (rLocal.salida && !rFB.salida) return rLocal;
+            if ((rLocal.estadoEntrada==='aprobado'||rLocal.estadoSalida==='aprobado') && rFB.estado==='pendiente') return rLocal;
+            return rFB;
+          });
+          return [...merged, ...localesNuevos];
+        });
         setComps(data.compensatorios || []);
         setSolicitudes(data.solicitudes || []);
         setNotifs(data.notificaciones || []);
