@@ -4664,6 +4664,7 @@ export default function App() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -5231,7 +5232,6 @@ export default function App() {
             </div>
           </div>
         )}
-
 
       </div>
     </div>
