@@ -1,115 +1,4 @@
-  function limpiarDatosPrueba() {
-    if (!window.confirm("¿Eliminar todos los datos del trabajador de prueba (PRB01)?")) return;
-    const tIds = new Set(trabajadores.filter(t=>t.esDePrueba).map(t=>t.id));
-    setTrabajadores(p=>p.filter(t=>!t.esDePrueba));
-    setRegistros(p=>p.filter(r=>!tIds.has(r.tId)));
-    setLiquidaciones(p=>p.filter(l=>!tIds.has(Number(l.tId))));
-    setAnticipos(p=>p.filter(a=>!tIds.has(a.tId)));
-    setContingencias(p=>p.filter(c=>c.descripcion!=="Período contingencia de prueba"));
-    alert("🗑 Datos de prueba eliminados.");
-  }  function crearDatosPrueba() {
-    const mesActual = new Date().getMonth();
-    const anioActual = new Date().getFullYear();
-    const { desde: pD, hasta: pH } = periodoLiquidacion(mesActual, anioActual);
-    const tId = 99901;
-
-    const trabPrueba = {
-      id: tId, codigo:"PRB01", activo:true, esDePrueba:true,
-      nombre:"Carlos", apellido:"Prueba", apellidoM:"Test", rut:"11.111.111-1",
-      ficha:{
-        cargo:"Operario Prueba", afp:"Habitat", sistSalud:"FONASA",
-        tipoContrato:"indefinido", sueldoPactado:800000,
-        colacion:3500, movilizacion:3500, gratificacion:true,
-        planIsapreUF:0, apv:0,
-        historialRemuneraciones:[{
-          id: nowId(), desde: pD, sueldo:800000,
-          colacion:3500, movilizacion:3500, gratificacion:true,
-          motivo:"Sueldo inicial prueba", registradoEn: hoy()
-        }]
-      }
-    };
-
-    const diasHabiles = [];
-    let cur = new Date(pD+"T12:00:00");
-    const fin = new Date(pH+"T12:00:00");
-    while (cur <= fin) {
-      if (cur.getDay()!==0 && cur.getDay()!==6) diasHabiles.push(cur.toISOString().slice(0,10));
-      cur.setDate(cur.getDate()+1);
-    }
-
-    const registrosPrueba = diasHabiles.map((f, idx) => {
-      if (idx === 14) return null;
-      const esEntrada = idx === 2;
-      const esSalida  = idx === 4;
-      return {
-        id: nowId()+idx, tId, fecha: f,
-        entrada: esEntrada ? "06:30" : "08:00",
-        salida:  esSalida  ? "20:00" : "18:00",
-        estado: "aprobado",
-        estadoEntrada: esEntrada ? "aprobado" : null,
-        estadoSalida:  esSalida  ? "aprobado" : null,
-        motivoSobretiempo: esSalida ? "Término de faena urgente" : "",
-        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
-        entradaAnticipada: esEntrada,
-        horasExtraAprobadas: esSalida ? 2 : undefined,
-      };
-    }).filter(Boolean);
-
-    if (diasHabiles[9]) {
-      registrosPrueba.push({
-        id: nowId()+10000, tId, fecha: diasHabiles[9],
-        entrada:"21:00", salida:"23:00", estado:"aprobado",
-        estadoEntrada:"aprobado", estadoSalida:null,
-        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
-        entradaAnticipada:false, segundoTurno:true, horasExtraAprobadas:2,
-      });
-    }
-
-    const curFin = new Date(pD+"T12:00:00");
-    while (curFin.getDay()!==6) curFin.setDate(curFin.getDate()+1);
-    registrosPrueba.push({
-      id: nowId()+20000, tId, fecha: curFin.toISOString().slice(0,10),
-      entrada:"08:00", salida:"20:00", estado:"aprobado",
-      estadoEntrada:null, estadoSalida:null,
-      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
-      entradaAnticipada:false, esContingencia:true, horasExtraAprobadas:2,
-    });
-
-    const anticipoPrueba = {
-      id: nowId()+30000, tId, monto:50000,
-      mes:mesActual, anio:anioActual,
-      fecha:diasHabiles[5]||pD, estado:"aprobado",
-      motivo:"Anticipo de prueba",
-    };
-
-    const contPrueba = {
-      id: nowId()+40000, desde: pD, hasta: pH,
-      descripcion:"Período contingencia de prueba",
-    };
-
-    if (trabajadores.find(t=>t.id===tId)) {
-      if (!window.confirm("Ya existe un trabajador de prueba. ¿Deseas reemplazarlo?")) return;
-      setTrabajadores(p=>p.filter(t=>t.id!==tId));
-      setRegistros(p=>p.filter(r=>r.tId!==tId));
-      setLiquidaciones(p=>p.filter(l=>l.tId!==tId));
-      setAnticipos(p=>p.filter(a=>a.tId!==tId));
-    }
-    setTrabajadores(p=>[...p, trabPrueba]);
-    setRegistros(p=>[...p, ...registrosPrueba]);
-    setAnticipos(p=>[...p, anticipoPrueba]);
-    setContingencias(p=>[...p.filter(c=>c.descripcion!=="Período contingencia de prueba"), contPrueba]);
-    alert(
-      "✅ Modo Prueba activado — PRB01\n\n" +
-      "Escenarios:\n" +
-      "• Entrada anticipada día 3 (06:30)\n" +
-      "• Salida tardía día 5 (20:00)\n" +
-      "• Segundo turno día 10 (21:00-23:00)\n" +
-      "• Sábado con contingencia\n" +
-      "• 1 ausencia injustificada (día 15)\n" +
-      "• Anticipo $50.000\n\n" +
-      "Acceso: código PRB01 / RUT 11.111.111-1"
-    );
-  }import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "firebase/firestore";
 
@@ -353,6 +242,16 @@ function nombreCompleto(t) {
 function hoy() { return new Date().toISOString().split("T")[0]; }
 function horaActual() { return new Date().toTimeString().slice(0,5); }
 function nowId() { return Date.now() + Math.random(); }
+
+// Formatea fecha AAAA-MM-DD a DD-MM-AAAA con nombre de día
+function fmtFecha(f, conDia=false) {
+  if (!f) return "—";
+  const [y,m,d] = f.split("-");
+  if (!y || !m || !d) return f;
+  const dias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const nomDia = conDia ? dias[new Date(`${y}-${m}-${d}T12:00:00`).getDay()] + " " : "";
+  return `${nomDia}${d}-${m}-${y}`;
+}
 
 // Tasas AFP 2026
 const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
@@ -902,7 +801,7 @@ function FichaForm({
                           background:idx===0?"rgba(255,215,0,0.07)":"transparent",
                           borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                           <td style={{padding:"7px 9px",fontWeight:idx===0?"bold":"normal",whiteSpace:"nowrap"}}>
-                            {h.desde}
+                            {fmtFecha(h.desde)}
                             {idx===0&&<span style={{background:"rgba(255,215,0,0.25)",color:"#C9A84C",
                               fontSize:9,fontWeight:"bold",padding:"1px 5px",borderRadius:4,marginLeft:5}}>
                               VIGENTE
@@ -915,7 +814,7 @@ function FichaForm({
                           <td style={{padding:"7px 9px",color:"#9A8A6A"}}>${Number(h.movilizacion).toLocaleString("es-CL")}</td>
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
-                          <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{h.registradoEn}</td>
+                          <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{fmtFecha(h.registradoEn)}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -1868,7 +1767,7 @@ export default function App() {
     const { id, motivo } = motivoModal;
     setRegistros(p => p.map(r => r.id===id ? {...r, estado:"rechazado", motivoRechazo:motivo} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+    if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
     setMotivoModal(null);
   }
 
@@ -1878,13 +1777,13 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida||"08:00", r.fecha, "aprobado", r.estadoSalida||null);
-      pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${r.fecha} (${h.extraEntrada}h antes de las 08:00) fueron aprobadas.`);
+      pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${fmtFecha(r.fecha)} (${h.extraEntrada}h antes de las 08:00) fueron aprobadas.`);
     }
   }
   function rechazarHEEntrada(id, motivo) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"rechazado", motivoRechazoEntrada:motivo||""} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+    if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
   // ── HE salida posterior ──
@@ -1898,7 +1797,7 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, "aprobado");
-      pushNotif(r.tId, `✅ Tus HE de salida del ${r.fecha} (${h.extraSalida}h después del horario normal) fueron aprobadas.`);
+      pushNotif(r.tId, `✅ Tus HE de salida del ${fmtFecha(r.fecha)} (${h.extraSalida}h después del horario normal) fueron aprobadas.`);
     }
   }
   function rechazarHESalida(id, motivo) {
@@ -1908,7 +1807,7 @@ export default function App() {
       return {...r, estadoSalida:"rechazado", motivoRechazoSalida:motivo||"", estado:estadoGeneral};
     }));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+    if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
   // ── Admin: aprobar/rechazar solicitud ─────────────────
@@ -1917,7 +1816,7 @@ export default function App() {
     const s = solicitudes.find(x => x.id===id);
     if (s) {
       const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-      pushNotif(s.tId, `✅ Tu solicitud de ${tipo} para el ${s.fechaDesde}${s.tipo==="vacaciones"?" al "+s.fechaHasta:""} fue aprobada.`);
+      pushNotif(s.tId, `✅ Tu solicitud de ${tipo} para el ${fmtFecha(s.fechaDesde)}${s.tipo==="vacaciones"?" al "+s.fechaHasta:""} fue aprobada.`);
     }
   }
   function abrirRechazoSolicitud(id) {
@@ -1929,7 +1828,7 @@ export default function App() {
     const s = solicitudes.find(x => x.id===id);
     if (s) {
       const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-      pushNotif(s.tId, `❌ Tu solicitud de ${tipo} para el ${s.fechaDesde} fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
+      pushNotif(s.tId, `❌ Tu solicitud de ${tipo} para el ${fmtFecha(s.fechaDesde)} fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
     }
     setMotivoModal(null);
   }
@@ -2232,7 +2131,7 @@ export default function App() {
   function aprobarEntradaAnticipada(id) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estado:"pendiente", entradaAnticipada:false} : r));
     const r = registros.find(x=>x.id===id);
-    if(r) pushNotif(r.tId, `✅ Tu entrada anticipada del ${r.fecha} a las ${r.entrada} fue aprobada.`);
+    if(r) pushNotif(r.tId, `✅ Tu entrada anticipada del ${fmtFecha(r.fecha)} a las ${r.entrada} fue aprobada.`);
     setEntradaAnticModal(null);
   }
 
@@ -2240,7 +2139,7 @@ export default function App() {
     if(!horaCorregida){ return; }
     setRegistros(p => p.map(r => r.id===id ? {...r, entrada:horaCorregida, estado:"pendiente", entradaAnticipada:false} : r));
     const r = registros.find(x=>x.id===id);
-    if(r) pushNotif(r.tId, `⚠️ Tu entrada del ${r.fecha} fue corregida por administración. Hora registrada: ${horaCorregida}.`);
+    if(r) pushNotif(r.tId, `⚠️ Tu entrada del ${fmtFecha(r.fecha)} fue corregida por administración. Hora registrada: ${horaCorregida}.`);
     setEntradaAnticModal(null);
   }
 
@@ -2539,6 +2438,126 @@ export default function App() {
     setFichaMode("ver");
     setFichaDraft(null);
     setFichaGuardMsg({tipo:"ok",txt:"✅ Ficha actualizada correctamente."});
+  }
+
+  // ── MODO PRUEBA ──────────────────────────────────────────
+  function crearDatosPrueba() {
+    const mesActual = new Date().getMonth();
+    const anioActual = new Date().getFullYear();
+    const { desde: pD, hasta: pH } = periodoLiquidacion(mesActual, anioActual);
+    const tId = 99901;
+
+    const trabPrueba = {
+      id: tId, codigo:"PRB01", activo:true, esDePrueba:true,
+      nombre:"Carlos", apellido:"Prueba", apellidoM:"Test", rut:"11.111.111-1",
+      ficha:{
+        cargo:"Operario Prueba", afp:"Habitat", sistSalud:"FONASA",
+        tipoContrato:"indefinido", sueldoPactado:800000,
+        colacion:3500, movilizacion:3500, gratificacion:true,
+        planIsapreUF:0, apv:0,
+        historialRemuneraciones:[{
+          id: nowId(), desde: pD, sueldo:800000,
+          colacion:3500, movilizacion:3500, gratificacion:true,
+          motivo:"Sueldo inicial prueba", registradoEn: hoy()
+        }]
+      }
+    };
+
+    // Días hábiles del período
+    const diasHabiles = [];
+    let cur = new Date(pD+"T12:00:00");
+    const fin = new Date(pH+"T12:00:00");
+    while (cur <= fin) {
+      if (cur.getDay()!==0 && cur.getDay()!==6) diasHabiles.push(cur.toISOString().slice(0,10));
+      cur.setDate(cur.getDate()+1);
+    }
+
+    const registrosPrueba = diasHabiles.map((f, idx) => {
+      if (idx === 14) return null; // día 15: ausencia injustificada
+      const esEntrada = idx === 2;
+      const esSalida  = idx === 4;
+      return {
+        id: nowId()+idx, tId, fecha: f,
+        entrada: esEntrada ? "06:30" : "08:00",
+        salida:  esSalida  ? "20:00" : "18:00",
+        estado: "aprobado",
+        estadoEntrada: esEntrada ? "aprobado" : null,
+        estadoSalida:  esSalida  ? "aprobado" : null,
+        motivoSobretiempo: esSalida ? "Término de faena urgente" : "",
+        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+        entradaAnticipada: esEntrada,
+        horasExtraAprobadas: esSalida ? 2 : undefined,
+      };
+    }).filter(Boolean);
+
+    // Segundo turno en día 10
+    if (diasHabiles[9]) {
+      registrosPrueba.push({
+        id: nowId()+10000, tId, fecha: diasHabiles[9],
+        entrada:"21:00", salida:"23:00", estado:"aprobado",
+        estadoEntrada:"aprobado", estadoSalida:null,
+        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+        entradaAnticipada:false, segundoTurno:true, horasExtraAprobadas:2,
+      });
+    }
+
+    // Sábado con contingencia
+    const curFin = new Date(pD+"T12:00:00");
+    while (curFin.getDay()!==6) curFin.setDate(curFin.getDate()+1);
+    registrosPrueba.push({
+      id: nowId()+20000, tId, fecha: curFin.toISOString().slice(0,10),
+      entrada:"08:00", salida:"20:00", estado:"aprobado",
+      estadoEntrada:null, estadoSalida:null,
+      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+      entradaAnticipada:false, esContingencia:true, horasExtraAprobadas:2,
+    });
+
+    // Anticipo de prueba
+    const anticipoPrueba = {
+      id: nowId()+30000, tId, monto:50000,
+      mes:mesActual, anio:anioActual,
+      fecha:diasHabiles[5]||pD, estado:"aprobado",
+      motivo:"Anticipo de prueba",
+    };
+
+    // Contingencia de prueba para el período
+    const contPrueba = {
+      id: nowId()+40000,
+      desde: pD, hasta: pH,
+      descripcion:"Período contingencia de prueba",
+    };
+
+    if (trabajadores.find(t=>t.id===tId)) {
+      if (!window.confirm("Ya existe un trabajador de prueba. ¿Deseas reemplazarlo?")) return;
+      setTrabajadores(p=>p.filter(t=>t.id!==tId));
+      setRegistros(p=>p.filter(r=>r.tId!==tId));
+      setLiquidaciones(p=>p.filter(l=>l.tId!==tId));
+      setAnticipos(p=>p.filter(a=>a.tId!==tId));
+    }
+    setTrabajadores(p=>[...p, trabPrueba]);
+    setRegistros(p=>[...p, ...registrosPrueba]);
+    setAnticipos(p=>[...p, anticipoPrueba]);
+    setContingencias(p=>[...p.filter(c=>c.descripcion!=="Período contingencia de prueba"), contPrueba]);
+    alert(
+      "✅ Modo Prueba activado — PRB01\n\n" +
+      "Escenarios incluidos:\n" +
+      "• Entrada anticipada día 3 (06:30)\n" +
+      "• Salida tardía con sobretiempo día 5 (20:00)\n" +
+      "• Segundo turno día 10 (21:00-23:00)\n" +
+      "• Sábado con contingencia\n" +
+      "• 1 ausencia injustificada (día 15)\n" +
+      "• Anticipo $50.000 aprobado\n\n" +
+      "Acceso trabajador: código PRB01 / RUT 11.111.111-1"
+    );
+  }
+
+  function limpiarDatosPrueba() {
+    if (!window.confirm("¿Eliminar todos los datos del trabajador de prueba (PRB01)?")) return;
+    const tIds = new Set(trabajadores.filter(t=>t.esDePrueba).map(t=>t.id));
+    setTrabajadores(p=>p.filter(t=>!t.esDePrueba));
+    setRegistros(p=>p.filter(r=>!tIds.has(r.tId)));
+    setLiquidaciones(p=>p.filter(l=>!tIds.has(l.tId)));
+    alert("🗑 Datos de prueba eliminados.");
   }
 
   function exportarDatos() {
@@ -3061,7 +3080,7 @@ export default function App() {
                         const esp = esEspecial(r.fecha);
                         return (
                           <tr key={r.id} style={{ background:esp?"rgba(142,68,173,0.1)":"transparent" }}>
-                            <td style={S.td}>{r.fecha} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
+                            <td style={S.td}>{fmtFecha(r.fecha, true)} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
                             <td style={S.td}>{r.entrada}</td>
                             <td style={S.td}>{r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
                             <td style={{...S.td, color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
@@ -3130,7 +3149,7 @@ export default function App() {
                       {[...misSolicitudes].reverse().map(s => (
                         <tr key={s.id}>
                           <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
-                          <td style={S.td}>{s.fechaDesde}{s.fechaHasta!==s.fechaDesde?` → ${s.fechaHasta}`:""}</td>
+                          <td style={S.td}>{fmtFecha(s.fechaDesde)}{s.fechaHasta!==s.fechaDesde?` → ${fmtFecha(s.fechaHasta)}`:""}</td>
                           <td style={{...S.td, color:"#9A8A6A", fontSize:12}}>{s.motivo||"—"}</td>
                           <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
                             {s.estado==="aprobado"?"✓ Aprobado":s.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
@@ -3275,7 +3294,7 @@ export default function App() {
                         {/* Firma sello */}
                         {liq.estado==="firmada" && (
                           <div style={{ background:"rgba(39,174,96,0.15)", border:"1px solid #27ae60", borderRadius:8, padding:"10px 14px", marginTop:12, fontSize:12, color:"#aaffcc" }}>
-                            ✅ Firmada electrónicamente por <strong>{liq.firmadaPor}</strong> — {liq.firmadaFecha} {liq.firmadaHora}
+                            ✅ Firmada electrónicamente por <strong>{liq.firmadaPor}</strong> — {fmtFecha(liq.firmadaFecha)} {liq.firmadaHora}
                           </div>
                         )}
                         {/* Modal firma */}
@@ -3457,6 +3476,7 @@ export default function App() {
     { k:"compensat",    l:"📅 Compensatorios" },
     { k:"calendario",   l:"🗓 Calendario" },
     { k:"dashboard",    l:"📊 Dashboard" },
+    { k:"prueba",      l:"🧪 Modo Prueba" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
@@ -3471,7 +3491,7 @@ export default function App() {
             // HE clásica (día especial)
             setRegistros(p => p.map(r => r.id===motivoModal.id ? {...r, estado:"rechazado", motivoRechazo:mot} : r));
             const r = registros.find(x => x.id===motivoModal.id);
-            if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
+            if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
           } else if (motivoModal.tipo==="heEntrada") {
             // HE entrada anticipada
             rechazarHEEntrada(motivoModal.id, mot);
@@ -3485,7 +3505,7 @@ export default function App() {
             const s = solicitudes.find(x => x.id===motivoModal.id);
             if (s) {
               const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-              pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${s.fechaDesde} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
+              pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${fmtFecha(s.fechaDesde)} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
             }
           }
           setMotivoModal(null);
@@ -3571,7 +3591,7 @@ export default function App() {
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
-                      <td style={S.td}>{r.fecha}</td>
+                      <td style={S.td}>{fmtFecha(r.fecha, true)}</td>
                       <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{r.entrada}</td>
                       <td style={S.td}>
                         <button onClick={()=>setEntradaAnticModal({id:r.id,horaCorregida:"08:00"})} style={{...S.btnB,fontSize:12}}>
@@ -3607,7 +3627,7 @@ export default function App() {
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>
-                        {r.fecha}
+                        {fmtFecha(r.fecha)}
                         {esDiaEsp && <span style={{...S.bdg("#8e44ad"),marginLeft:4,fontSize:10}}>
                           {esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}
                         </span>}
@@ -3696,7 +3716,7 @@ export default function App() {
                     <tr key={s.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                       <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
-                      <td style={S.td}>{s.fechaDesde}</td>
+                      <td style={S.td}>{fmtFecha(s.fechaDesde)}</td>
                       <td style={S.td}>{s.fechaHasta!==s.fechaDesde?s.fechaHasta:"—"}</td>
                       <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{s.motivo||"—"}</td>
                       <td style={S.td}>
@@ -3935,7 +3955,7 @@ export default function App() {
                                     <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
                                     <button
                                       onClick={()=>{
-                                        if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
+                                        if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${fmtFecha(r.fecha)}?`)){
                                           registrosEliminados.current.add(r.id);
                                           setRegistros(p=>p.filter(x=>x.id!==r.id));
                                         }
@@ -4575,7 +4595,7 @@ export default function App() {
                                 <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
                                   {liq.estado==="firmada"?"✓ Firmada":liq.estado==="enviada"?"● Enviada":"Borrador"}
                                 </span>
-                                {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{liq.firmadaFecha} {liq.firmadaHora}</div>}
+                                {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{fmtFecha(liq.firmadaFecha)} {liq.firmadaHora}</div>}
                               </td>
                               <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={S.btnB}>🖨 PDF</button></td>
                             </tr>
@@ -4959,6 +4979,45 @@ export default function App() {
           </div>
         )}
 
+        {/* ── TAB: MODO PRUEBA ─────────────────────────────────── */}
+        {tabAdmin==="prueba" && (
+          <div style={{ marginTop:4 }}>
+            <div style={S.card}>
+              <h3 style={{ color:"#e67e22", marginTop:0 }}>🧪 Modo Prueba</h3>
+              <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                Crea un trabajador ficticio con registros del período actual para probar todos los módulos sin afectar datos reales.
+              </p>
+              <div style={{ background:"rgba(230,126,34,0.08)", border:"1px solid rgba(230,126,34,0.3)",
+                borderRadius:10, padding:"14px 16px", marginBottom:16, fontSize:12, color:"#9A8A6A" }}>
+                <div style={{ color:"#e67e22", fontWeight:"bold", marginBottom:8 }}>¿Qué incluye?</div>
+                <div>👤 <strong>Carlos Prueba Test</strong> — Código: <strong>PRB01</strong></div>
+                <div>💰 $800.000 · AFP Habitat · FONASA · Contrato indefinido · Colación $3.500 · Movilización $3.500</div>
+                <div>📆 22 días hábiles trabajados en el período actual</div>
+                <div>⏱ HE de entrada aprobadas (1 día a las 06:45)</div>
+                <div>⏱ HE de salida aprobadas (1 día a las 19:15)</div>
+                <div>📅 1 día especial (fin de semana) aprobado</div>
+                <div style={{ marginTop:8, color:"#C9A84C" }}>
+                  Puedes calcular liquidación, ajustar días/IMM, ver gratificación, HE, viáticos y enviarla para firmar con código PRB01.
+                </div>
+              </div>
+              <div style={{ display:"flex", gap:12 }}>
+                <button onClick={crearDatosPrueba} style={{ flex:2, ...S.btnG, fontSize:14, padding:"12px 0" }}>
+                  🧪 Crear / Reiniciar Datos de Prueba
+                </button>
+                <button onClick={limpiarDatosPrueba} style={{ flex:1, ...S.btnD, fontSize:13, padding:"12px 0" }}>
+                  🗑 Limpiar
+                </button>
+              </div>
+              {trabajadores.find(t=>t.esDePrueba) && (
+                <div style={{ marginTop:12, background:"rgba(39,174,96,0.1)", border:"1px solid #27ae60",
+                  borderRadius:8, padding:"10px 14px", fontSize:12, color:"#27ae60" }}>
+                  ✅ Trabajador de prueba activo — código <strong>PRB01</strong>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── TAB: EXPORTAR / IMPORTAR ───────────────────── */}
         {tabAdmin==="exportar" && (
           <div style={{ marginTop:4 }}>
@@ -5232,6 +5291,7 @@ export default function App() {
             </div>
           </div>
         )}
+
 
       </div>
     </div>
