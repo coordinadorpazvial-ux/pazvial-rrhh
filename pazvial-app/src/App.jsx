@@ -1952,12 +1952,12 @@ export default function App() {
       <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:11px;color:#1a1a2e;">
         ✅ <strong>Firmado Electrónicamente por María Paz Espinoza</strong><br/>
         Paz Vial SpA — RUT: 78.351.313-7<br/>
-        Fecha: ${liq.enviadaFecha||new Date().toLocaleDateString("es-CL")} &nbsp;|&nbsp; Hora: ${liq.enviadaHora||new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}
+        Fecha: ${liq.enviadaFecha ? fmtFecha(liq.enviadaFecha) : new Date().toLocaleDateString("es-CL")} &nbsp;|&nbsp; Hora: ${liq.enviadaHora||new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}
       </div>`;
     const firmaTrabajador = liq.estado==="firmada"
       ? `<div style="margin-top:6px;padding:10px 14px;background:#e8f5e9;border:1.5px solid #27ae60;border-radius:6px;font-size:11px;color:#1b5e20;">
           ✅ <strong>Firmada electrónicamente por ${liq.firmadaPor}</strong><br/>
-          Fecha: ${liq.firmadaFecha} &nbsp;|&nbsp; Hora: ${liq.firmadaHora}
+          Fecha: ${liq.firmadaFecha ? liq.firmadaFecha.split("-").reverse().join("-") : ""} &nbsp;|&nbsp; Hora: ${liq.firmadaHora}
          </div>` : `<div style="margin-top:6px;padding:10px 14px;background:#fff8e1;border:1.5px dashed #f39c12;border-radius:6px;font-size:11px;color:#7d5a00;">
           ⏳ Pendiente de firma del trabajador
          </div>`;
@@ -2031,14 +2031,17 @@ export default function App() {
     </div>
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
-    const blob = new Blob([html], { type:"text/html;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.target   = "_blank";
-    a.rel      = "noopener";
-    a.click();
-    setTimeout(()=>URL.revokeObjectURL(url), 10000);
+    const _blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    const _url = URL.createObjectURL(_blob);
+    const _ifr = document.createElement("iframe");
+    _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+    _ifr.src = _url;
+    _ifr.onload = () => {
+      _ifr.contentWindow.focus();
+      _ifr.contentWindow.print();
+      setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
+    };
+    document.body.appendChild(_ifr);
   }
 
   // ── REGISTRO MANUAL ──────────────────────────────────
@@ -2969,7 +2972,7 @@ export default function App() {
                       <div key={s.id} style={{ ...S.card, background:"rgba(201,168,76,0.06)", marginBottom:10 }}>
                         <div style={{ color:"#d0e0ff", fontWeight:"bold" }}>{t?nombreCompleto(t):"—"}</div>
                         <div style={{ color:"#9A8A6A", fontSize:12, marginTop:4 }}>
-                          {s.tipo} · {s.fechaDesde}{s.fechaHasta&&s.fechaHasta!==s.fechaDesde?" → "+s.fechaHasta:""}
+                          {s.tipo} · {fmtFecha(s.fechaDesde)}{s.fechaHasta&&s.fechaHasta!==s.fechaDesde?" → "+fmtFecha(s.fechaHasta):""}
                         </div>
                         {s.motivo&&<div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{s.motivo}</div>}
                       </div>
@@ -3321,7 +3324,7 @@ export default function App() {
                         <span style={{ fontSize:14 }}>{n.msg}</span>
                         {!n.leida && <span style={{ ...S.bdg("#ff9800"), marginLeft:8, flexShrink:0 }}>Nuevo</span>}
                       </div>
-                      <div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{n.fecha}</div>
+                      <div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{fmtFecha(n.fecha)}</div>
                     </div>
                   ))
                 )}
@@ -3914,7 +3917,7 @@ export default function App() {
                   {[...registros.filter(r=>r.salida&&(r.estado==="aprobado"||r.estado==="rechazado")&&calcularHoras(r.entrada,r.salida,r.fecha).extra>0)].reverse().slice(0,5).map(r=>{
                     const t=trabajadores.find(x=>x.id===r.tId);
                     const h=calcularHoras(r.entrada,r.salida,r.fecha);
-                    return <div key={r.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} {r.fecha} <span style={S.bdg(r.estado==="aprobado"?"#27ae60":"#c0392b")}>{r.estado==="aprobado"?"✓":"✗"}</span> {h.extra}h</div>;
+                    return <div key={r.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} {fmtFecha(r.fecha)} <span style={S.bdg(r.estado==="aprobado"?"#27ae60":"#c0392b")}>{r.estado==="aprobado"?"✓":"✗"}</span> {h.extra}h</div>;
                   })}
                 </div>
                 <div>
@@ -3945,7 +3948,7 @@ export default function App() {
                     <h3 style={{color:"#e67e22",marginTop:0}}>⏰ Entrada Anticipada — Validar</h3>
                     <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}>
                       <div><strong style={{color:"#C9A84C"}}>{nombreCompleto(trab)}</strong> <span style={{color:"#9A8A6A"}}>({trab.codigo})</span></div>
-                      <div style={{marginTop:4}}>Fecha: <strong>{reg.fecha}</strong> | Hora marcada: <strong style={{color:"#e67e22"}}>{reg.entrada}</strong></div>
+                      <div style={{marginTop:4}}>Fecha: <strong>{fmtFecha(reg.fecha, true)}</strong> | Hora marcada: <strong style={{color:"#e67e22"}}>{reg.entrada}</strong></div>
                     </div>
                     <div style={{marginBottom:14}}>
                       <label style={S.lbl}>Hora corregida (si rechaza)</label>
@@ -4769,7 +4772,7 @@ export default function App() {
                         return (
                           <tr key={c.id}>
                             <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
-                            <td style={S.td}>{c.fecha}</td>
+                            <td style={S.td}>{fmtFecha(c.fecha)}</td>
                             <td style={S.td}><span style={S.bdg(tipoColor)}>{tipoLabel}</span></td>
                             <td style={S.td}>
                               <select style={{...S.sel,fontSize:12,padding:"4px 8px"}} value={c.estado} onChange={e=>setComps(p=>p.map(x=>x.id===c.id?{...x,estado:e.target.value}:x))}>
