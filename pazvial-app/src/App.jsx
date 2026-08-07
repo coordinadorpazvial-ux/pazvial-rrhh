@@ -4733,7 +4733,6 @@ export default function App() {
                 <div>
                   {/* Leyenda */}
                   <div style={{...S.card, display:"flex", flexWrap:"wrap", gap:10, padding:"12px 16px", marginBottom:14}}>
-                    <div style={{display:"contents"}}>
                     {trabActivos.map((t,i) => (
                       <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
                         <div style={{width:12,height:12,borderRadius:3,background:COLORES[i%COLORES.length],flexShrink:0}}/>
