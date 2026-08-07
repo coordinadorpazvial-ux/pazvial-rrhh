@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "firebase/firestore";
@@ -18,7 +17,7 @@ const db = getFirestore(firebaseApp);
 // ── Helpers Firebase ──────────────────────────────────────────────────────
 const DB_DOC = "pazvial/datos";
 
-async function guardarEnFirebase(datos, intentos = 0) {
+async function guardarEnFirebase(datos) {
   try {
     const [col, docId] = DB_DOC.split("/");
 
@@ -28,30 +27,14 @@ async function guardarEnFirebase(datos, intentos = 0) {
     if (snap.exists()) {
       const remoto = snap.data();
 
-      // Merge de registros: unión bidireccional
-      // Local gana si tiene datos más completos (salida, estado aprobado)
-      // Remoto agrega registros que no existen en local (creados por otro dispositivo)
+      // Merge de registros: conservar remotos que no estén en local,
+      // pero respetar los que fueron eliminados explícitamente en esta sesión
+      const idsLocales = new Set((datos.registros || []).map(r => r.id));
       const idsEliminados = datos._eliminados || new Set();
-      const mapaLocal = new Map((datos.registros || []).map(r => [r.id, r]));
-      const mapaRemoto = new Map((remoto.registros || []).map(r => [r.id, r]));
-
-      // Agregar remotos que no están en local (nuevas marcas de otros dispositivos)
-      for (const [id, rRemoto] of mapaRemoto) {
-        if (!mapaLocal.has(id) && !idsEliminados.has(id)) {
-          mapaLocal.set(id, rRemoto);
-        } else if (mapaLocal.has(id)) {
-          // Mismo registro: ganar el que tiene más información
-          const rLocal = mapaLocal.get(id);
-          // Si local no tiene salida pero remoto sí, usar remoto
-          // Si local tiene salida aprobada/pendiente, usar local
-          const localMasCompleto = rLocal.salida || rLocal.estadoEntrada === 'aprobado'
-            || rLocal.estadoSalida === 'aprobado' || rLocal.segundoTurno;
-          if (!localMasCompleto && rRemoto.salida) {
-            mapaLocal.set(id, rRemoto);
-          }
-        }
-      }
-      datos = { ...datos, registros: Array.from(mapaLocal.values()) };
+      const registrosRemotos = (remoto.registros || []).filter(r =>
+        !idsLocales.has(r.id) && !idsEliminados.has(r.id)
+      );
+      datos = { ...datos, registros: [...datos.registros, ...registrosRemotos] };
 
       // Merge de solicitudes
       const idsSolicLocal = new Set((datos.solicitudes || []).map(s => s.id));
@@ -68,19 +51,6 @@ async function guardarEnFirebase(datos, intentos = 0) {
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
       datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
 
-      // Merge de cuadrillas
-      if ((datos.cuadrillas||[]).length === 0 && (remoto.cuadrillas||[]).length > 0) {
-        datos = { ...datos, cuadrillas: remoto.cuadrillas };
-      }
-      // Merge de contingencias
-      if ((datos.contingencias||[]).length === 0 && (remoto.contingencias||[]).length > 0) {
-        datos = { ...datos, contingencias: remoto.contingencias };
-      }
-      // Merge de params
-      if (!datos.params && remoto.params) {
-        datos = { ...datos, params: remoto.params };
-      }
-
       // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
       const codigosLocal = new Set(datos.codigosUsados || []);
       const codigosRemotos = (remoto.codigosUsados || []).filter(c => !codigosLocal.has(c));
@@ -93,12 +63,7 @@ async function guardarEnFirebase(datos, intentos = 0) {
     // Nota: el flag escribiendoEnFirebase lo maneja el auto-guardado externamente
   } catch(e) {
     console.error("Error guardando en Firebase:", e);
-    if (intentos < 3) {
-      // Reintento automático con backoff exponencial
-      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, intentos)));
-      return guardarEnFirebase(datos, intentos + 1);
-    }
-    throw e;
+    throw e; // Re-lanzar para que el reintento funcione
   }
 }
 
@@ -155,13 +120,6 @@ const esFeriado  = d => FERIADOS.has(d);
 const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
 const esCompensable = d => esDomingo(d) || esFeriado(d); // genera día compensatorio (sábado NO genera)
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
-
-// Helper formato fecha DD/MM/AAAA
-function fmtFecha(f) {
-  if (!f) return "—";
-  const [y,m,d] = f.split("-");
-  return `${d}-${m}-${y}`;
-}
 
 function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
@@ -281,372 +239,115 @@ function nombreCompleto(t) {
   return [t.nombre, t.apellido, t.apellidoM].filter(Boolean).join(" ");
 }
 
-function hoy() { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function hoy() { return new Date().toISOString().split("T")[0]; }
 function horaActual() { return new Date().toTimeString().slice(0,5); }
-function esDiaContingencia(fecha, contingencias) {
-  if (!contingencias || !fecha) return false;
-  return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
-}
-
 function nowId() { return Date.now() + Math.random(); }
 
+// Formatea fecha AAAA-MM-DD a DD-MM-AAAA con nombre de día
+function fmtFecha(f, conDia=false) {
+  if (!f) return "—";
+  const [y,m,d] = f.split("-");
+  if (!y || !m || !d) return f;
+  const dias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const nomDia = conDia ? dias[new Date(`${y}-${m}-${d}T12:00:00`).getDay()] + " " : "";
+  return `${nomDia}${d}-${m}-${y}`;
+}
+
 // Tasas AFP 2026
-// ── Parámetros por defecto (editables desde el panel admin) ──
-const PARAMS_DEFAULT = {
-  // Legales
-  jornadaSemanal: 42,          // horas semanales vigentes
-  diasBaseMensual: 30,
-  recargHE: 1.5,               // factor hora extra (50% sobre ordinaria)
-  IMM: 510000,                 // Ingreso Mínimo Mensual vigente
-  topeGratifIMM: 4.75,         // tope gratificación anual en IMM
-  topeAFPSaludUF: 90,          // tope cotización AFP/salud en UF
-  topeAFCuf: 135.2,            // tope AFC en UF
-  // Tasas legales
-  tasaAFP: 0.10,               // cotización obligatoria AFP
-  tasaSalud: 0.07,             // tasa salud legal
-  tasaAFCindefinido: 0.006,    // AFC trabajador contrato indefinido
-  tasaAFCplazoFijo: 0.0,       // AFC trabajador contrato plazo fijo
-  // Valores del mes (actualizar mensualmente)
-  valorUF: 39700,
-  valorUTM: 71506,
-  // AFP y sus comisiones totales (tasa obligatoria + comisión)
-  afps: [
-    { nombre:"Capital",   comision:0.0144 },
-    { nombre:"Provida",   comision:0.0145 },
-    { nombre:"Habitat",   comision:0.0127 },
-    { nombre:"Cuprum",    comision:0.0144 },
-    { nombre:"PlanVital", comision:0.0116 },
-    { nombre:"Uno",       comision:0.0046 },
-    { nombre:"Modelo",    comision:0.0058 },
-  ],
-  // Tabla impuesto único (tramos en UTM)
-  tablaImpuesto: [
-    { desde:0,   hasta:13.5, factor:0,     rebaja:0    },
-    { desde:13.5,hasta:30,   factor:0.04,  rebaja:0.54 },
-    { desde:30,  hasta:50,   factor:0.08,  rebaja:1.74 },
-    { desde:50,  hasta:70,   factor:0.135, rebaja:4.49 },
-    { desde:70,  hasta:90,   factor:0.23,  rebaja:11.14},
-    { desde:90,  hasta:120,  factor:0.304, rebaja:17.8 },
-    { desde:120, hasta:310,  factor:0.35,  rebaja:23.32},
-    { desde:310, hasta:999999,factor:0.4,  rebaja:38.82},
-  ],
-};
-
-function getAfpComision(afpNombre, params) {
-  const p = params || PARAMS_DEFAULT;
-  const afp = (p.afps||[]).find(a => a.nombre.toUpperCase()===afpNombre?.toUpperCase());
-  return afp ? afp.comision : 0.0144;
-}
-
-function calcularImpuesto(baseTributable, params) {
-  const p = params || PARAMS_DEFAULT;
-  const utm = p.valorUTM || 71506;
-  const baseUTM = baseTributable / utm;
-  const tabla = p.tablaImpuesto || PARAMS_DEFAULT.tablaImpuesto;
-  const tramo = tabla.find(t => baseUTM >= t.desde && baseUTM < t.hasta)
-    || tabla[tabla.length-1];
-  if (!tramo || tramo.factor === 0) return 0;
-  return Math.max(0, Math.round(baseTributable * tramo.factor - tramo.rebaja * utm));
-}
+const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
 
 function getRemuneracionVigente(ficha, mes, anio) {
-  // Período de liquidación: 26 del mes anterior al 25 del mes actual
-  const mesAnterior = mes === 0 ? 11 : mes - 1;
-  const anioAnterior = mes === 0 ? anio - 1 : anio;
-  const pDesde = `${anioAnterior}-${String(mesAnterior+1).padStart(2,"0")}-26`;
-  const pHasta = `${anio}-${String(mes+1).padStart(2,"0")}-25`;
-
+  // Busca el registro del historial vigente para el período dado
+  const fechaPeriodo = `${anio}-${String(mes+1).padStart(2,"0")}-01`;
   const historial = (ficha.historialRemuneraciones||[])
-    .sort((a,b) => a.desde.localeCompare(b.desde));
-
-  // Fallback base
-  const fallback = {
+    .filter(h => h.desde <= fechaPeriodo)
+    .sort((a,b) => b.desde.localeCompare(a.desde));
+  if (historial.length > 0) {
+    return {
+      sueldoPactado: historial[0].sueldo,
+      colacion:      historial[0].colacion,
+      movilizacion:  historial[0].movilizacion,
+      gratificacion: historial[0].gratificacion,
+    };
+  }
+  // Fallback: datos actuales de la ficha
+  return {
     sueldoPactado: Number(ficha.sueldoPactado)||0,
     colacion:      Number(ficha.colacion)||0,
     movilizacion:  Number(ficha.movilizacion)||0,
-    gratificacion: ficha.gratificacion !== undefined ? ficha.gratificacion : true,
-  };
-
-  if (historial.length === 0) return fallback;
-
-  // Construir tramos de remuneración dentro del período
-  // Para cada día del período, determinar qué sueldo aplica
-  const toMs = f => new Date(f+"T12:00:00").getTime();
-  const diasPeriodo = Math.round((toMs(pHasta) - toMs(pDesde)) / 86400000) + 1;
-
-  // Para cada tramo del historial que se superpone con el período
-  let totalSueldo = 0, totalColacion = 0, totalMovilizacion = 0;
-  let diasContados = 0;
-  let ultimaGratif = false;
-
-  // Ordenar tramos: [desde_vigencia, hasta_vigencia)
-  for (let i = 0; i < historial.length; i++) {
-    const h = historial[i];
-    const hDesde = h.desde > pDesde ? h.desde : pDesde;
-    const hHasta = i+1 < historial.length
-      ? (historial[i+1].desde <= pHasta ? historial[i+1].desde : null)
-      : null;
-    const tramoHasta = hHasta
-      ? (new Date(hHasta+"T12:00:00").setDate(new Date(hHasta+"T12:00:00").getDate()-1),
-         new Date(new Date(hHasta+"T12:00:00").getTime()-86400000).toISOString().slice(0,10))
-      : pHasta;
-
-    if (hDesde > pHasta) continue; // tramo fuera del período
-
-    const dDesde = hDesde < pDesde ? pDesde : hDesde;
-    const dHasta = tramoHasta > pHasta ? pHasta : tramoHasta;
-    if (dDesde > dHasta) continue;
-
-    const dias = Math.round((toMs(dHasta) - toMs(dDesde)) / 86400000) + 1;
-    totalSueldo       += (Number(h.sueldo)||0) * dias;
-    totalColacion     += (h.colacion !== undefined ? Number(h.colacion) : fallback.colacion) * dias;
-    totalMovilizacion += (h.movilizacion !== undefined ? Number(h.movilizacion) : fallback.movilizacion) * dias;
-    diasContados    += dias;
-    ultimaGratif     = h.gratificacion !== undefined ? h.gratificacion : true;
-  }
-
-  if (diasContados === 0) return fallback;
-
-  // Si hay días del período sin historial (antes del primer tramo), usar el fallback
-  const diasSinHistorial = diasPeriodo - diasContados;
-  if (diasSinHistorial > 0) {
-    totalSueldo       += fallback.sueldoPactado * diasSinHistorial;
-    totalColacion     += fallback.colacion * diasSinHistorial;
-    totalMovilizacion += fallback.movilizacion * diasSinHistorial;
-    diasContados      += diasSinHistorial;
-  }
-
-  // Si solo hay un tramo vigente (no hubo cambio dentro del período),
-  // usar ese sueldo directamente sin prorratear
-  if (historial.filter(h => h.desde >= pDesde && h.desde <= pHasta).length <= 1
-      && diasSinHistorial === 0) {
-    // Todo el período con el mismo sueldo — retornar sin prorrateo
-    const ultimo = [...historial].filter(h => h.desde <= pHasta)
-      .sort((a,b) => b.desde.localeCompare(a.desde))[0];
-    if (ultimo) {
-      return {
-        sueldoPactado: Number(ultimo.sueldo)||0,
-        // Usar colación/movilización del historial; si no tiene, usar el fallback de la ficha
-        colacion:      ultimo.colacion !== undefined ? Number(ultimo.colacion) : fallback.colacion,
-        movilizacion:  ultimo.movilizacion !== undefined ? Number(ultimo.movilizacion) : fallback.movilizacion,
-        gratificacion: ultimo.gratificacion !== undefined ? ultimo.gratificacion : true,
-      };
-    }
-  }
-
-  const colacionResult = Math.round(totalColacion / diasContados);
-  const movilizacionResult = Math.round(totalMovilizacion / diasContados);
-  return {
-    sueldoPactado: Math.round(totalSueldo / diasContados),
-    // Si el historial no tiene colación registrada, usar la ficha directa
-    colacion:      colacionResult > 0 ? colacionResult : fallback.colacion,
-    movilizacion:  movilizacionResult > 0 ? movilizacionResult : fallback.movilizacion,
-    gratificacion: ultimaGratif,
+    gratificacion: ficha.gratificacion||false,
   };
 }
 
-// ── PERÍODO DE LIQUIDACIÓN: del 26 del mes anterior al 25 del mes actual ──
-function periodoLiquidacion(mes, anio) {
-  // desde: 26 del mes anterior
-  const mesAnterior = mes === 0 ? 11 : mes - 1;
-  const anioAnterior = mes === 0 ? anio - 1 : anio;
-  const desde = `${anioAnterior}-${String(mesAnterior+1).padStart(2,"0")}-26`;
-  // hasta: 25 del mes actual
-  const hasta = `${anio}-${String(mes+1).padStart(2,"0")}-25`;
-  return { desde, hasta };
-}
-
-function calcularLiquidacion(trab, registros, anticipos, mes, anio, params, solicitudes=[], compensatorios=[], diasManualOverride=null, immOverride=null) {
-  const P = params || PARAMS_DEFAULT;
+function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
-  const sueldoBase = remVigente.sueldoPactado || 0;
-  // Colación y movilización siempre desde la ficha directa (no dependen del historial)
-  const colacion = Number(ficha.colacion) || 0;
-  const movilizacion = Number(ficha.movilizacion) || 0;
-  const tipoContrato = ficha.tipoContrato || "indefinido"; // "indefinido" | "plazoFijo"
-  const sistSalud = (ficha.sistSalud || "FONASA").toUpperCase();
-  const planIsapreUF = Number(ficha.planIsapreUF) || 0;
-  const apvRegB = Number(ficha.apv) || 0;
+  const sueldoBase = remVigente.sueldoPactado;
+  const pctAFP = TASAS_AFP[ficha.afp?.toUpperCase()] || 0.1144;
+  const pctSalud = 0.07;
+  const colacion = remVigente.colacion;
+  const movilizacion = remVigente.movilizacion;
 
-  // ── Parámetros ──────────────────────────────────────────
-  const jornadaSem = P.jornadaSemanal || 42;
-  const diasBase = P.diasBaseMensual || 30;
-  const IMM = P.IMM || 510000;
-  const ufValor = P.valorUF || 39700;
-  const utmValor = P.valorUTM || 71506;
-  const topeAFPSaludCLP = (P.topeAFPSaludUF || 90) * ufValor;
-  const topeAFCclp = (P.topeAFCuf || 135.2) * ufValor;
-  const comisionAFP = getAfpComision(ficha.afp, P);
-  const tasaAFP = (P.tasaAFP || 0.10) + comisionAFP;
-  const tasaSalud = P.tasaSalud || 0.07;
-  const tasaAFC = tipoContrato === "indefinido"
-    ? (P.tasaAFCindefinido || 0.006)
-    : (P.tasaAFCplazoFijo || 0);
+  // Días trabajados del mes
+  const regs = registros.filter(r => {
+    const d = new Date(r.fecha+"T12:00:00");
+    return r.tId===trab.id && d.getMonth()===mes && d.getFullYear()===anio && r.salida;
+  });
+  const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
 
-  // ── Período y registros ──────────────────────────────────
-  const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
-  const regs = registros.filter(r =>
-    r.tId===trab.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida
-  );
-  // Días hábiles del período (L-V, excluye feriados)
-  const diasHabiles = [];
-  let dCur = new Date(pDesde + "T12:00:00");
-  const dFin = new Date(pHasta + "T12:00:00");
-  while (dCur <= dFin) {
-    const f = dCur.toISOString().slice(0,10);
-    const diaSem = dCur.getDay();
-    if (diaSem !== 0 && diaSem !== 6 && !esFeriado(f)) diasHabiles.push(f);
-    dCur.setDate(dCur.getDate()+1);
-  }
-  // Días con marca (días normales trabajados)
-  const diasConMarca = new Set(regs.filter(r => !esEspecial(r.fecha)).map(r => r.fecha));
-  // Días con permiso aprobado en el período
-  const diasConPermiso = new Set(
-    solicitudes.filter(s =>
-      s.tId === trab.id && s.estado === "aprobado" &&
-      s.fechaDesde && s.fechaHasta
-    ).flatMap(s => {
-      const dias = [];
-      let cur = new Date(s.fechaDesde + "T12:00:00");
-      const fin = new Date(s.fechaHasta + "T12:00:00");
-      while (cur <= fin) {
-        dias.push(cur.toISOString().slice(0,10));
-        cur.setDate(cur.getDate()+1);
-      }
-      return dias;
-    })
-  );
-  // Días con compensatorio tomado en el período
-  const diasConCompensatorio = new Set(
-    compensatorios.filter(c =>
-      c.tId === trab.id && c.fechaTomado &&
-      c.fechaTomado >= pDesde && c.fechaTomado <= pHasta
-    ).map(c => c.fechaTomado)
-  );
-  // Días ausentes injustificados = hábiles sin marca, sin permiso, sin compensatorio
-  const diasAusentesInjust = diasHabiles.filter(f =>
-    !diasConMarca.has(f) && !diasConPermiso.has(f) && !diasConCompensatorio.has(f)
-  ).length;
-  // Base 30 días: días efectivos = 30 - ausencias injustificadas
-  const diasEfectivos = Math.max(0, 30 - diasAusentesInjust);
-  const diasTrab = diasEfectivos; // se muestra en liquidación, editable manualmente
-
-  // ── Sueldo proporcional (base 30 días) ──────────────────
-  // diasTrab puede ser sobreescrito manualmente desde la UI
-  const diasTrabFinal = diasManualOverride !== null ? Number(diasManualOverride) : diasTrab;
-  const sueldoProporcional = Math.round(sueldoBase / 30 * diasTrabFinal);
-
-  // ── Valor hora extra (método DT 42h sobre sueldo proporcional) ──
-  const divisorHora = jornadaSem * 4; // 168 para 42h
-  const valorHoraOrd = sueldoBase > 0 ? (sueldoBase / diasBase * 28) / divisorHora : 0; // sobre sueldo BASE completo
-  const valorHoraExtra = valorHoraOrd * (P.recargHE || 1.5);
-
-  // ── HE aprobadas ─────────────────────────────────────────
-  let totalHorasExtra = 0;
-  let totalViaticosContingencia = 0;
+  // Horas extra aprobadas del mes → valor
+  const diasMes = new Date(anio, mes+1, 0).getDate();
+  const horasJornadaDia = 45/5; // 9h/día promedio
+  const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
+  let totalMinExtra = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
-      if (r.estado==="aprobado") {
-        if (r.esContingencia) {
-          const heAprobadas = r.horasExtraAprobadas !== undefined
-            ? r.horasExtraAprobadas
-            : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10);
-          totalHorasExtra += heAprobadas;
-          totalViaticosContingencia += 50000;
-        } else {
-          totalHorasExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra;
-        }
-      }
+      // Días especiales: usar estado general
+      if (r.estado==="aprobado") totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
     } else {
-      const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null);
-      totalHorasExtra += h.extra;
+      // Días normales: sumar HE entrada y HE salida según sus estados independientes
+      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+      totalMinExtra += h.extra * 60;
     }
   });
-  // ── Tope legal 48 HE por período ────────────────────────
-  const TOPE_HE_LEGAL = 48;
-  const horasExtraTotal = +totalHorasExtra.toFixed(2);
-  const horasExtraImponibles = Math.min(horasExtraTotal, TOPE_HE_LEGAL);
-  const horasExtraExcedentes = Math.max(0, +(horasExtraTotal - TOPE_HE_LEGAL).toFixed(2));
-  const horasExtra = horasExtraImponibles; // para mostrar en liquidación
+  const horasExtra = +(totalMinExtra/60).toFixed(2);
+  const valorHHExtra = Math.round(horasExtra * valorHoraBase * 1.5);
 
-  // HE imponibles (hasta 48h)
-  const valorHHExtra = Math.round(horasExtraImponibles * valorHoraExtra);
-  // Viático operacional: HE sobre 48h × valor HE (no imponible)
-  const viaticosOperacional = Math.round(horasExtraExcedentes * valorHoraExtra);
+  // Gratificación legal mensual (25% sueldo base / 12, tope 4.75 IMM)
+  const IMM = 500000; // Ingreso Mínimo Mensual referencial
+  const gratif = remVigente.gratificacion ? Math.min(Math.round(sueldoBase*0.25/12), Math.round(IMM*4.75/12)) : 0;
 
-  // ── Gratificación legal: 25% (sueldo proporcional + HE imponibles), tope 4.75 IMM ──
-  const IMMliq = immOverride !== null ? Number(immOverride) : (P.IMM || 510000);
-  const topeGratifAnual = Math.round((P.topeGratifIMM || 4.75) * IMMliq);
-  const topeGratifMensual = Math.round(topeGratifAnual / 12);
-  const baseGratif = sueldoProporcional + valorHHExtra;
-  const gratifProp = baseGratif > 0
-    ? Math.min(Math.round(baseGratif * 0.25), topeGratifMensual)
-    : 0;
-
-  // ── Haberes imponibles ────────────────────────────────────
-  const totalImponible = sueldoProporcional + valorHHExtra + gratifProp;
-
-  // ── Haberes no imponibles ─────────────────────────────────
-  const viaticosContingencia = totalViaticosContingencia;
-  const totalNoImponible = colacion + movilizacion + viaticosContingencia + viaticosOperacional;
+  // Haberes
+  const totalImponible = sueldoBase + valorHHExtra + gratif;
+  const totalNoImponible = colacion + movilizacion;
   const totalHaberes = totalImponible + totalNoImponible;
 
-  // ── Bases cotizables con tope ────────────────────────────
-  const baseCotizableAFP = Math.min(totalImponible, topeAFPSaludCLP);
-  const baseCotizableAFC = Math.min(totalImponible, topeAFCclp);
-
-  // ── Descuentos legales ───────────────────────────────────
-  // AFP (obligatoria 10% + comisión AFP)
-  const afpOblig = Math.round(baseCotizableAFP * (P.tasaAFP || 0.10));
-  const comisionAFPmonto = Math.round(baseCotizableAFP * comisionAFP);
-  const prevision = afpOblig + comisionAFPmonto;
-
-  // Salud: FONASA 7% o Isapre (mayor entre 7% y plan UF)
-  const saludLegal = Math.round(baseCotizableAFP * tasaSalud);
-  const saludIsapre = planIsapreUF > 0
-    ? Math.max(saludLegal, Math.round(planIsapreUF * ufValor))
-    : saludLegal;
-  const salud = sistSalud === "FONASA" ? saludLegal : saludIsapre;
-
-  // AFC (solo indefinido)
-  const segCesantia = Math.round(baseCotizableAFC * tasaAFC);
-
+  // Descuentos
+  const prevision = Math.round(totalImponible * pctAFP);
+  const salud = Math.round(totalImponible * pctSalud);
+  const segCesantia = 0;
   const totalDescLegales = prevision + salud + segCesantia;
 
-  // ── Impuesto único segunda categoría ─────────────────────
-  const baseTributable = Math.max(0, totalImponible - afpOblig - salud - apvRegB);
-  const impuesto = calcularImpuesto(baseTributable, P);
-
-  // ── Anticipo aprobado del mes ─────────────────────────────
+  // Anticipo aprobado del mes
   const anticMes = anticipos.filter(a =>
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
-  ).reduce((s,a) => s+Number(a.monto), 0);
+  ).reduce((s,a)=>s+Number(a.monto),0);
 
   const totalOtrosDesc = anticMes;
-  const totalDescuentos = totalDescLegales + impuesto + totalOtrosDesc;
+  const totalDescuentos = totalDescLegales + totalOtrosDesc;
   const alcanceLiquido = totalHaberes - totalDescuentos;
+
+  // Tributable
+  const tributable = totalImponible - prevision - salud;
 
   return {
     tId:trab.id, nombre:nombreCompleto(trab), rut:trab.rut, codigo:trab.codigo,
-    afp: ficha.afp||"", sistSalud, tipoContrato,
-    pctAFP: ((P.tasaAFP||0.10)*100).toFixed(1),
-    comisionAFP: (comisionAFP*100).toFixed(2),
+    afp:ficha.afp||"", prevision:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
     diasTrab, horasExtra, mes, anio,
-    valorHoraOrd: +valorHoraOrd.toFixed(0),
-    valorHoraExtra: +valorHoraExtra.toFixed(0),
-    sueldoBase, sueldoProporcional, diasTrabFinal, valorHHExtra, gratif: gratifProp,
-    horasExtraTotal, horasExtraImponibles, horasExtraExcedentes,
-    viaticosOperacional,
-    totalImponible,
-    colacion, movilizacion, viaticosContingencia, viaticosOperacional, totalNoImponible, totalHaberes,
-    baseCotizableAFP, baseCotizableAFC,
-    afpOblig, comisionAFPmonto, prevision,
-    salud_monto: salud, segCesantia,
-    totalDescLegales,
-    baseTributable, impuesto,
-    anticipo: anticMes, totalOtrosDesc,
-    totalDescuentos, alcanceLiquido,
+    sueldoBase, valorHHExtra, gratif,
+    totalImponible, colacion, movilizacion, totalNoImponible, totalHaberes,
+    prevision_monto:prevision, salud_monto:salud, segCesantia, totalDescLegales,
+    anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
     cc:"001",
   };
 }
@@ -1034,69 +735,6 @@ function FichaForm({
             </div>
           </FichaRow>
 
-          <FichaRow cols="1fr 1fr">
-            <div>
-              <FichaLBL>Tipo de Contrato</FichaLBL>
-              <select disabled={!enEdicion} style={fs}
-                value={val("tipoContrato")||"indefinido"}
-                onChange={e => enEdicion && setD("tipoContrato", e.target.value)}>
-                <option value="indefinido">Indefinido</option>
-                <option value="plazoFijo">Plazo Fijo</option>
-              </select>
-            </div>
-            {(val("tipoContrato")||"indefinido")==="plazoFijo" && (
-              <div>
-                <FichaLBL>Vencimiento Contrato</FichaLBL>
-                <input type="date" readOnly={!enEdicion} style={fi}
-                  value={val("vencimientoContrato")||""}
-                  onChange={e => enEdicion && setD("vencimientoContrato", e.target.value)}/>
-              </div>
-            )}
-          </FichaRow>
-
-          {(val("tipoContrato")||"indefinido")==="plazoFijo" && val("vencimientoContrato") && (() => {
-            const venc = new Date(val("vencimientoContrato")+"T12:00:00");
-            const hoyD = new Date();
-            const diasRestantes = Math.ceil((venc - hoyD) / 86400000);
-            const vencido = diasRestantes < 0;
-            return (
-              <div style={{background:vencido?"rgba(192,57,43,0.1)":"rgba(255,215,0,0.07)",
-                border:`1px solid ${vencido?"#c0392b":"rgba(255,215,0,0.3)"}`,
-                borderRadius:8, padding:"10px 14px", fontSize:12, marginBottom:8}}>
-                {vencido
-                  ? <span style={{color:"#e74c3c"}}>⚠️ Contrato vencido hace {Math.abs(diasRestantes)} día(s)</span>
-                  : <span style={{color:"#C9A84C"}}>📅 Vence en {diasRestantes} día(s) — {val("vencimientoContrato")}</span>}
-                {enEdicion && (
-                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                    <button type="button" onClick={()=>{setD("tipoContrato","indefinido");setD("vencimientoContrato","");}}
-                      style={{...S.btnG,fontSize:11,padding:"3px 10px"}}>→ Convertir a Indefinido</button>
-                    <button type="button" onClick={()=>setD("vencimientoContrato","")}
-                      style={{...S.btn,fontSize:11,padding:"3px 10px"}}>↻ Nueva Fecha</button>
-                    <button type="button" onClick={()=>setD("motivoSalida","Término de contrato")}
-                      style={{...S.btnD,fontSize:11,padding:"3px 10px"}}>✗ Terminar</button>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          <FichaRow cols="1fr 1fr">
-            <div>
-              <FichaLBL>Plan Isapre (UF)</FichaLBL>
-              <input type="number" readOnly={!enEdicion} style={fi}
-                value={val("planIsapreUF")||""}
-                onChange={e => enEdicion && setD("planIsapreUF", e.target.value)}
-                placeholder="Solo si tiene Isapre"/>
-            </div>
-            <div>
-              <FichaLBL>APV Régimen B (CLP/mes)</FichaLBL>
-              <input type="number" readOnly={!enEdicion} style={fi}
-                value={val("apv")||""}
-                onChange={e => enEdicion && setD("apv", e.target.value)}
-                placeholder="0"/>
-            </div>
-          </FichaRow>
-
           <FichaRow cols="1fr">
             <div>
               <FichaLBL>Motivo de Salida</FichaLBL>
@@ -1146,7 +784,7 @@ function FichaForm({
                 <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                   <thead>
                     <tr>
-                      {["Desde","Sueldo","Colación","Moviliz.","Gratif.","Motivo","Registrado","Acciones"].map(h=>(
+                      {["Desde","Sueldo","Colación","Moviliz.","Gratif.","Motivo","Registrado"].map(h=>(
                         <th key={h} style={{background:"rgba(5,4,2,0.6)",padding:"7px 9px",
                           textAlign:"left",color:"#C9A84C",fontSize:10,textTransform:"uppercase",
                           letterSpacing:1,borderBottom:"1px solid rgba(255,215,0,0.2)"}}>
@@ -1163,7 +801,7 @@ function FichaForm({
                           background:idx===0?"rgba(255,215,0,0.07)":"transparent",
                           borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
                           <td style={{padding:"7px 9px",fontWeight:idx===0?"bold":"normal",whiteSpace:"nowrap"}}>
-                            {h.desde}
+                            {fmtFecha(h.desde)}
                             {idx===0&&<span style={{background:"rgba(255,215,0,0.25)",color:"#C9A84C",
                               fontSize:9,fontWeight:"bold",padding:"1px 5px",borderRadius:4,marginLeft:5}}>
                               VIGENTE
@@ -1176,27 +814,7 @@ function FichaForm({
                           <td style={{padding:"7px 9px",color:"#9A8A6A"}}>${Number(h.movilizacion).toLocaleString("es-CL")}</td>
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
-                          <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{h.registradoEn}</td>
-                          <td style={{padding:"7px 9px"}}>
-                            <button
-                              title="Eliminar este registro"
-                              onClick={()=>{
-                                if(!window.confirm(`¿Eliminar el registro desde ${h.desde}?`)) return;
-                                setTrabajadores(p=>p.map(t=>{
-                                  if(t.id!==trabReal.id) return t;
-                                  const hist = (t.ficha?.historialRemuneraciones||[]).filter(x=>x.id!==h.id);
-                                  const vig = [...hist].sort((a,b)=>b.desde.localeCompare(a.desde))[0];
-                                  return {...t, ficha:{...t.ficha,
-                                    historialRemuneraciones: hist,
-                                    sueldoPactado: vig ? String(vig.sueldo) : t.ficha?.sueldoPactado,
-                                    colacion: vig ? vig.colacion : t.ficha?.colacion,
-                                    movilizacion: vig ? vig.movilizacion : t.ficha?.movilizacion,
-                                  }};
-                                }));
-                              }}
-                              style={{background:"rgba(192,57,43,0.2)",border:"1px solid #c0392b",color:"#e74c3c",borderRadius:4,fontSize:10,padding:"2px 6px",cursor:"pointer"}}
-                            >🗑</button>
-                          </td>
+                          <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{fmtFecha(h.registradoEn)}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -1282,7 +900,7 @@ function FichaForm({
             <button
               onClick={()=>{
                 setFichaMode("editar");
-                setFichaDraft({nombre:trabReal.nombre,apellido:trabReal.apellido,apellidoM:trabReal.apellidoM||"",rut:trabReal.rut,...trabReal.ficha, tipoContrato:trabReal.ficha?.tipoContrato||"indefinido", vencimientoContrato:trabReal.ficha?.vencimientoContrato||"", planIsapreUF:trabReal.ficha?.planIsapreUF||0, apv:trabReal.ficha?.apv||0, sistSalud:trabReal.ficha?.sistSalud||trabReal.ficha?.prevision||"FONASA"});
+                setFichaDraft({nombre:trabReal.nombre,apellido:trabReal.apellido,apellidoM:trabReal.apellidoM||"",rut:trabReal.rut,...trabReal.ficha});
                 setFichaGuardMsg({tipo:"",txt:""});
               }}
               style={{flex:1,background:"linear-gradient(135deg,rgba(41,128,185,0.3),rgba(41,128,185,0.15))",
@@ -1595,426 +1213,6 @@ function ModalMotivo({ motivoModal, setMotivoModal, onConfirmar }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// COMPONENTE: PARÁMETROS ADMIN
-// ═══════════════════════════════════════════════════════════
-function ParametrosAdmin({ params, onSave, S }) {
-  const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(params)));
-  const [msg, setMsg] = useState("");
-  const [tabP, setTabP] = useState("general");
-
-  function upd(key, val) { setDraft(p => ({...p, [key]: val})); }
-  function updAfp(idx, key, val) {
-    setDraft(p => {
-      const afps = [...(p.afps||[])];
-      afps[idx] = {...afps[idx], [key]: key==="comision" ? Number(val) : val};
-      return {...p, afps};
-    });
-  }
-  function updTabla(idx, key, val) {
-    setDraft(p => {
-      const t = [...(p.tablaImpuesto||[])];
-      t[idx] = {...t[idx], [key]: Number(val)};
-      return {...p, tablaImpuesto: t};
-    });
-  }
-  function guardar() {
-    onSave(draft);
-    setMsg("✅ Parámetros guardados");
-    setTimeout(() => setMsg(""), 3000);
-  }
-  function restaurar() {
-    setDraft(JSON.parse(JSON.stringify(PARAMS_DEFAULT)));
-    setMsg("↩ Valores restaurados a por defecto");
-    setTimeout(() => setMsg(""), 3000);
-  }
-
-  const tabs = [
-    {k:"general", l:"⚙️ General"},
-    {k:"afp",     l:"🏦 AFP"},
-    {k:"impuesto",l:"📊 Impuesto"},
-  ];
-
-  return (
-    <div>
-      <div style={S.card}>
-        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16}}>
-          <h3 style={{color:"#C9A84C", margin:0}}>⚙️ Parámetros del Sistema</h3>
-          <div style={{display:"flex", gap:8}}>
-            <button onClick={restaurar} style={{fontSize:12, padding:"6px 12px", background:"rgba(201,168,76,0.15)", border:"1px solid #C9A84C", color:"#C9A84C", borderRadius:6, cursor:"pointer"}}>↩ Restaurar</button>
-            <button onClick={guardar} style={{...S.btnG, fontSize:12, padding:"6px 14px"}}>✓ Guardar</button>
-          </div>
-        </div>
-        {msg && <div style={{color:"#27ae60", fontSize:12, marginBottom:12}}>{msg}</div>}
-
-        {/* Sub-tabs */}
-        <div style={{display:"flex", gap:6, marginBottom:16, flexWrap:"wrap"}}>
-          {tabs.map(t => (
-            <button key={t.k} onClick={() => setTabP(t.k)} style={{
-              padding:"6px 14px", borderRadius:16, border:"none", cursor:"pointer", fontSize:12,
-              background: tabP===t.k ? "#C9A84C" : "rgba(201,168,76,0.12)",
-              color: tabP===t.k ? "#0A0A0A" : "#C9A84C", fontWeight: tabP===t.k ? "bold" : "normal",
-            }}>{t.l}</button>
-          ))}
-        </div>
-
-        {/* General */}
-        {tabP==="general" && (
-          <div>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12}}>
-              <div>
-                <label style={S.lbl}>Jornada semanal (horas)</label>
-                <input type="number" style={S.input} value={draft.jornadaSemanal||42}
-                  onChange={e=>upd("jornadaSemanal", Number(e.target.value))}/>
-                <div style={{color:"#9A8A6A",fontSize:11,marginTop:3}}>Actualmente: {draft.jornadaSemanal}h — divisor hora = {(draft.jornadaSemanal||42)*4}</div>
-              </div>
-              <div>
-                <label style={S.lbl}>Ingreso Mínimo Mensual ($)</label>
-                <input type="number" style={S.input} value={draft.IMM||510000}
-                  onChange={e=>upd("IMM", Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Valor UF del mes ($)</label>
-                <input type="number" style={S.input} value={draft.valorUF||39700}
-                  onChange={e=>upd("valorUF", Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Valor UTM del mes ($)</label>
-                <input type="number" style={S.input} value={draft.valorUTM||71506}
-                  onChange={e=>upd("valorUTM", Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Tope AFP/Salud (UF)</label>
-                <input type="number" style={S.input} value={draft.topeAFPSaludUF||90}
-                  onChange={e=>upd("topeAFPSaludUF", Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Tope AFC (UF)</label>
-                <input type="number" style={S.input} value={draft.topeAFCuf||135.2}
-                  onChange={e=>upd("topeAFCuf", Number(e.target.value))}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Tasa AFP obligatoria (%)</label>
-                <input type="number" step="0.01" style={S.input} value={((draft.tasaAFP||0.10)*100).toFixed(1)}
-                  onChange={e=>upd("tasaAFP", Number(e.target.value)/100)}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Tasa salud legal (%)</label>
-                <input type="number" step="0.01" style={S.input} value={((draft.tasaSalud||0.07)*100).toFixed(1)}
-                  onChange={e=>upd("tasaSalud", Number(e.target.value)/100)}/>
-              </div>
-              <div>
-                <label style={S.lbl}>AFC contrato indefinido (%)</label>
-                <input type="number" step="0.001" style={S.input} value={((draft.tasaAFCindefinido||0.006)*100).toFixed(1)}
-                  onChange={e=>upd("tasaAFCindefinido", Number(e.target.value)/100)}/>
-              </div>
-              <div>
-                <label style={S.lbl}>Tope gratificación (× IMM)</label>
-                <input type="number" step="0.01" style={S.input} value={draft.topeGratifIMM||4.75}
-                  onChange={e=>upd("topeGratifIMM", Number(e.target.value))}/>
-              </div>
-            </div>
-            <div style={{background:"rgba(201,168,76,0.08)",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#9A8A6A"}}>
-              <strong style={{color:"#C9A84C"}}>Fórmula valor hora extra:</strong> Sueldo / {draft.diasBaseMensual||30} × 28 / {(draft.jornadaSemanal||42)*4} × {draft.recargHE||1.5} = ${draft.jornadaSemanal ? Math.round(510000/30*28/((draft.jornadaSemanal)*4)*1.5).toLocaleString("es-CL") : "—"} /h (ejemplo con $510.000)
-            </div>
-          </div>
-        )}
-
-        {/* AFP */}
-        {tabP==="afp" && (
-          <div>
-            <p style={{color:"#9A8A6A",fontSize:12,marginTop:0}}>Ingresar solo la comisión de la AFP (sin incluir el 10% obligatorio). El sistema suma automáticamente 10% + comisión.</p>
-            <table style={S.tbl}><thead><tr>
-              {["AFP","Comisión (%)","Tasa total (%)"].map(h=><th key={h} style={S.th}>{h}</th>)}
-            </tr></thead><tbody>
-            {(draft.afps||[]).map((a,i) => (
-              <tr key={i}>
-                <td style={S.td}>
-                  <input style={{...S.input,padding:"4px 8px",fontSize:12}} value={a.nombre}
-                    onChange={e=>updAfp(i,"nombre",e.target.value)}/>
-                </td>
-                <td style={S.td}>
-                  <input type="number" step="0.01" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={(a.comision*100).toFixed(2)}
-                    onChange={e=>updAfp(i,"comision",Number(e.target.value)/100)}/>
-                </td>
-                <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>
-                  {(((draft.tasaAFP||0.10)+a.comision)*100).toFixed(2)}%
-                </td>
-              </tr>
-            ))}
-            </tbody></table>
-          </div>
-        )}
-
-        {/* Impuesto */}
-        {tabP==="impuesto" && (
-          <div>
-            <p style={{color:"#9A8A6A",fontSize:12,marginTop:0}}>Tabla impuesto único segunda categoría. UTM vigente: ${(draft.valorUTM||71506).toLocaleString("es-CL")}.</p>
-            <table style={S.tbl}><thead><tr>
-              {["Desde UTM","Hasta UTM","Factor","Rebaja UTM"].map(h=><th key={h} style={S.th}>{h}</th>)}
-            </tr></thead><tbody>
-            {(draft.tablaImpuesto||[]).map((t,i) => (
-              <tr key={i}>
-                <td style={S.td}>{t.desde}</td>
-                <td style={S.td}>{t.hasta >= 999999 ? "∞" : t.hasta}</td>
-                <td style={S.td}>
-                  <input type="number" step="0.001" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={t.factor}
-                    onChange={e=>updTabla(i,"factor",e.target.value)}/>
-                </td>
-                <td style={S.td}>
-                  <input type="number" step="0.01" style={{...S.input,padding:"4px 8px",fontSize:12,width:80}} value={t.rebaja}
-                    onChange={e=>updTabla(i,"rebaja",e.target.value)}/>
-                </td>
-              </tr>
-            ))}
-            </tbody></table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// COMPONENTE: CONTINGENCIAS ADMIN
-// ═══════════════════════════════════════════════════════════
-function ContingenciasAdmin({ contingencias, onGuardar, onEliminar, S }) {
-  const [form, setForm] = useState({ id:null, desde:"", hasta:"", descripcion:"" });
-  const [editId, setEditId] = useState(null);
-  const [msg, setMsg] = useState("");
-
-  function abrir(c) {
-    setForm(c ? {...c} : { id:null, desde:"", hasta:"", descripcion:"" });
-    setEditId(c ? c.id : "nueva");
-    setMsg("");
-  }
-  function cerrar() { setEditId(null); setMsg(""); }
-
-  function guardar() {
-    if (!form.desde || !form.hasta) { setMsg("Debes indicar fecha desde y hasta."); return; }
-    if (form.desde > form.hasta) { setMsg("La fecha inicio debe ser anterior o igual al término."); return; }
-    onGuardar(form);
-    cerrar();
-  }
-
-  const hoy = new Date().toISOString().slice(0,10);
-
-  return (
-    <div>
-      <div style={S.card}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <h3 style={{ color:"#e67e22", margin:0 }}>⚠️ Períodos de Contingencia</h3>
-          <button onClick={()=>abrir(null)} style={{...S.btn, fontSize:12, padding:"6px 14px"}}>+ Nuevo Período</button>
-        </div>
-        <p style={{ color:"#9A8A6A", fontSize:12, marginTop:0 }}>
-          Los días dentro de un período de contingencia activan el viático de $50.000 para fines de semana y feriados trabajados. El split nocturno requiere confirmación del trabajador.
-        </p>
-        {contingencias.length === 0
-          ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay períodos de contingencia activos</div>
-          : contingencias.map(c => {
-              const activo = hoy >= c.desde && hoy <= c.hasta;
-              const futuro = hoy < c.desde;
-              return (
-                <div key={c.id} style={{ border:`1px solid ${activo?"#e67e22":futuro?"rgba(201,168,76,0.3)":"rgba(255,255,255,0.1)"}`,
-                  borderRadius:10, padding:"12px 16px", marginBottom:10,
-                  background: activo?"rgba(230,126,34,0.08)":"transparent" }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div>
-                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                        <span style={{ fontSize:20 }}>{activo?"🔴":"futuro"?"🟡":"⚪"}</span>
-                        <span style={{ color: activo?"#e67e22":futuro?"#C9A84C":"#9A8A6A",
-                          fontWeight:"bold", fontSize:14 }}>
-                          {activo?"ACTIVO":futuro?"PRÓXIMO":"FINALIZADO"}
-                        </span>
-                      </div>
-                      <div style={{ color:"#d0e0ff", fontSize:13 }}>
-                        📅 {c.desde} → {c.hasta}
-                      </div>
-                      {c.descripcion && <div style={{ color:"#9A8A6A", fontSize:12, marginTop:4 }}>{c.descripcion}</div>}
-                    </div>
-                    <div style={{ display:"flex", gap:6 }}>
-                      <button onClick={()=>abrir(c)} style={{...S.btn, fontSize:11, padding:"4px 10px"}}>✏ Editar</button>
-                      <button onClick={()=>onEliminar(c.id)} style={{...S.btnD, fontSize:11, padding:"4px 10px"}}>🗑</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-        }
-      </div>
-
-      {/* Modal crear/editar */}
-      {editId !== null && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:999,
-          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-          <div style={{ ...S.card, maxWidth:420, width:"100%", border:"2px solid #e67e22" }}>
-            <h3 style={{ color:"#e67e22", marginTop:0 }}>
-              {editId==="nueva" ? "Nuevo Período de Contingencia" : "Editar Período"}
-            </h3>
-
-            <label style={S.lbl}>Descripción (opcional)</label>
-            <input style={S.input} value={form.descripcion}
-              onChange={e=>setForm(p=>({...p,descripcion:e.target.value}))}
-              placeholder="Ej: Emergencia vial Ruta 5 Norte" />
-
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:12 }}>
-              <div>
-                <label style={S.lbl}>Fecha inicio</label>
-                <input type="date" style={S.input} value={form.desde}
-                  onChange={e=>setForm(p=>({...p,desde:e.target.value}))} />
-              </div>
-              <div>
-                <label style={S.lbl}>Fecha término</label>
-                <input type="date" style={S.input} value={form.hasta}
-                  onChange={e=>setForm(p=>({...p,hasta:e.target.value}))} />
-              </div>
-            </div>
-
-            <div style={{ background:"rgba(230,126,34,0.1)", border:"1px solid rgba(230,126,34,0.3)",
-              borderRadius:8, padding:"10px 12px", marginTop:12, fontSize:12, color:"#e67e22" }}>
-              ⚠️ Durante este período: fines de semana y feriados generan viático de <strong>$50.000</strong>.
-              El split nocturno requiere confirmación del trabajador.
-            </div>
-
-            {msg && <div style={S.err}>{msg}</div>}
-
-            <div style={{ display:"flex", gap:10, marginTop:16 }}>
-              <button onClick={guardar} style={{...S.btnG, flex:1}}>✓ Guardar</button>
-              <button onClick={cerrar} style={{...S.btnD, flex:1}}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-// COMPONENTE: CUADRILLAS ADMIN
-// ═══════════════════════════════════════════════════════════
-function CuadrillasAdmin({ trabajadores, cuadrillas, onGuardar, onEliminar, S, nombreCompleto }) {
-  const [modo, setModo] = useState(null); // null | "nueva" | id_cuadrilla
-  const [form, setForm] = useState({ nombre:"", supervisorId:"", miembros:[] });
-  const [msg, setMsg] = useState("");
-
-  function abrirNueva() {
-    setForm({ nombre:"", supervisorId:"", miembros:[] });
-    setModo("nueva");
-    setMsg("");
-  }
-  function abrirEditar(c) {
-    setForm({ ...c });
-    setModo(c.id);
-    setMsg("");
-  }
-  function cerrar() { setModo(null); setMsg(""); }
-
-  function guardar() {
-    if (!form.nombre.trim()) { setMsg("Ingresa un nombre para la cuadrilla."); return; }
-    if (!form.supervisorId) { setMsg("Selecciona un supervisor."); return; }
-    if (form.miembros.length === 0) { setMsg("Agrega al menos un integrante."); return; }
-    onGuardar({ ...form, id: modo==="nueva" ? null : modo });
-    cerrar();
-  }
-
-  function toggleMiembro(id) {
-    setForm(p => ({
-      ...p,
-      miembros: p.miembros.includes(id)
-        ? p.miembros.filter(x => x !== id)
-        : [...p.miembros, id]
-    }));
-  }
-
-  const trabActivos = trabajadores.filter(t => t.activo && t.id !== 999);
-  const supervisor = form.supervisorId ? trabajadores.find(t => t.id === Number(form.supervisorId)) : null;
-
-  return (
-    <div>
-      <div style={S.card}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <h3 style={{ color:"#C9A84C", margin:0 }}>👥 Cuadrillas</h3>
-          <button onClick={abrirNueva} style={S.btn}>+ Nueva Cuadrilla</button>
-        </div>
-        {cuadrillas.length === 0
-          ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay cuadrillas creadas</div>
-          : cuadrillas.map(c => {
-              const sup = trabajadores.find(t => t.id === c.supervisorId);
-              const mbs = trabajadores.filter(t => (c.miembros||[]).includes(t.id));
-              return (
-                <div key={c.id} style={{ border:"1px solid rgba(201,168,76,0.2)", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                    <div>
-                      <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16, marginBottom:4 }}>{c.nombre}</div>
-                      <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:6 }}>
-                        👤 Supervisor: <span style={{ color:"#d0e0ff" }}>{sup ? `${nombreCompleto(sup)} (${sup.codigo})` : "—"}</span>
-                      </div>
-                      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                        {mbs.map(t => (
-                          <span key={t.id} style={{ background:"rgba(201,168,76,0.1)", border:"1px solid rgba(201,168,76,0.3)", borderRadius:12, padding:"2px 10px", fontSize:12, color:"#C9A84C" }}>
-                            {t.codigo} {t.apellido}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                      <button onClick={()=>abrirEditar(c)} style={{ ...S.btn, fontSize:12, padding:"4px 10px" }}>✏ Editar</button>
-                      <button onClick={()=>onEliminar(c.id)} style={{ ...S.btnD, fontSize:12, padding:"4px 10px" }}>🗑</button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-        }
-      </div>
-
-      {/* Modal crear/editar cuadrilla */}
-      {modo !== null && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-          <div style={{ ...S.card, maxWidth:500, width:"100%", maxHeight:"90vh", overflowY:"auto" }}>
-            <h3 style={{ color:"#C9A84C", marginTop:0 }}>{modo==="nueva" ? "Nueva Cuadrilla" : "Editar Cuadrilla"}</h3>
-
-            <label style={S.lbl}>Nombre de la Cuadrilla</label>
-            <input style={S.input} value={form.nombre} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Cuadrilla Norte" />
-
-            <label style={{ ...S.lbl, marginTop:12 }}>Supervisor</label>
-            <select style={S.sel} value={form.supervisorId} onChange={e=>setForm(p=>({...p,supervisorId:Number(e.target.value)}))}>
-              <option value="">— Seleccionar supervisor —</option>
-              {trabActivos.map(t => (
-                <option key={t.id} value={t.id}>{t.codigo} — {nombreCompleto(t)}</option>
-              ))}
-            </select>
-            {supervisor && (
-              <div style={{ color:"#27ae60", fontSize:11, marginTop:4 }}>
-                ✓ Contraseña de acceso: <strong>{supervisor.codigo}</strong>
-              </div>
-            )}
-
-            <label style={{ ...S.lbl, marginTop:12 }}>Integrantes <span style={{ color:"#9A8A6A", fontWeight:"normal" }}>(selecciona los miembros)</span></label>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, maxHeight:200, overflowY:"auto", padding:8, background:"rgba(0,0,0,0.2)", borderRadius:8 }}>
-              {trabActivos.filter(t => t.id !== Number(form.supervisorId)).map(t => (
-                <label key={t.id} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", padding:"4px 6px", borderRadius:6,
-                  background: form.miembros.includes(t.id) ? "rgba(201,168,76,0.15)" : "transparent" }}>
-                  <input type="checkbox" checked={form.miembros.includes(t.id)} onChange={()=>toggleMiembro(t.id)} />
-                  <span style={{ fontSize:12, color:"#d0e0ff" }}>{t.codigo} {t.apellido}</span>
-                </label>
-              ))}
-            </div>
-            <div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{form.miembros.length} integrante(s) seleccionado(s)</div>
-
-            {msg && <div style={S.err}>{msg}</div>}
-
-            <div style={{ display:"flex", gap:10, marginTop:16 }}>
-              <button onClick={guardar} style={{ ...S.btnG, flex:1 }}>✓ Guardar</button>
-              <button onClick={cerrar} style={{ ...S.btnD, flex:1 }}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
 // APP PRINCIPAL
 // ═══════════════════════════════════════════════════════════
 export default function App() {
@@ -2042,21 +1240,6 @@ export default function App() {
   const [aPass,  setAPass]  = useState("");
   const [aError, setAError] = useState("");
 
-  // ── Login supervisor ───────────────────────────────────
-  const [supCodigo, setSupCodigo] = useState("");
-  const [supError,  setSupError]  = useState("");
-  const [supActivo, setSupActivo] = useState(null); // trabajador que es supervisor
-
-  // ── Cuadrillas ─────────────────────────────────────────
-  const [cuadrillas, setCuadrillas] = useState([]);
-  const [tabSup, setTabSup] = useState("hoy");
-
-  // ── Contingencias ─────────────────────────────────────
-  const [contingencias, setContingencias] = useState([]);
-
-  // ── Parámetros del sistema ─────────────────────────────
-  const [params, setParams] = useState(PARAMS_DEFAULT);
-
   // ── Marca asistencia ───────────────────────────────────
   const [tipoMarca,   setTipoMarca]   = useState("entrada");
   const [marcaMsg,    setMarcaMsg]    = useState({ tipo:"", txt:"" });
@@ -2070,7 +1253,6 @@ export default function App() {
 
   // ── Admin: aprobar/rechazar ────────────────────────────
   const [motivoModal, setMotivoModal] = useState(null); // {tipo:"extra"|"solicitud", id, accion:"rechazar"}
-  const [editAnticipo, setEditAnticipo] = useState({id:null, monto:""});
 
   // ── Dashboard filtros ──────────────────────────────────
   const [dMes,  setDMes]  = useState(new Date().getMonth());
@@ -2099,11 +1281,10 @@ export default function App() {
   const [subTabNomina, setSubTabNomina] = useState("lista");
 
   // ── Filtros registro asistencia ───────────────────────
-  const [filtroRegTrab,  setFiltroRegTrab]  = useState("");
-  const [filtroRegMes,   setFiltroRegMes]   = useState("");
-  const [filtroRegAnio,  setFiltroRegAnio]  = useState(String(new Date().getFullYear()));
-  const [filtroRegFecha, setFiltroRegFecha] = useState("");
-  const [regOrden,       setRegOrden]       = useState("desc");
+  const [filtroRegTrab, setFiltroRegTrab] = useState("");
+  const [filtroRegMes,  setFiltroRegMes]  = useState("");
+  const [filtroRegAnio, setFiltroRegAnio] = useState(String(new Date().getFullYear()));
+  const [regOrden,      setRegOrden]      = useState("desc"); // "asc" | "desc"
 
   // ── Hoja de asistencia mensual ─────────────────────────
   const [hojaAsistMes,    setHojaAsistMes]    = useState(new Date().getMonth());
@@ -2154,10 +1335,6 @@ export default function App() {
   const [marcaConfirm,   setMarcaConfirm]   = useState(null);   // {tipo, hora, fecha} | null
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
-  const [modalContingencia, setModalContingencia] = useState(null); // {hora, fecha, regHoy}
-  const [modalSegundoTurno, setModalSegundoTurno] = useState(null);
-  const [modalSobretiempo, setModalSobretiempo] = useState(null); // {hora, fecha, regHoy, fin}
-  const [motivoSobretiempo, setMotivoSobretiempo] = useState("");
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
 
   // ── Liquidaciones ──────────────────────────────────────
@@ -2175,8 +1352,6 @@ export default function App() {
   const [liqMes,     setLiqMes]     = useState(new Date().getMonth());
   const [liqAnio,    setLiqAnio]    = useState(new Date().getFullYear());
   const [liqPreview, setLiqPreview] = useState(null);
-  const [liqDiasManual, setLiqDiasManual] = useState(null); // null = usar calculado
-  const [liqIMM, setLiqIMM] = useState(null); // null = usar el de params
   const [liqMsg,     setLiqMsg]     = useState({tipo:"",txt:""});
 
   // ── UI firma trabajador ────────────────────────────────
@@ -2277,30 +1452,12 @@ export default function App() {
       if (tieneReales) {
         cargandoDesdeFirebase.current = true;
         setTrabajadores(tFirebase);
-        // Merge de registros: preservar marcas locales que aún no llegaron a Firebase
-        setRegistros(prev => {
-          const fbRegs = data.registros || [];
-          const idsFB = new Set(fbRegs.map(r => r.id));
-          // Registros locales que no están en Firebase (marcas recientes no guardadas aún)
-          const localesNuevos = prev.filter(r => !idsFB.has(r.id));
-          // Para registros en ambos: si local tiene salida y remoto no, conservar local
-          const merged = fbRegs.map(rFB => {
-            const rLocal = prev.find(r => r.id === rFB.id);
-            if (!rLocal) return rFB;
-            if (rLocal.salida && !rFB.salida) return rLocal;
-            if ((rLocal.estadoEntrada==='aprobado'||rLocal.estadoSalida==='aprobado') && rFB.estado==='pendiente') return rLocal;
-            return rFB;
-          });
-          return [...merged, ...localesNuevos];
-        });
+        setRegistros(data.registros || []);
         setComps(data.compensatorios || []);
         setSolicitudes(data.solicitudes || []);
         setNotifs(data.notificaciones || []);
         setLiquidaciones(data.liquidaciones || []);
         setAnticipos(data.anticipos || []);
-    setCuadrillas(data.cuadrillas || []);
-    setContingencias(data.contingencias || []);
-    if (data.params) setParams({...PARAMS_DEFAULT, ...data.params});
         setCodigosUsados(data.codigosUsados || []);
         setTimeout(() => {
           cargandoDesdeFirebase.current = false;
@@ -2338,9 +1495,6 @@ export default function App() {
           trabajadores, registros,
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
-          cuadrillas,
-          contingencias,
-          params,
           codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
@@ -2360,7 +1514,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, cuadrillas, contingencias, params, codigosUsados]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
@@ -2429,89 +1583,6 @@ export default function App() {
   // ACCIONES
   // ═══════════════════════════════════════════════════════
 
-  function confirmarSegundoTurno() {
-    if (!modalSegundoTurno) return;
-    const { fechaHoy, hora, idReal } = modalSegundoTurno;
-    setModalSegundoTurno(null);
-    setRegistros(p => [...p, {
-      id: nowId(), tId: idReal, fecha: fechaHoy,
-      entrada: hora, salida: null, estado: "pendiente",
-      estadoEntrada: "pendiente", estadoSalida: null,
-      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
-      entradaAnticipada: false, segundoTurno: true,
-    }]);
-    setMarcaMsg({ tipo:"ok", txt:`✅ Segundo turno iniciado a las ${hora}. Pendiente de aprobación.` });
-    setTimeout(() => setMarcaMsg({ tipo:"", txt:"" }), 4000);
-  }
-
-  // ── CONFIRMAR SOBRETIEMPO (con motivo) ──────────────
-  function confirmarSobretiempo(motivo) {
-    if (!modalSobretiempo) return;
-    const { hora, fecha, regHoy } = modalSobretiempo;
-    setModalSobretiempo(null);
-    const nuevosRegistros = registros.map(r => {
-      if (r.id !== regHoy.id) return r;
-      return {
-        ...r,
-        salida: hora,
-        estadoSalida: "pendiente",
-        motivoSobretiempo: motivo.trim(),
-        motivoRechazoSalida: r.motivoRechazoSalida || "",
-      };
-    });
-    setRegistros(nuevosRegistros);
-    setMotivoSobretiempo("");
-    setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación.` });
-    // Limpiar mensaje después de 4 segundos para despejar la pantalla
-    setTimeout(() => setMarcaMsg({ tipo:"", txt:"" }), 4000);
-  }
-
-  // ── CONFIRMAR TURNO NOCTURNO (contingencia o no) ────
-  function confirmarTurnoNocturno(esContingencia) {
-    if (!modalContingencia) return;
-    const { hora, fecha, regHoy } = modalContingencia;
-    setModalContingencia(null);
-
-    if (!esContingencia) {
-      setMarcaMsg({ tipo:"err", txt:"⛔ Marca no permitida. Comuníquese con su supervisor." });
-      return;
-    }
-
-    // Es contingencia: hacer el split + marcar como contingencia
-    const { reg1, reg2 } = splitTurnoNocturno(regHoy, hora);
-    const reg1c = { ...reg1, esContingencia: true };
-    const reg2c = { ...reg2, esContingencia: true, estado:"pendiente" };
-    const yaExisteSig = registros.find(r => r.tId === trabVigente.id && r.fecha === reg2c.fecha);
-    let nuevosRegistros = registros.map(r => r.id === regHoy.id ? reg1c : r);
-    if (!yaExisteSig) nuevosRegistros = [...nuevosRegistros, reg2c];
-    setRegistros(nuevosRegistros);
-    setMarcaMsg({ tipo:"ok", txt:`✅ Turno nocturno de contingencia registrado. Cierre ${fecha} a 23:59 y apertura ${reg2c.fecha} desde 00:00 hasta ${hora}. Pendiente de aprobación.` });
-  }
-
-  // ── LOGIN SUPERVISOR ──────────────────────────────────
-  function loginSupervisor() {
-    const codigo = supCodigo.trim().toUpperCase();
-    if (!codigo) { setSupError("Ingresa tu código de supervisor."); return; }
-    const trab = trabajadores.find(t => t.codigo?.toUpperCase() === codigo && t.activo);
-    if (!trab) { setSupError("Código no encontrado o inactivo."); return; }
-    const cuad = cuadrillas.find(c => c.supervisorId === trab.id);
-    if (!cuad) { setSupError("No tienes cuadrilla asignada. Contacta al administrador."); return; }
-    setSupActivo(trab);
-    setVista("supervisor");
-    setSupError("");
-    setSupCodigo("");
-  }
-
-  // ── CRUD CUADRILLAS ───────────────────────────────────
-  function guardarCuadrilla(cuad) {
-    setCuadrillas(p => cuad.id
-      ? p.map(c => c.id === cuad.id ? cuad : c)
-      : [...p, { ...cuad, id: Date.now() }]);
-  }
-  function eliminarCuadrilla(id) {
-    setCuadrillas(p => p.filter(c => c.id !== id));
-  }
-
   function loginTrabajador() {
     setLError("");
     const codigoOk = (t) => t.codigo.toUpperCase() === lCodigo.trim().toUpperCase();
@@ -2548,23 +1619,14 @@ export default function App() {
           x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() && x.activo
         )?.id;
 
-    const regsHoyAll = registros.filter(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
-    const regHoySinSalida = regsHoyAll.find(r => !r.salida);
-    const regHoyCompleto  = regsHoyAll.find(r => r.salida && !r.segundoTurno);
-    const regHoy = regHoySinSalida || regsHoyAll[regsHoyAll.length-1] || null;
+    const regHoy = registros.find(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
 
     // Validaciones previas
     if (tipoMarca === "entrada") {
-      if (regHoySinSalida) {
-        setMarcaMsg({ tipo:"err", txt:"Ya tiene una entrada sin salida registrada hoy." }); return;
-      }
-      if (regHoyCompleto) {
-        setModalSegundoTurno({ fechaHoy, hora, idReal: idReal ?? trabActivo.id });
-        return;
-      }
+      if (regHoy) { setMarcaMsg({ tipo:"err", txt:"Ya tiene registro de entrada hoy." }); return; }
     } else {
-      const regParaSalida = regsHoyAll.find(r => !r.salida);
-      if (!regParaSalida) { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
+      if (!regHoy)       { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
+      if (regHoy.salida) { setMarcaMsg({ tipo:"err", txt:"Ya tiene salida registrada hoy." }); return; }
     }
     // Mostrar modal de confirmación con hora actual
     setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaHoy });
@@ -2598,9 +1660,7 @@ export default function App() {
       return;
     }
 
-    // Buscar el registro sin salida (puede ser segundo turno u otro turno activo)
-    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha && !r.salida)
-      || registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
+    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
     const [hh] = hora.split(":").map(Number);
     const esAnticipada = hh < 8;
 
@@ -2629,21 +1689,15 @@ export default function App() {
       nuevosRegistros = [...registros, nuevoReg];
     } else {
       // Al marcar salida: detectar si genera HE de salida
-      const toMinS2 = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-      const finS2 = esViernes(fecha) ? 840 : 1080;
-      const tieneHESalidaS2 = !esEspecial(fecha) && toMinS2(hora) > finS2;
-      if (tieneHESalidaS2) {
-        setMarcaGuardando(false);
-        setMarcaConfirm(null);
-        setModalSobretiempo({ hora, fecha, regHoy }); setMotivoSobretiempo("");
-        return;
-      }
       nuevosRegistros = registros.map(r => {
         if (r.id !== regHoy.id) return r;
+        const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+        const fin = esViernes(fecha) ? 840 : 1080;
+        const tieneHESalida = !esEspecial(fecha) && toMin(hora) > fin;
         return {
           ...r,
           salida: hora,
-          estadoSalida: null,
+          estadoSalida: tieneHESalida ? "pendiente" : null,
           motivoRechazoSalida: r.motivoRechazoSalida || "",
         };
       });
@@ -2702,28 +1756,9 @@ export default function App() {
   // ── Admin: aprobar/rechazar extra ─────────────────────
   // ── HE clásica (días especiales: sáb/dom/feriado) ──
   function aprobarExtra(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado"} : r));
     const r = registros.find(x => x.id===id);
-    if (!r) return;
-    const hBruto = calcularHoras(r.entrada, r.salida, r.fecha);
-    // Si es contingencia: viático cubre primeras 10h, solo se aprueban las adicionales
-    const heAprobadas = r.esContingencia ? Math.max(0, hBruto.extra - 10) : hBruto.extra;
-    setRegistros(p => p.map(x => x.id===id
-      ? {...x, estado:"aprobado", horasExtraAprobadas: heAprobadas}
-      : x));
-    const msg = r.esContingencia
-      ? `✅ Contingencia aprobada. Viático $50.000 cubre 10h. ${heAprobadas > 0 ? `HE adicionales: ${heAprobadas}h.` : "Sin HE adicionales."}`
-      : "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.";
-    pushNotif(r.tId, msg);
-  }
-  function reabrirExtra(id) {
-    const r = registros.find(x => x.id===id);
-    if (!r) return;
-    const hBruto = calcularHoras(r.entrada, r.salida, r.fecha);
-    const heAprobadas = r.esContingencia ? Math.max(0, hBruto.extra - 10) : hBruto.extra;
-    setRegistros(p => p.map(x => x.id===id
-      ? {...x, estado:"aprobado", motivoRechazo:"", horasExtraAprobadas: heAprobadas}
-      : x));
-    pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " han sido aprobadas (corrección).");
+    if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.");
   }
   function abrirRechazoExtra(id) {
     setMotivoModal({ tipo:"extra", id, accion:"rechazar", motivo:"" });
@@ -2732,7 +1767,7 @@ export default function App() {
     const { id, motivo } = motivoModal;
     setRegistros(p => p.map(r => r.id===id ? {...r, estado:"rechazado", motivoRechazo:motivo} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
+    if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
     setMotivoModal(null);
   }
 
@@ -2742,18 +1777,13 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida||"08:00", r.fecha, "aprobado", r.estadoSalida||null);
-      pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${r.fecha} (${h.extraEntrada}h antes de las 08:00) fueron aprobadas.`);
+      pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${fmtFecha(r.fecha)} (${h.extraEntrada}h antes de las 08:00) fueron aprobadas.`);
     }
   }
   function rechazarHEEntrada(id, motivo) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"rechazado", motivoRechazoEntrada:motivo||""} : r));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
-  }
-  function reabrirHEEntrada(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado", motivoRechazoEntrada:""} : r));
-    const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `✅ Tus HE de entrada anticipada del ${r.fecha} han sido aprobadas (corrección).`);
+    if (r) pushNotif(r.tId, `❌ Tus HE de entrada anticipada del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
   // ── HE salida posterior ──
@@ -2767,7 +1797,7 @@ export default function App() {
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, "aprobado");
-      pushNotif(r.tId, `✅ Tus HE de salida del ${r.fecha} (${h.extraSalida}h después del horario normal) fueron aprobadas.`);
+      pushNotif(r.tId, `✅ Tus HE de salida del ${fmtFecha(r.fecha)} (${h.extraSalida}h después del horario normal) fueron aprobadas.`);
     }
   }
   function rechazarHESalida(id, motivo) {
@@ -2777,16 +1807,7 @@ export default function App() {
       return {...r, estadoSalida:"rechazado", motivoRechazoSalida:motivo||"", estado:estadoGeneral};
     }));
     const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${r.fecha} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
-  }
-  function reabrirHESalida(id) {
-    setRegistros(p => p.map(r => {
-      if (r.id!==id) return r;
-      const estadoGeneral = r.estadoEntrada==="aprobado" ? "aprobado" : "pendiente";
-      return {...r, estadoSalida:"aprobado", motivoRechazoSalida:"", estado:estadoGeneral};
-    }));
-    const r = registros.find(x => x.id===id);
-    if (r) pushNotif(r.tId, `✅ Tus HE de salida del ${r.fecha} han sido aprobadas (corrección).`);
+    if (r) pushNotif(r.tId, `❌ Tus HE de salida del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
   // ── Admin: aprobar/rechazar solicitud ─────────────────
@@ -2795,7 +1816,7 @@ export default function App() {
     const s = solicitudes.find(x => x.id===id);
     if (s) {
       const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-      pushNotif(s.tId, `✅ Tu solicitud de ${tipo} para el ${s.fechaDesde}${s.tipo==="vacaciones"?" al "+s.fechaHasta:""} fue aprobada.`);
+      pushNotif(s.tId, `✅ Tu solicitud de ${tipo} para el ${fmtFecha(s.fechaDesde)}${s.tipo==="vacaciones"?" al "+s.fechaHasta:""} fue aprobada.`);
     }
   }
   function abrirRechazoSolicitud(id) {
@@ -2807,7 +1828,7 @@ export default function App() {
     const s = solicitudes.find(x => x.id===id);
     if (s) {
       const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-      pushNotif(s.tId, `❌ Tu solicitud de ${tipo} para el ${s.fechaDesde} fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
+      pushNotif(s.tId, `❌ Tu solicitud de ${tipo} para el ${fmtFecha(s.fechaDesde)} fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
     }
     setMotivoModal(null);
   }
@@ -2834,13 +1855,12 @@ export default function App() {
   // ── Export / Import ───────────────────────────────────
   // ── LIQUIDACIONES ────────────────────────────────────
   function generarPreviewLiq() {
-    setLiqDiasManual(null); // resetear ajuste manual al recalcular
     setLiqMsg({tipo:"",txt:""});
     if(!liqTrabId){ setLiqMsg({tipo:"err",txt:"Selecciona un trabajador."}); return; }
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual, liqIMM);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio);
     setLiqPreview(datos);
   }
 
@@ -2904,14 +1924,9 @@ export default function App() {
     if(a) pushNotif(a.tId,`❌ Tu solicitud de anticipo fue rechazada. Motivo: ${motivo||"Sin motivo especificado"}`);
   }
 
-  function editarMontoAnticipo(id, nuevoMonto) {
-    const m = Number(nuevoMonto);
-    if (!m || m <= 0) return;
-    setAnticipos(p=>p.map(a=>a.id===id?{...a,monto:m}:a));
-  }
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
-    const d = liq.datos || {};
+    const d = liq.datos;
     const firmaEmpleador = `
       <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:11px;color:#1a1a2e;">
         ✅ <strong>Firmado Electrónicamente por María Paz Espinoza</strong><br/>
@@ -2948,15 +1963,7 @@ export default function App() {
       .firmas{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
       .firma-box{border:1px solid #ccc;border-radius:6px;padding:10px;font-size:10px;}
       .firma-box strong{display:block;margin-bottom:6px;font-size:11px;color:#2D2D2D;}
-      @media print{
-        body{padding:10px;}
-        .no-print{display:none;}
-        *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important;}
-        th{background:#2D2D2D !important; color:#fff !important;}
-        .tot{background:#f2f2f2 !important;}
-        .totbar{background:#2D2D2D !important; color:#fff !important;}
-        .alc{background:#1E6B2E !important; color:#fff !important;}
-      }
+      @media print{body{padding:10px;} .no-print{display:none;}}
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
       <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
@@ -2974,100 +1981,23 @@ export default function App() {
     <h2>LIQUIDACIÓN DE SUELDO</h2>
     <h3>REMUNERACIONES MES DE: ${mesNombre(d.mes).toUpperCase()} ${d.anio}</h3>
     <div class="row"><span>Trabajador:</span><span>${d.nombre}</span></div>
-    <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>Remuneraciones</span></div>
-    <div class="row"><span>AFP:</span><span>${d.afp||"—"} (${d.pctAFP}% + ${d.comisionAFP}% com.)</span><span>Previsión Salud:</span><span>${d.sistSalud||"FONASA"} (7%)</span></div>
+    <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>${d.cc}</span></div>
+    <div class="row"><span>AFP:</span><span>${d.afp} (${d.pctAFP}%)</span><span>Previsión Salud:</span><span>${d.prevision} (7%)</span></div>
     <div class="row">
       <span>Días trabajados: <strong>${d.diasTrab}</strong></span>
       <span>HH Extras: <strong>${d.horasExtra}h</strong></span>
       <span>Imponible: <strong>$${d.totalImponible.toLocaleString("es-CL")}</strong></span>
-      <span>Base tributable: <strong>$${(d.baseTributable||d.tributable||0).toLocaleString("es-CL")}</strong></span>
+      <span>Tributable: <strong>$${d.tributable.toLocaleString("es-CL")}</strong></span>
     </div>
     <table>
-      <tr>
-        <th style="width:35%">HABERES</th>
-        <th style="text-align:right;width:15%">MONTO</th>
-        <th style="width:35%">DESCUENTOS</th>
-        <th style="text-align:right;width:15%">MONTO</th>
-      </tr>
-      <tr>
-        <td>Sueldo Base</td>
-        <td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td>
-        <td>AFP ${d.afp||"—"} − Cotiz. Oblig. (${d.pctAFP}%)</td>
-        <td style="text-align:right">$${(d.afpOblig||0).toLocaleString("es-CL")}</td>
-      </tr>
-      ${d.sueldoProporcional!==d.sueldoBase?`
-      <tr>
-        <td style="color:#C9A84C">Sueldo Proporcional (${d.diasTrabFinal||d.diasTrab}/30 días)</td>
-        <td style="text-align:right;color:#C9A84C">$${d.sueldoProporcional.toLocaleString("es-CL")}</td>
-        <td>AFP Comisión (${d.comisionAFP||"0"}%)</td>
-        <td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td>
-      </tr>`:`
-      <tr>
-        <td></td><td></td>
-        <td>AFP Comisión (${d.comisionAFP||"0"}%)</td>
-        <td style="text-align:right">$${(d.comisionAFPmonto||0).toLocaleString("es-CL")}</td>
-      </tr>`}
-      ${d.valorHHExtra>0?`
-      <tr>
-        <td>Horas Extra (${d.horasExtra}h × $${(d.valorHoraExtra||0).toLocaleString("es-CL")}/h)</td>
-        <td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td>
-        <td>Salud ${d.sistSalud||"FONASA"} (7%)</td>
-        <td style="text-align:right">$${(d.salud_monto||0).toLocaleString("es-CL")}</td>
-      </tr>`:`
-      <tr>
-        <td></td><td></td>
-        <td>Salud ${d.sistSalud||"FONASA"} (7%)</td>
-        <td style="text-align:right">$${(d.salud_monto||0).toLocaleString("es-CL")}</td>
-      </tr>`}
-      <tr>
-        ${d.gratif>0?`<td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
-        ${(d.segCesantia||0)>0?`<td>Seg. Cesantía AFC</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
-      </tr>
-      ${(d.impuesto||0)>0?`
-      <tr>
-        <td></td><td></td>
-        <td>Impuesto Único 2ª Cat.</td>
-        <td style="text-align:right">$${d.impuesto.toLocaleString("es-CL")}</td>
-      </tr>`:""}
-      <tr class="tot">
-        <td>TOTAL IMPONIBLE</td>
-        <td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td>
-        <td>TOTAL DESC. LEGALES</td>
-        <td style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td>
-      </tr>
-      ${(d.colacion||0)>0?`<tr>
-        <td>Asig. Colación</td>
-        <td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td>
-        ${(d.anticipo||0)>0?`<td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
-      </tr>`:""}
-      ${(d.movilizacion||0)>0?`<tr>
-        <td>Asig. Movilización</td>
-        <td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>
-        ${(d.colacion||0)===0&&(d.anticipo||0)>0?`<td style="color:#c0392b">Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}
-      </tr>`:""}
-      ${(d.colacion||0)===0&&(d.movilizacion||0)===0&&(d.anticipo||0)>0?`<tr>
-        <td></td><td></td>
-        <td style="color:#c0392b">Anticipo de Remuneración</td>
-        <td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>
-      </tr>`:""}
-      ${d.viaticosContingencia>0?`
-      <tr>
-        <td style="color:#e67e22;font-weight:bold">⚠️ Viático Contingencia</td>
-        <td style="text-align:right;color:#e67e22;font-weight:bold">$${d.viaticosContingencia.toLocaleString("es-CL")}</td>
-        <td></td><td></td>
-      </tr>`:""}
-      ${(d.viaticosOperacional||0)>0?`
-      <tr>
-        <td style="color:#3498db;font-weight:bold">⚙️ Viático Operacional</td>
-        <td style="text-align:right;color:#3498db;font-weight:bold">$${(d.viaticosOperacional||0).toLocaleString("es-CL")}</td>
-        <td></td><td></td>
-      </tr>`:""}
-      <tr class="tot">
-        <td>TOTAL NO IMPONIBLE</td>
-        <td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td>
-        <td>TOTAL DESCUENTOS</td>
-        <td style="text-align:right">$${d.totalDescuentos.toLocaleString("es-CL")}</td>
-      </tr>
+      <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
+      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td>Previsión AFP (${d.pctAFP}%)</td><td style="text-align:right">$${d.prevision_monto.toLocaleString("es-CL")}</td></tr>
+      ${d.valorHHExtra>0?`<tr><td>Horas Extra 50% <span style="color:#888;font-size:10px">(${d.horasExtra}h)</span></td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
+      ${d.gratif>0?`<tr><td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`:`<tr><td></td><td></td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`}
+      <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
+      <tr><td>Asig. Colación</td><td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td><td class="tot">TOTAL DESC. LEGALES</td><td class="tot" style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td></tr>
+      <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${d.anticipo>0?`<td>Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
+      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL OTROS DESC.</td><td style="text-align:right">$${d.totalOtrosDesc.toLocaleString("es-CL")}</td></tr>
     </table>
     <div class="totbar">
       <span>TOTAL HABERES: <strong>$${d.totalHaberes.toLocaleString("es-CL")}</strong></span>
@@ -3080,17 +2010,14 @@ export default function App() {
     </div>
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
-    const _blob = new Blob([html], {type:"text/html;charset=utf-8"});
-    const _url = URL.createObjectURL(_blob);
-    const _ifr = document.createElement("iframe");
-    _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
-    _ifr.src = _url;
-    _ifr.onload = () => {
-      _ifr.contentWindow.focus();
-      _ifr.contentWindow.print();
-      setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
-    };
-    document.body.appendChild(_ifr);
+    const blob = new Blob([html], { type:"text/html;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.target   = "_blank";
+    a.rel      = "noopener";
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 10000);
   }
 
   // ── REGISTRO MANUAL ──────────────────────────────────
@@ -3109,7 +2036,6 @@ export default function App() {
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     const tieneHEEntradaMan = !esDiaEspMan && minEntradaMan < 420; // antes de 07:00
     const tieneHESalidaMan  = !esDiaEspMan && regManSalida && toMin(regManSalida) > finMan;
-    const esDiaEspManual = esEspecial(regManFecha);
     const nuevo = {
       id:nowId(), tId:Number(regManTrabId), fecha:regManFecha,
       entrada:regManEntrada, salida:regManSalida||null,
@@ -3118,7 +2044,6 @@ export default function App() {
       estadoSalida:  tieneHESalidaMan  ? "pendiente" : null,
       motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
       entradaAnticipada: tieneHEEntradaMan,
-      esContingencia: esDiaEspManual && esDiaContingencia(regManFecha, contingencias),
       manual:true
     };
     setRegistros(p=>[...p,nuevo]);
@@ -3206,7 +2131,7 @@ export default function App() {
   function aprobarEntradaAnticipada(id) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estado:"pendiente", entradaAnticipada:false} : r));
     const r = registros.find(x=>x.id===id);
-    if(r) pushNotif(r.tId, `✅ Tu entrada anticipada del ${r.fecha} a las ${r.entrada} fue aprobada.`);
+    if(r) pushNotif(r.tId, `✅ Tu entrada anticipada del ${fmtFecha(r.fecha)} a las ${r.entrada} fue aprobada.`);
     setEntradaAnticModal(null);
   }
 
@@ -3214,127 +2139,11 @@ export default function App() {
     if(!horaCorregida){ return; }
     setRegistros(p => p.map(r => r.id===id ? {...r, entrada:horaCorregida, estado:"pendiente", entradaAnticipada:false} : r));
     const r = registros.find(x=>x.id===id);
-    if(r) pushNotif(r.tId, `⚠️ Tu entrada del ${r.fecha} fue corregida por administración. Hora registrada: ${horaCorregida}.`);
+    if(r) pushNotif(r.tId, `⚠️ Tu entrada del ${fmtFecha(r.fecha)} fue corregida por administración. Hora registrada: ${horaCorregida}.`);
     setEntradaAnticModal(null);
   }
 
-  // ── REPORTE HE POR TRABAJADOR ────────────────────────
-function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
-  const { desde, hasta } = periodoLiquidacion(mes, anio);
-  const diasNombres = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-  const trabActivos = trabajadores.filter(t => t.activo && t.id !== 999);
-
-  let filas = "";
-  trabActivos.forEach(t => {
-    const regs = registros.filter(r =>
-      r.tId === t.id && r.fecha >= desde && r.fecha <= hasta && r.salida
-    );
-    const conHE = regs.filter(r => {
-      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
-      const esp = esEspecial(r.fecha);
-      if (esp) {
-        if (r.estado !== "aprobado") return false;
-        const hePag = r.esContingencia
-          ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10))
-          : calcularHoras(r.entrada,r.salida,r.fecha).extra;
-        return hePag > 0;
-      }
-      return h.extra > 0 || h.extraEntrada > 0 || h.extraSalida > 0;
-    });
-    if (conHE.length === 0) return;
-
-    let totalHE = 0;
-    let filasT = "";
-    conHE.forEach(r => {
-      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada, r.estadoSalida);
-      const esp = esEspecial(r.fecha);
-      const heBruta = esp ? calcularHoras(r.entrada,r.salida,r.fecha).extra : h.extra;
-      const heTotal = esp
-        ? (r.estado==="aprobado"
-            ? (r.esContingencia
-                ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, heBruta - 10))
-                : heBruta)
-            : 0)
-        : h.extra;
-      const estado = esp ? r.estado : (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "aprobado" : r.estadoEntrada==="rechazado"&&r.estadoSalida==="rechazado" ? "rechazado" : "pendiente";
-      const diaSem = new Date(r.fecha+"T12:00:00").getDay();
-      const tipo = esFeriado(r.fecha) ? "Feriado" : diaSem===0 ? "Domingo" : diaSem===6 ? "Sábado" : "Día Normal";
-      const color = estado==="aprobado" ? "#27ae60" : estado==="rechazado" ? "#c0392b" : "#e67e22";
-      totalHE += heTotal;
-      filasT += `<tr>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee">${diasNombres[diaSem]} ${r.fecha}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${tipo}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${r.entrada}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${r.salida}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#e67e22">${h.extra > 0 ? h.extra+"h" : "—"}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${color};font-weight:bold">${estado==="aprobado"?"✓ Aprobada":estado==="rechazado"?"✗ Rechazada":"⏳ Pendiente"}</td>
-        <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:bold;color:#27ae60">${heTotal > 0 ? heTotal+"h" : "—"}</td>
-      </tr>`;
-    });
-
-    filas += `
-    <div style="margin-bottom:24px;page-break-inside:avoid">
-      <div style="background:#f0f0f0;padding:8px 12px;font-weight:bold;font-size:14px;border-left:4px solid #e67e22">
-        ${t.apellido} ${t.nombre} — Código: ${t.codigo} — RUT: ${t.rut||"—"} — Total HE aprobadas: ${totalHE.toFixed(2)}h
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead><tr style="background:#e67e22;color:#fff">
-          <th style="padding:6px 8px;text-align:left">Fecha</th>
-          <th style="padding:6px 8px">Tipo día</th>
-          <th style="padding:6px 8px">Entrada</th>
-          <th style="padding:6px 8px">Salida</th>
-          <th style="padding:6px 8px">H. Extra</th>
-          <th style="padding:6px 8px">Estado</th>
-          <th style="padding:6px 8px">H.E. Aprobadas</th>
-        </tr></thead>
-        <tbody>${filasT}</tbody>
-      </table>
-    </div>`;
-  });
-
-  if (!filas) filas = '<p style="text-align:center;color:#999;padding:40px">Sin registros de horas extras en el período seleccionado.</p>';
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Reporte HE — ${mesNombre(mes)} ${anio}</title>
-  <style>body{font-family:Arial,sans-serif;padding:20px;color:#333}
-  @media print{body{padding:10px}.no-print{display:none}}</style>
-  </head><body>
-  <div style="display:flex;align-items:center;gap:16;margin-bottom:20px;border-bottom:2px solid #e67e22;padding-bottom:12px">
-    <img src="${LOGO_SRC}" alt="Paz Vial" style="width:60px;height:60px;object-fit:contain"/>
-    <div>
-      <div style="font-weight:bold;font-size:18px">PAZ VIAL SpA</div>
-      <div style="color:#666;font-size:12px">RUT: 78.351.313-7</div>
-    </div>
-    <div style="margin-left:auto;text-align:right">
-      <div style="font-weight:bold;font-size:16px">REPORTE DE HORAS EXTRAS</div>
-      <div style="color:#e67e22;font-size:13px">Período: ${desde} al ${hasta}</div>
-    </div>
-  </div>
-  ${filas}
-  <div style="margin-top:20px;font-size:10px;color:#999;text-align:center;border-top:1px solid #eee;padding-top:8px">
-    Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL")} — ${window.location.origin}
-  </div>
-  <script>window.onload=()=>{window.print()}<\/script>
-  </body></html>`;
-
-  const ifrId = "__pv_liq_frame__";
-  let ifr = document.getElementById(ifrId);
-  if(ifr) ifr.remove();
-  ifr = document.createElement("iframe");
-  ifr.id = ifrId;
-  ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:800px;height:600px;border:0;";
-  document.body.appendChild(ifr);
-  ifr.contentDocument.open();
-  ifr.contentDocument.write(html);
-  ifr.contentDocument.close();
-  setTimeout(() => {
-    ifr.contentWindow.focus();
-    ifr.contentWindow.print();
-    setTimeout(() => ifr.remove(), 2000);
-  }, 500);
-}
-
-// ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
+  // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
   function generarHojaAsistenciaPDF(tId, mes, anio) {
     const trab = tId ? trabajadores.find(t=>t.id===Number(tId)) : null;
     const titulo = trab
@@ -3345,15 +2154,13 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       ? [trab]
       : trabajadores.filter(t=>t.activo && t.id!==999);
 
-    // Generar días del período (26 mes anterior → 25 mes actual)
-    const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
-    const diasMes = [];
-    let cur = new Date(pDesde + "T12:00:00");
-    const fin = new Date(pHasta + "T12:00:00");
-    while (cur <= fin) {
-      diasMes.push(cur.toISOString().slice(0,10));
-      cur.setDate(cur.getDate()+1);
-    }
+    // Generar días del mes
+    const diasEnMes = new Date(anio, mes+1, 0).getDate();
+    const diasMes = Array.from({length:diasEnMes},(_,i)=>{
+      const d = String(i+1).padStart(2,"0");
+      const m = String(mes+1).padStart(2,"0");
+      return `${anio}-${m}-${d}`;
+    });
 
     const nombresDias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
@@ -3405,7 +2212,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       });
 
       seccionesHTML += `
-        <div class="trabajador-bloque" style="margin-bottom:${listaTrabajadores.length>1?"40px":"0"}">
+        <div style="margin-bottom:${listaTrabajadores.length>1?"40px":"0"}">
           ${listaTrabajadores.length>1?`<h3 style="margin:0 0 6px;font-size:13px;color:#FF6B00;border-bottom:2px solid #FF6B00;padding-bottom:4px">${nombreCompleto(t)} — Código: ${t.codigo} — RUT: ${t.rut}</h3>`:""}
           <table style="width:100%;border-collapse:collapse;font-size:11px">
             <thead>
@@ -3451,12 +2258,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       .trab-info{background:#f2f2f2;padding:7px 12px;border-radius:4px;margin-bottom:10px;font-size:11px;display:flex;gap:20px;flex-wrap:wrap;}
       .firmas{display:flex;gap:40px;margin-top:30px;}
       .firma{text-align:center;border-top:1px solid #333;padding-top:6px;width:200px;font-size:10px;}
-      @media print{
-        body{padding:10px;}
-        .no-print{display:none;}
-        .trabajador-bloque{page-break-inside:avoid;}
-        *{-webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;}
-      }
+      @media print{body{padding:10px;}.no-print{display:none;}}
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
       <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
@@ -3466,7 +2268,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       <div class="empresa-info"><strong>PAZ VIAL SpA</strong>RUT: 78.351.313-7<br/>Gestión de Personas</div>
     </div>
     <h2>HOJA DE ASISTENCIA MENSUAL</h2>
-    <h3>PERÍODO: ${pDesde.split("-").reverse().join("-")} AL ${pHasta.split("-").reverse().join("-")}</h3>
+    <h3>${mesNombre(mes).toUpperCase()} ${anio}</h3>
     ${trab?`<div class="trab-info">
       <span><strong>Trabajador:</strong> ${nombreCompleto(trab)}</span>
       <span><strong>RUT:</strong> ${trab.rut}</span>
@@ -3481,17 +2283,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
     </body></html>`;
 
-    const _blob2 = new Blob([html], {type:"text/html;charset=utf-8"});
-    const _url2 = URL.createObjectURL(_blob2);
-    const _ifr2 = document.createElement("iframe");
-    _ifr2.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
-    _ifr2.src = _url2;
-    _ifr2.onload = () => {
-      _ifr2.contentWindow.focus();
-      _ifr2.contentWindow.print();
-      setTimeout(() => { _ifr2.remove(); URL.revokeObjectURL(_url2); }, 3000);
-    };
-    document.body.appendChild(_ifr2);
+    const blob = new Blob([html],{type:"text/html;charset=utf-8"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href=url; a.target="_blank"; a.rel="noopener"; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
@@ -3568,12 +2364,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
         contactoEmergencia:    d.contactoEmergencia,
         telefonoEmergencia:    d.telefonoEmergencia,
         prevision:             d.prevision || "FONASA",
-        sistSalud:             d.sistSalud || d.prevision || "FONASA",
         afp:                   d.afp,
-        tipoContrato:          d.tipoContrato || "indefinido",
-        vencimientoContrato:   d.vencimientoContrato || "",
-        planIsapreUF:          Number(d.planIsapreUF) || 0,
-        apv:                   Number(d.apv) || 0,
         sueldoPactado:         d.sueldoPactado,
         gratificacion:         d.gratificacion,
         colacion:              Number(d.colacion) || 0,
@@ -3626,27 +2417,22 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
       rut:       fmtRut(d.rut),
       ficha: {
         ...t.ficha,
-        direccion:            d.direccion,
-        telefono:             d.telefono,
-        correo:               d.correo,
-        cargo:                d.cargo,
-        contactoEmergencia:   d.contactoEmergencia,
-        telefonoEmergencia:   d.telefonoEmergencia,
-        prevision:            d.prevision || "FONASA",
-        sistSalud:            d.sistSalud || d.prevision || "FONASA",
-        afp:                  d.afp,
-        tipoContrato:         d.tipoContrato || "indefinido",
-        vencimientoContrato:  d.vencimientoContrato || "",
-        planIsapreUF:         Number(d.planIsapreUF) || 0,
-        apv:                  Number(d.apv) || 0,
-        sueldoPactado:        d.sueldoPactado,
-        gratificacion:        d.gratificacion,
-        colacion:             Number(d.colacion) || 0,
-        movilizacion:         Number(d.movilizacion) || 0,
-        fechaIngreso:         d.fechaIngreso,
-        fechaSalida:          d.fechaSalida,
-        motivoSalida:         d.motivoSalida,
-        observaciones:        d.observaciones,
+        direccion:          d.direccion,
+        telefono:           d.telefono,
+        correo:             d.correo,
+        cargo:              d.cargo,
+        contactoEmergencia: d.contactoEmergencia,
+        telefonoEmergencia: d.telefonoEmergencia,
+        prevision:          d.prevision || "FONASA",
+        afp:                d.afp,
+        sueldoPactado:      d.sueldoPactado,
+        gratificacion:      d.gratificacion,
+        colacion:           Number(d.colacion) || 0,
+        movilizacion:       Number(d.movilizacion) || 0,
+        fechaIngreso:       d.fechaIngreso,
+        fechaSalida:        d.fechaSalida,
+        motivoSalida:       d.motivoSalida,
+        observaciones:      d.observaciones,
       },
     } : t));
     setFichaMode("ver");
@@ -3654,8 +2440,128 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     setFichaGuardMsg({tipo:"ok",txt:"✅ Ficha actualizada correctamente."});
   }
 
+  // ── MODO PRUEBA ──────────────────────────────────────────
+  function crearDatosPrueba() {
+    const mesActual = new Date().getMonth();
+    const anioActual = new Date().getFullYear();
+    const { desde: pD, hasta: pH } = periodoLiquidacion(mesActual, anioActual);
+    const tId = 99901;
+
+    const trabPrueba = {
+      id: tId, codigo:"PRB01", activo:true, esDePrueba:true,
+      nombre:"Carlos", apellido:"Prueba", apellidoM:"Test", rut:"11.111.111-1",
+      ficha:{
+        cargo:"Operario Prueba", afp:"Habitat", sistSalud:"FONASA",
+        tipoContrato:"indefinido", sueldoPactado:800000,
+        colacion:3500, movilizacion:3500, gratificacion:true,
+        planIsapreUF:0, apv:0,
+        historialRemuneraciones:[{
+          id: nowId(), desde: pD, sueldo:800000,
+          colacion:3500, movilizacion:3500, gratificacion:true,
+          motivo:"Sueldo inicial prueba", registradoEn: hoy()
+        }]
+      }
+    };
+
+    // Días hábiles del período
+    const diasHabiles = [];
+    let cur = new Date(pD+"T12:00:00");
+    const fin = new Date(pH+"T12:00:00");
+    while (cur <= fin) {
+      if (cur.getDay()!==0 && cur.getDay()!==6) diasHabiles.push(cur.toISOString().slice(0,10));
+      cur.setDate(cur.getDate()+1);
+    }
+
+    const registrosPrueba = diasHabiles.map((f, idx) => {
+      if (idx === 14) return null; // día 15: ausencia injustificada
+      const esEntrada = idx === 2;
+      const esSalida  = idx === 4;
+      return {
+        id: nowId()+idx, tId, fecha: f,
+        entrada: esEntrada ? "06:30" : "08:00",
+        salida:  esSalida  ? "20:00" : "18:00",
+        estado: "aprobado",
+        estadoEntrada: esEntrada ? "aprobado" : null,
+        estadoSalida:  esSalida  ? "aprobado" : null,
+        motivoSobretiempo: esSalida ? "Término de faena urgente" : "",
+        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+        entradaAnticipada: esEntrada,
+        horasExtraAprobadas: esSalida ? 2 : undefined,
+      };
+    }).filter(Boolean);
+
+    // Segundo turno en día 10
+    if (diasHabiles[9]) {
+      registrosPrueba.push({
+        id: nowId()+10000, tId, fecha: diasHabiles[9],
+        entrada:"21:00", salida:"23:00", estado:"aprobado",
+        estadoEntrada:"aprobado", estadoSalida:null,
+        motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+        entradaAnticipada:false, segundoTurno:true, horasExtraAprobadas:2,
+      });
+    }
+
+    // Sábado con contingencia
+    const curFin = new Date(pD+"T12:00:00");
+    while (curFin.getDay()!==6) curFin.setDate(curFin.getDate()+1);
+    registrosPrueba.push({
+      id: nowId()+20000, tId, fecha: curFin.toISOString().slice(0,10),
+      entrada:"08:00", salida:"20:00", estado:"aprobado",
+      estadoEntrada:null, estadoSalida:null,
+      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+      entradaAnticipada:false, esContingencia:true, horasExtraAprobadas:2,
+    });
+
+    // Anticipo de prueba
+    const anticipoPrueba = {
+      id: nowId()+30000, tId, monto:50000,
+      mes:mesActual, anio:anioActual,
+      fecha:diasHabiles[5]||pD, estado:"aprobado",
+      motivo:"Anticipo de prueba",
+    };
+
+    // Contingencia de prueba para el período
+    const contPrueba = {
+      id: nowId()+40000,
+      desde: pD, hasta: pH,
+      descripcion:"Período contingencia de prueba",
+    };
+
+    if (trabajadores.find(t=>t.id===tId)) {
+      if (!window.confirm("Ya existe un trabajador de prueba. ¿Deseas reemplazarlo?")) return;
+      setTrabajadores(p=>p.filter(t=>t.id!==tId));
+      setRegistros(p=>p.filter(r=>r.tId!==tId));
+      setLiquidaciones(p=>p.filter(l=>l.tId!==tId));
+      setAnticipos(p=>p.filter(a=>a.tId!==tId));
+    }
+    setTrabajadores(p=>[...p, trabPrueba]);
+    setRegistros(p=>[...p, ...registrosPrueba]);
+    setAnticipos(p=>[...p, anticipoPrueba]);
+    setContingencias(p=>[...p.filter(c=>c.descripcion!=="Período contingencia de prueba"), contPrueba]);
+    alert(
+      "✅ Modo Prueba activado — PRB01\n\n" +
+      "Escenarios incluidos:\n" +
+      "• Entrada anticipada día 3 (06:30)\n" +
+      "• Salida tardía con sobretiempo día 5 (20:00)\n" +
+      "• Segundo turno día 10 (21:00-23:00)\n" +
+      "• Sábado con contingencia\n" +
+      "• 1 ausencia injustificada (día 15)\n" +
+      "• Anticipo $50.000 aprobado\n\n" +
+      "Acceso trabajador: código PRB01 / RUT 11.111.111-1"
+    );
+  }
+
+  function limpiarDatosPrueba() {
+    if (!window.confirm("¿Eliminar todos los datos del trabajador de prueba (PRB01)?")) return;
+    const tIds = new Set(trabajadores.filter(t=>t.esDePrueba).map(t=>t.id));
+    setTrabajadores(p=>p.filter(t=>!t.esDePrueba));
+    setRegistros(p=>p.filter(r=>!tIds.has(r.tId)));
+    setLiquidaciones(p=>p.filter(l=>!tIds.has(l.tId)));
+    alert("🗑 Datos de prueba eliminados.");
+  }
+
   function exportarDatos() {
-    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, cuadrillas, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados };
+    const data = { version:"1.0", exportado: new Date().toISOString(), trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:"application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -3771,9 +2677,9 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
   function getDashData() {
     return trabajadores.filter(t => t.activo && t.id !== 999).map(t => {
-      const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(dMes, dAnio);
       const regs = registros.filter(r => {
-        return r.tId===t.id && r.fecha>=pDesde && r.fecha<=pHasta && r.salida;
+        const d = new Date(r.fecha+"T12:00:00");
+        return r.tId===t.id && d.getMonth()===dMes && d.getFullYear()===dAnio && r.salida;
       });
       const diasTrab = regs.filter(r => !esEspecial(r.fecha)).length;
       const diasEsp  = regs.filter(r => esCompensable(r.fecha)).length; // solo domingo/feriado (generan compensatorio)
@@ -3859,7 +2765,6 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:14, width:"100%", maxWidth:480 }}>
             {[
               { label:"Trabajador", sub:"Registrar entrada / salida", icon:"👷", action:()=>setVista("trabLogin"), gold:false },
-              { label:"Supervisor", sub:"Monitoreo de cuadrilla", icon:"👁", action:()=>setVista("supLogin"), gold:false },
               { label:"Administrador", sub:"Gestión y reportes", icon:"🔐", action:()=>setVista("adminLogin"), gold:true },
             ].map(b => (
               <button key={b.label} onClick={b.action} style={{
@@ -3907,213 +2812,6 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
   );
 
   // ═══════════════════════════════════════════════════════
-  // VISTA: LOGIN SUPERVISOR
-  // ═══════════════════════════════════════════════════════
-  if (vista==="supLogin") return (
-    <div style={S.app}>
-      <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub="Acceso Supervisor" onBack={()=>setVista("portada")} />
-      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"70vh", padding:16 }}>
-        <div style={{ width:"100%", maxWidth:360 }}>
-          <div style={S.card}>
-            <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>👁 Acceso Supervisor</h3>
-            <label style={S.lbl}>Tu Código Personal</label>
-            <input style={S.input} value={supCodigo} onChange={e=>setSupCodigo(e.target.value.toUpperCase())}
-              placeholder="Ej: PP01" autoCapitalize="characters"
-              onKeyDown={e=>e.key==="Enter"&&loginSupervisor()} />
-            {supError && <div style={S.err}>{supError}</div>}
-            <button onClick={loginSupervisor} style={{ ...S.btn, width:"100%", marginTop:14 }}>Ingresar →</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  // ═══════════════════════════════════════════════════════
-  // VISTA: SUPERVISOR (solo lectura)
-  // ═══════════════════════════════════════════════════════
-  if (vista==="supervisor" && supActivo) {
-    const cuadActiva = cuadrillas.find(c => c.supervisorId === supActivo.id);
-    const miembros = cuadActiva
-      ? trabajadores.filter(t => (
-          ((cuadActiva.miembros||[]).includes(t.id) || t.id === supActivo.id) && t.activo
-        ))
-      : [supActivo].filter(Boolean);
-    const d=new Date(); const hoy=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-    const tabs = [
-      { k:"hoy",        l:"📍 Marcas Hoy" },
-      { k:"solicitudes",l:"📋 Solicitudes" },
-      { k:"anticipos",  l:"🏦 Anticipos" },
-      { k:"asistencia", l:"📅 Asistencia" },
-    ];
-    return (
-      <div style={S.app}>
-        <Hdr titulo={`CUADRILLA: ${cuadActiva?.nombre||"—"}`}
-          sub={`Supervisor: ${nombreCompleto(supActivo)}`}
-          onBack={()=>{ setVista("portada"); setSupActivo(null); }} />
-        {/* Tabs */}
-        <div style={{ padding:"0 8px", display:"flex", gap:4, flexWrap:"wrap", marginTop:8, overflowX:"auto" }}>
-          {tabs.map(t=>(
-            <button key={t.k} onClick={()=>setTabSup(t.k)} style={{
-              padding:"6px 14px", borderRadius:20, border:"none", cursor:"pointer", fontSize:13,
-              background: tabSup===t.k ? "#C9A84C" : "rgba(201,168,76,0.12)",
-              color: tabSup===t.k ? "#0A0A0A" : "#C9A84C", fontWeight: tabSup===t.k ? "bold" : "normal",
-              whiteSpace:"nowrap"
-            }}>{t.l}</button>
-          ))}
-        </div>
-        <div style={{ padding:"0 8px 48px" }}>
-
-          {/* ── MARCAS HOY ── */}
-          {tabSup==="hoy" && (
-            <div style={{ marginTop:12 }}>
-              <div style={S.card}>
-                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📍 Marcas del día — {fmtFecha(hoy)}</h3>
-                {miembros.length===0
-                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes en la cuadrilla</div>
-                  : <table style={S.tbl}><thead><tr>
-                      {["Trabajador","Entrada","Salida","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
-                    </tr></thead><tbody>
-                    {miembros.map(t => {
-                      const reg = registros.find(r => r.tId===t.id && r.fecha===hoy);
-                      const sinMarca = !reg;
-                      const soloEntrada = reg && !reg.salida;
-                      return (
-                        <tr key={t.id} style={{ background: sinMarca?"rgba(192,57,43,0.07)":soloEntrada?"rgba(230,126,34,0.07)":"rgba(39,174,96,0.05)" }}>
-                          <td style={S.td}><strong style={{ color:"#C9A84C" }}>{t.codigo}</strong> {nombreCompleto(t)}</td>
-                          <td style={S.td}>{reg?.entrada||<span style={{ color:"#c0392b" }}>—</span>}</td>
-                          <td style={S.td}>{reg?.salida||<span style={{ color:"#e67e22" }}>—</span>}</td>
-                          <td style={S.td}>
-                            {sinMarca
-                              ? <span style={S.bdg("#c0392b")}>Sin marca</span>
-                              : soloEntrada
-                              ? <span style={S.bdg("#e67e22")}>Solo entrada</span>
-                              : <span style={S.bdg("#27ae60")}>✓ Completo</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody></table>
-                }
-              </div>
-            </div>
-          )}
-
-          {/* ── SOLICITUDES ── */}
-          {tabSup==="solicitudes" && (
-            <div style={{ marginTop:12 }}>
-              <div style={S.card}>
-                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📋 Solicitudes de la Cuadrilla</h3>
-                {miembros.length===0
-                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes</div>
-                  : (() => {
-                      const sols = solicitudes.filter(s => miembros.some(m=>m.id===s.tId));
-                      if (sols.length===0) return <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin solicitudes</div>;
-                      return (
-                        <table style={S.tbl}><thead><tr>
-                          {["Trabajador","Tipo","Desde","Hasta","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
-                        </tr></thead><tbody>
-                        {[...sols].reverse().map(s => {
-                          const t = trabajadores.find(x=>x.id===s.tId);
-                          return (
-                            <tr key={s.id}>
-                              <td style={S.td}>{t?.codigo} {t?.apellido}</td>
-                              <td style={S.td}>{s.tipo}</td>
-                              <td style={S.td}>{fmtFecha(s.fechaDesde)}</td>
-                              <td style={S.td}>{fmtFecha(s.fechaHasta)}</td>
-                              <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
-                                {s.estado==="aprobado"?"✓ Aprobada":s.estado==="rechazado"?"✗ Rechazada":"● Pendiente"}
-                              </span></td>
-                            </tr>
-                          );
-                        })}
-                        </tbody></table>
-                      );
-                    })()
-                }
-              </div>
-            </div>
-          )}
-
-          {/* ── ANTICIPOS ── */}
-          {tabSup==="anticipos" && (
-            <div style={{ marginTop:12 }}>
-              <div style={S.card}>
-                <h3 style={{ color:"#C9A84C", marginTop:0 }}>🏦 Anticipos de la Cuadrilla</h3>
-                {miembros.length===0
-                  ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin integrantes</div>
-                  : (() => {
-                      const ants = anticipos.filter(a => miembros.some(m=>m.id===a.tId));
-                      if (ants.length===0) return <div style={{ color:"#9A8A6A", textAlign:"center", padding:20 }}>Sin anticipos</div>;
-                      return (
-                        <table style={S.tbl}><thead><tr>
-                          {["Trabajador","Mes","Monto","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}
-                        </tr></thead><tbody>
-                        {[...ants].reverse().map(a => {
-                          const t = trabajadores.find(x=>x.id===a.tId);
-                          return (
-                            <tr key={a.id}>
-                              <td style={S.td}>{t?.codigo} {t?.apellido}</td>
-                              <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
-                              <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>${Number(a.monto).toLocaleString("es-CL")}</td>
-                              <td style={S.td}><span style={S.bdg(a.estado==="aprobado"?"#27ae60":a.estado==="rechazado"?"#c0392b":"#e67e22")}>
-                                {a.estado==="aprobado"?"✓ Aprobado":a.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
-                              </span></td>
-                            </tr>
-                          );
-                        })}
-                        </tbody></table>
-                      );
-                    })()
-                }
-              </div>
-            </div>
-          )}
-
-          {/* ── ASISTENCIA ── */}
-          {tabSup==="asistencia" && (
-            <div style={{ marginTop:12 }}>
-              <div style={S.card}>
-                <h3 style={{ color:"#C9A84C", marginTop:0 }}>📅 Asistencia del Mes en Curso</h3>
-                {miembros.map(t => {
-                  const regsT = registros.filter(r=>r.tId===t.id&&r.fecha>=hoy.slice(0,7)+"-01"&&r.fecha<=hoy);
-                  return (
-                    <div key={t.id} style={{ marginBottom:16 }}>
-                      <div style={{ color:"#C9A84C", fontWeight:"bold", marginBottom:6 }}>{t.codigo} — {nombreCompleto(t)}</div>
-                      {regsT.length===0
-                        ? <div style={{ color:"#9A8A6A", fontSize:12 }}>Sin registros este mes</div>
-                        : <table style={S.tbl}><thead><tr>
-                            {["Fecha","Entrada","Salida","H.Normales","H.Extra"].map(h=><th key={h} style={S.th}>{h}</th>)}
-                          </tr></thead><tbody>
-                          {regsT.map(r => {
-                            const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida);
-                            const heAprobada = esEspecial(r.fecha)
-                              ? r.estado==="aprobado" ? h.extra : 0
-                              : h.extra;
-                            return (
-                              <tr key={r.id}>
-                                <td style={S.td}>{fmtFecha(r.fecha)}</td>
-                                <td style={S.td}>{r.entrada||"—"}</td>
-                                <td style={S.td}>{r.salida||"—"}</td>
-                                <td style={{ ...S.td, color:"#27ae60" }}>{r.salida?+(h.normales).toFixed(2)+"h":"—"}</td>
-                                <td style={{ ...S.td, color:"#C9A84C", fontWeight:"bold" }}>{heAprobada>0?heAprobada+"h":"—"}</td>
-                              </tr>
-                            );
-                          })}
-                          </tbody></table>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════
   // VISTA: LOGIN TRABAJADOR
   // ═══════════════════════════════════════════════════════
   if (vista==="trabLogin") return (
@@ -4150,28 +2848,15 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     const misSolicitudes = solicitudes.filter(s => s.tId===trabActivo.id);
     const noLeidas     = misNotifs.filter(n=>!n.leida).length;
 
-    // Dashboard personal — período 26-25
+    // Dashboard personal
     const mesActual = new Date().getMonth();
     const anioActual = new Date().getFullYear();
-    const { desde: pDash, hasta: pDashH } = periodoLiquidacion(mesActual, anioActual);
-    const regMes = misRegistros.filter(r => r.fecha >= pDash && r.fecha <= pDashH && r.salida);
-    let extraAcum = 0;
-    regMes.forEach(r => {
-      const esp = esEspecial(r.fecha);
-      if (esp) {
-        // Día especial: solo si está aprobado
-        if (r.estado === "aprobado") {
-          const he = r.esContingencia
-            ? (r.horasExtraAprobadas !== undefined ? r.horasExtraAprobadas : Math.max(0, calcularHoras(r.entrada,r.salida,r.fecha).extra - 10))
-            : calcularHoras(r.entrada,r.salida,r.fecha).extra;
-          extraAcum += he;
-        }
-      } else {
-        // Día normal: sumar HE aprobadas (entrada y/o salida)
-        const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
-        extraAcum += h.extra;
-      }
+    const regMes = misRegistros.filter(r => {
+      const d = new Date(r.fecha+"T12:00:00");
+      return d.getMonth()===mesActual && d.getFullYear()===anioActual && r.salida;
     });
+    let extraAcum = 0;
+    regMes.forEach(r => { if(r.estado==="aprobado") extraAcum += calcularHoras(r.entrada,r.salida,r.fecha).extra; });
 
     const tabsTrab = [
       { k:"marcar",    l:"🕐 Marcar Asistencia" },
@@ -4205,168 +2890,9 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
         <div style={{ padding:"0 8px 40px" }}>
 
-          {/* ── BANNER: LIQUIDACIÓN DISPONIBLE ─────────────── */}
-          {liquidaciones.some(l => Number(l.tId)===Number(trabActivo.id) && l.estado==="enviada" && !l.firmadaPor) && (
-            <div onClick={()=>setTabTrab("liquidacs")} style={{ margin:"12px 0 8px", padding:"14px 16px",
-              background:"linear-gradient(135deg,rgba(39,174,96,0.2),rgba(39,174,96,0.08))",
-              border:"2px solid #27ae60", borderRadius:12, cursor:"pointer",
-              display:"flex", alignItems:"center", gap:12 }}>
-              <div style={{ fontSize:28 }}>💰</div>
-              <div style={{ flex:1 }}>
-                <div style={{ color:"#27ae60", fontWeight:"bold", fontSize:14, marginBottom:2 }}>
-                  Liquidación de sueldo disponible
-                </div>
-                <div style={{ color:"#9A8A6A", fontSize:12 }}>Toca aquí para revisar y firmar</div>
-              </div>
-              <div style={{ color:"#27ae60", fontSize:20 }}>›</div>
-            </div>
-          )}
-
           {/* ── TAB: MARCAR ──────────────────────────────── */}
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
-
-              {/* Modal de sobretiempo — pide motivo al marcar salida con HE */}
-              {modalSobretiempo && (
-                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-                  <div style={{ background:"linear-gradient(135deg,#0d1a0d,#1a2d1a)", border:"3px solid #e67e22",
-                    borderRadius:20, padding:28, maxWidth:400, width:"100%" }}>
-                    <div style={{ fontSize:40, textAlign:"center", marginBottom:8 }}>⏱</div>
-                    <div style={{ color:"#e67e22", fontSize:18, fontWeight:"bold", textAlign:"center", marginBottom:8 }}>
-                      Sobretiempo detectado
-                    </div>
-                    <div style={{ color:"#d0e0ff", fontSize:13, textAlign:"center", marginBottom:16 }}>
-                      Tu salida a las <strong style={{color:"#FFD700"}}>{modalSobretiempo.hora}</strong> supera
-                      el horario normal.<br/>Por favor indica el motivo del sobretiempo:
-                    </div>
-                    <textarea
-                      value={motivoSobretiempo}
-                      onChange={e=>setMotivoSobretiempo(e.target.value)}
-                      placeholder="Ej: Término de faena pendiente, espera de materiales..."
-                      maxLength={200}
-                      style={{ width:"100%", minHeight:80, background:"rgba(0,0,0,0.3)",
-                        border:"1px solid rgba(230,126,34,0.5)", borderRadius:8,
-                        color:"#fff", padding:"10px 12px", fontSize:13,
-                        resize:"vertical", boxSizing:"border-box" }}
-                    />
-                    <div style={{ color:"#9A8A6A", fontSize:11, marginBottom:14, textAlign:"right" }}>
-                      {motivoSobretiempo.length}/200
-                    </div>
-                    <div style={{ display:"flex", gap:10 }}>
-                      <button
-                        onClick={()=>{ setModalSobretiempo(null); setMotivoSobretiempo(""); setMarcaMsg({tipo:"err",txt:"Marca cancelada."}); }}
-                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
-                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
-                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>
-                        Cancelar
-                      </button>
-                      <button
-                        disabled={!motivoSobretiempo.trim()}
-                        onClick={()=>confirmarSobretiempo(motivoSobretiempo)}
-                        style={{ flex:2, background: motivoSobretiempo.trim()?"linear-gradient(135deg,#e67e22,#d35400)":"rgba(100,80,50,0.4)",
-                          color:"#fff", border:"none", borderRadius:10,
-                          padding:"12px 0", cursor: motivoSobretiempo.trim()?"pointer":"not-allowed",
-                          fontSize:14, fontWeight:"bold" }}>
-                        ✓ Registrar salida
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Modal de segundo turno */}
-              {modalSegundoTurno && (
-                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-                  <div style={{ background:"linear-gradient(135deg,#0d1a2d,#0d2d1a)", border:"3px solid #27ae60",
-                    borderRadius:20, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
-                    <div style={{ fontSize:40, marginBottom:8 }}>🔄</div>
-                    <div style={{ color:"#27ae60", fontSize:18, fontWeight:"bold", marginBottom:8 }}>Segundo turno</div>
-                    <div style={{ color:"#d0e0ff", fontSize:13, marginBottom:6 }}>Ya tienes una jornada completa hoy.</div>
-                    <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:24 }}>
-                      ¿Estás iniciando un segundo turno?<br/>Quedará pendiente de aprobación del administrador.
-                    </div>
-                    <div style={{ display:"flex", gap:12 }}>
-                      <button onClick={()=>setModalSegundoTurno(null)}
-                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
-                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
-                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>✗ No</button>
-                      <button onClick={confirmarSegundoTurno}
-                        style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
-                          color:"#fff", border:"none", borderRadius:10,
-                          padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:"bold" }}>
-                        ✓ Sí, segundo turno
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Modal de segundo turno */}
-              {modalSegundoTurno && (
-                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-                  <div style={{ background:"linear-gradient(135deg,#0d1a2d,#0d2d1a)", border:"3px solid #27ae60",
-                    borderRadius:20, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
-                    <div style={{ fontSize:40, marginBottom:8 }}>🔄</div>
-                    <div style={{ color:"#27ae60", fontSize:18, fontWeight:"bold", marginBottom:8 }}>Segundo turno</div>
-                    <div style={{ color:"#d0e0ff", fontSize:13, marginBottom:6 }}>Ya tienes una jornada completa hoy.</div>
-                    <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:24 }}>
-                      ¿Estás iniciando un segundo turno?<br/>Quedará pendiente de aprobación del administrador.
-                    </div>
-                    <div style={{ display:"flex", gap:12 }}>
-                      <button onClick={()=>setModalSegundoTurno(null)}
-                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
-                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10,
-                          padding:"12px 0", cursor:"pointer", fontSize:14 }}>✗ No</button>
-                      <button onClick={confirmarSegundoTurno}
-                        style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
-                          color:"#fff", border:"none", borderRadius:10,
-                          padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:"bold" }}>
-                        ✓ Sí, segundo turno
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Modal de contingencia nocturna */}
-              {modalContingencia && (
-                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
-                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-                  <div style={{ background:"linear-gradient(135deg,#1a0a00,#2d1500)", border:"3px solid #e67e22",
-                    borderRadius:20, padding:32, maxWidth:380, width:"100%", textAlign:"center" }}>
-                    <div style={{ fontSize:48, marginBottom:12 }}>⚠️</div>
-                    <div style={{ color:"#e67e22", fontSize:20, fontWeight:"bold", marginBottom:8 }}>
-                      Marca fuera de horario
-                    </div>
-                    <div style={{ color:"#fff", fontSize:15, marginBottom:6 }}>
-                      Tu salida es a las <strong style={{color:"#FFD700"}}>{modalContingencia.hora}</strong>
-                    </div>
-                    <div style={{ color:"#9A8A6A", fontSize:13, marginBottom:24 }}>
-                      Esta marca corresponde al día siguiente.<br/>
-                      ¿Estás trabajando en <strong style={{color:"#e67e22"}}>contingencia</strong>?
-                    </div>
-                    <div style={{ display:"flex", gap:12 }}>
-                      <button
-                        onClick={()=>confirmarTurnoNocturno(false)}
-                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#fff",
-                          border:"1px solid rgba(255,255,255,0.3)", borderRadius:12,
-                          padding:"14px 0", cursor:"pointer", fontSize:15 }}>
-                        ✗ No
-                      </button>
-                      <button
-                        onClick={()=>confirmarTurnoNocturno(true)}
-                        style={{ flex:2, background:"linear-gradient(135deg,#e67e22,#d35400)",
-                          color:"#fff", border:"none", borderRadius:12,
-                          padding:"14px 0", cursor:"pointer", fontSize:15, fontWeight:"bold" }}>
-                        ✓ Sí, estoy en contingencia
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* Modal de confirmación */}
               {marcaConfirm && (
@@ -4484,15 +3010,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
               {/* Estado del registro de hoy */}
               {(()=>{
-                const regsHoy = registros.filter(r=>r.tId===trabActivo.id&&r.fecha===hoy());
-                const regSegundo = regsHoy.find(r=>r.segundoTurno&&!r.salida);
-                const regHoy = regsHoy.find(r=>!r.segundoTurno&&!r.salida) || regsHoy.find(r=>!r.segundoTurno) || null;
-                if(regSegundo) return (
-                  <div style={{ ...S.card, background:"rgba(39,174,96,0.1)", border:"1px solid rgba(39,174,96,0.3)", fontSize:13 }}>
-                    <div style={{ color:"#27ae60", fontWeight:"bold", marginBottom:4 }}>🔄 Segundo turno activo</div>
-                    <div style={{ color:"#9A8A6A" }}>Entrada: <strong style={{color:"#fff"}}>{regSegundo.entrada}</strong> — Recuerda marcar tu salida.</div>
-                  </div>
-                );
+                const regHoy = registros.find(r=>r.tId===trabActivo.id&&r.fecha===hoy());
                 if(!regHoy) return (
                   <div style={{ ...S.card, background:"rgba(255,152,0,0.1)",
                     border:"1px solid rgba(255,152,0,0.3)", textAlign:"center", fontSize:13, color:"#ffddaa" }}>
@@ -4557,20 +3075,15 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       {["Fecha","Entrada","Salida","H. Extra","Estado","Nota"].map(h=><th key={h} style={S.th}>{h}</th>)}
                     </tr></thead>
                     <tbody>
-                      {[...misRegistros].filter(r=>r.fecha>=pDash&&r.fecha<=pDashH).reverse().slice(0,60).map(r => {
-                        const espT = esEspecial(r.fecha);
-                        const h = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha, r.estadoEntrada||null, r.estadoSalida||null) : null;
-                        const hBrutoT = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha) : null;
-                        const heDisplay = espT
-                          ? (r.estado==="aprobado" ? (r.esContingencia ? (r.horasExtraAprobadas||0) : hBrutoT?.extra||0) : 0)
-                          : (h?.extra||0);
+                      {[...misRegistros].reverse().slice(0,30).map(r => {
+                        const h = r.salida ? calcularHoras(r.entrada,r.salida,r.fecha) : null;
                         const esp = esEspecial(r.fecha);
                         return (
                           <tr key={r.id} style={{ background:esp?"rgba(142,68,173,0.1)":"transparent" }}>
-                            <td style={S.td}>{r.fecha} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
+                            <td style={S.td}>{fmtFecha(r.fecha, true)} {esp&&<span style={S.bdg("#8e44ad")}>{esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}</span>}</td>
                             <td style={S.td}>{r.entrada}</td>
                             <td style={S.td}>{r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
-                            <td style={{...S.td, color:heDisplay>0?"#FFD700":"#aaa"}}>{r.salida?(heDisplay>0?heDisplay+"h":"—"):"—"}</td>
+                            <td style={{...S.td, color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
                             <td style={S.td}>
                               <span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":"#e67e22")}>
                                 {r.estado==="aprobado"?"✓ Aprobado":r.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
@@ -4636,7 +3149,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       {[...misSolicitudes].reverse().map(s => (
                         <tr key={s.id}>
                           <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
-                          <td style={S.td}>{s.fechaDesde}{s.fechaHasta!==s.fechaDesde?` → ${s.fechaHasta}`:""}</td>
+                          <td style={S.td}>{fmtFecha(s.fechaDesde)}{s.fechaHasta!==s.fechaDesde?` → ${fmtFecha(s.fechaHasta)}`:""}</td>
                           <td style={{...S.td, color:"#9A8A6A", fontSize:12}}>{s.motivo||"—"}</td>
                           <td style={S.td}><span style={S.bdg(s.estado==="aprobado"?"#27ae60":s.estado==="rechazado"?"#c0392b":"#e67e22")}>
                             {s.estado==="aprobado"?"✓ Aprobado":s.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
@@ -4733,12 +3246,12 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           {tabTrab==="liquidacs" && (
             <div style={{ marginTop:16 }}>
               {firmaMsg.txt && <div style={{ ...firmaMsg.tipo==="err"?S.err:S.ok, marginBottom:12 }}>{firmaMsg.txt}</div>}
-              {liquidaciones.filter(l=>Number(l.tId)===Number(trabActivo.id)).length===0
+              {liquidaciones.filter(l=>l.tId===trabActivo.id).length===0
                 ? <div style={{ ...S.card, textAlign:"center", color:"#9A8A6A", padding:40 }}>
                     No tienes liquidaciones disponibles aún.
                   </div>
-                : [...liquidaciones.filter(l=>Number(l.tId)===Number(trabActivo.id))].reverse().map(liq=>{
-                    const d = liq.datos || {};
+                : [...liquidaciones.filter(l=>l.tId===trabActivo.id)].reverse().map(liq=>{
+                    const d = liq.datos;
                     return (
                       <div key={liq.id} style={{ ...S.card, border: liq.estado==="firmada"?"1px solid #27ae60":"1px solid rgba(255,215,0,0.3)" }}>
                         {/* Encabezado */}
@@ -4747,7 +3260,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                             <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16 }}>
                               Liquidación {mesNombre(liq.mes)} {liq.anio}
                             </div>
-                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${(d.alcanceLiquido||0).toLocaleString("es-CL")}</strong></div>
+                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${d.alcanceLiquido.toLocaleString("es-CL")}</strong></div>
                           </div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
@@ -4761,27 +3274,27 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${(d.sueldoBase||0).toLocaleString("es-CL")}</span></div>
-                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${(d.valorHHExtra||0).toLocaleString("es-CL")}</span></div>}
-                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${(d.gratif||0).toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${(d.totalImponible||0).toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${(d.colacion||0).toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${(d.movilizacion||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${d.sueldoBase.toLocaleString("es-CL")}</span></div>
+                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${d.valorHHExtra.toLocaleString("es-CL")}</span></div>}
+                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${d.gratif.toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${d.totalImponible.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${d.colacion.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${d.movilizacion.toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#C9A84C" }}><span>TOTAL HABERES</span><span>${d.totalHaberes.toLocaleString("es-CL")}</span></div>
                           </div>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${(d.prevision_monto||0).toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${(d.salud_monto||0).toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${(d.totalDescLegales||0).toLocaleString("es-CL")}</span></div>
-                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${(d.anticipo||0).toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${(d.totalDescuentos||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${d.prevision_monto.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${d.salud_monto.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${d.totalDescLegales.toLocaleString("es-CL")}</span></div>
+                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${d.anticipo.toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${d.totalDescuentos.toLocaleString("es-CL")}</span></div>
                           </div>
                         </div>
                         {/* Firma sello */}
                         {liq.estado==="firmada" && (
                           <div style={{ background:"rgba(39,174,96,0.15)", border:"1px solid #27ae60", borderRadius:8, padding:"10px 14px", marginTop:12, fontSize:12, color:"#aaffcc" }}>
-                            ✅ Firmada electrónicamente por <strong>{liq.firmadaPor}</strong> — {liq.firmadaFecha} {liq.firmadaHora}
+                            ✅ Firmada electrónicamente por <strong>{liq.firmadaPor}</strong> — {fmtFecha(liq.firmadaFecha)} {liq.firmadaHora}
                           </div>
                         )}
                         {/* Modal firma */}
@@ -4818,33 +3331,128 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
           {tabTrab==="manual" && (
             <div style={{ marginTop:16, maxWidth:780, margin:"16px auto 0" }}>
               <div style={{ ...S.card, border:"2px solid rgba(255,215,0,0.4)" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
                   <Logo size={48} />
                   <div>
-                    <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:1 }}>Manual del Trabajador</h2>
-                    <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, marginTop:4 }}>Guía de uso del sistema · Paz Vial SpA</div>
+                    <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
+                    <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Trabajador — Gestión de Personas Paz Vial SpA</div>
                   </div>
                 </div>
-                <div style={{ marginBottom:24 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🔑</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>1. Cómo Ingresar al Sistema</h3></div>
-                  <div style={{ paddingLeft:34 }}>{["Desde la portada, selecciona el botón Trabajador.","Ingresa tu Código (Ej: PP01) y tu RUT (Ej: 12.345.678-9).","Tu código fue asignado por el administrador.","Si los datos son correctos, el sistema te dará la bienvenida."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-                </div>
-                <div style={{ marginBottom:24 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🕐</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>2. Registrar Entrada y Salida</h3></div>
-                  <div style={{ paddingLeft:34 }}>{["En Marcar Asistencia, selecciona Entrada o Salida.","Aparecerá una pantalla de confirmación con la hora exacta.","Presiona '✓ Sí, Confirmar' para registrar.","Solo puedes registrar una entrada y una salida por día."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-                </div>
-                <div style={{ marginBottom:24 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
-                  <div style={{ paddingLeft:34 }}>{["Entrada antes de las 07:00 genera HE entrada anticipada.","Salida después del horario normal genera HE salida posterior.","Ambas se aprueban de forma independiente por el administrador.","Sábado/domingo/feriado: mínimo 8 horas garantizadas.","Domingos y feriados generan compensatorio; sábados no."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-                </div>
-                <div style={{ marginBottom:24 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>📝</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Solicitar Vacaciones o Permisos</h3></div>
-                  <div style={{ paddingLeft:34 }}>{["Ve a la pestaña Solicitudes.","Selecciona el tipo: Vacaciones, Permiso con goce o sin goce.","Elige las fechas de inicio y término.","Recibirás una notificación con el resultado."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-                </div>
-                <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+
+                {[
+                  {
+                    icon:"🔑", titulo:"1. Cómo Ingresar al Sistema",
+                    items:[
+                      "Desde la portada, selecciona el botón Trabajador.",
+                      "Ingresa tu Código de trabajador (Ej: PP01) y tu RUT (Ej: 12.345.678-9). El sistema te saludará con tu nombre completo.",
+                      "Si los datos son correctos, el sistema te dará la bienvenida con tu nombre completo.",
+                      "Tu código es único y fue asignado por el administrador al momento de tu registro.",
+                    ]
+                  },
+                  {
+                    icon:"🕐", titulo:"2. Registrar Entrada y Salida",
+                    items:[
+                      "En la pestaña Marcar Asistencia, selecciona el tipo de marca: Entrada o Salida.",
+                      "Presiona el botón correspondiente. Aparecerá una pantalla de confirmación con la hora exacta del momento.",
+                      "Lee la hora que muestra el sistema y presiona '✓ Sí, Confirmar' para registrar, o '✗ Cancelar' si no es el momento correcto.",
+                      "Solo puedes registrar una entrada y una salida por día.",
+                      "Debajo del botón verás el estado de tu registro del día: si aún no has marcado entrada, si ya marcaste entrada y falta la salida, o si la jornada está completa.",
+                      "El indicador de sincronización muestra si el registro se guardó en la nube: 🟢 Sincronizado, 🟡 Guardando o 🔴 Error de conexión (el sistema reintenta automáticamente).",
+                      "Si trabajas en domingo o feriado, el sistema lo indicará, generará automáticamente un Día Compensatorio y registrará tus horas como extraordinarias (mínimo 8h garantizadas).",
+                      "Si trabajas en sábado, tus horas se registran como extraordinarias (mínimo 8h garantizadas), pero no genera día compensatorio.",
+                    ]
+                  },
+                  {
+                    icon:"📅", titulo:"3. Jornada Laboral y Horas Extraordinarias",
+                    items:[
+                      "Lunes a Jueves: jornada normal de 08:00 a 18:00.",
+                      "Viernes: jornada normal de 08:00 a 14:00.",
+                      "Si entras antes de las 07:00 (más de 1 hora antes del inicio), el tiempo entre tu entrada y las 08:00 se registra como horas extraordinarias de entrada anticipada, pendientes de aprobación.",
+                      "Si tu salida es posterior al horario normal (18:00 de lunes a jueves, 14:00 los viernes), el excedente se registra como horas extraordinarias de salida, también pendientes de aprobación.",
+                      "Ambas (HE de entrada y HE de salida) son independientes: el administrador puede aprobar una y rechazar la otra.",
+                      "Sábado, domingo o feriado: toda tu jornada se considera hora extraordinaria, con un mínimo garantizado de 8 horas. Si trabajas más de 8 horas, se registran las horas efectivamente trabajadas.",
+                      "Si trabajas en domingo o feriado, además se genera automáticamente un Día Compensatorio. El sábado NO genera compensatorio.",
+                      "Recibirás una notificación por cada aprobación o rechazo, con el motivo indicado por el administrador.",
+                    ]
+                  },
+                  {
+                    icon:"📊", titulo:"4. Mi Resumen",
+                    items:[
+                      "En la pestaña Mi Resumen encontrarás un resumen del mes en curso: días trabajados, horas extra aprobadas, compensatorios pendientes y solicitudes pendientes.",
+                      "Más abajo verás el historial completo de tus registros de asistencia con el estado de cada uno.",
+                      "Si una hora extraordinaria fue rechazada, verás el motivo indicado por el administrador.",
+                    ]
+                  },
+                  {
+                    icon:"📝", titulo:"5. Solicitar Permiso o Vacaciones",
+                    items:[
+                      "En la pestaña Solicitudes puedes pedir un Permiso (día puntual) o Vacaciones (rango de fechas).",
+                      "Selecciona el tipo, completa las fechas y agrega un motivo si lo deseas.",
+                      "Importante: las vacaciones solo pueden solicitarse con inicio en día hábil (lunes a viernes, sin feriados).",
+                      "La fecha de término no puede ser anterior a la fecha de inicio; el sistema lo valida automáticamente.",
+                      "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
+                      "Recibirás una notificación cuando sea aprobada o rechazada, incluyendo el motivo en caso de rechazo.",
+                    ]
+                  },
+                  {
+                    icon:"🏦", titulo:"5b. Solicitar Anticipo de Sueldo",
+                    items:[
+                      "En la pestaña Anticipo puedes solicitar un adelanto de tu remuneración.",
+                      "Ingresa el monto solicitado y un motivo breve.",
+                      "Tu solicitud quedará en estado Pendiente hasta que el administrador la revise.",
+                      "Si es aprobada, el monto se descontará automáticamente en tu próxima liquidación de sueldo.",
+                      "Si es rechazada, recibirás una notificación con el motivo del rechazo.",
+                    ]
+                  },
+                  {
+                    icon:"💰", titulo:"5c. Mis Liquidaciones de Sueldo",
+                    items:[
+                      "En la pestaña Liquidaciones encontrarás las liquidaciones de sueldo que el administrador te haya enviado.",
+                      "Cada liquidación detalla: sueldo base, gratificación, colación, movilización, horas extra aprobadas, descuentos previsionales y anticipos.",
+                      "Puedes revisar el detalle completo y descargar el PDF de cada liquidación.",
+                      "Al revisarla por primera vez, puedes Firmarla digitalmente como aceptación de conformidad.",
+                    ]
+                  },
+                  {
+                    icon:"🔔", titulo:"6. Notificaciones",
+                    items:[
+                      "En la pestaña Notificaciones verás todos los mensajes del sistema relacionados con tus horas extra y solicitudes.",
+                      "Las notificaciones nuevas aparecen destacadas en naranja y con un contador en la pestaña.",
+                      "Puedes marcarlas como leídas con el botón Marcar todas como leídas.",
+                      "Al ingresar al sistema, las notificaciones pendientes se marcan automáticamente.",
+                    ]
+                  },
+                  {
+                    icon:"💡", titulo:"7. Consejos y Buenas Prácticas",
+                    items:[
+                      "Marca siempre tu entrada al llegar y tu salida al retirarte para mantener un registro preciso.",
+                      "Si olvidaste marcar, comunícate con el administrador para que corrija el registro.",
+                      "Solicita tus vacaciones con anticipación para facilitar la aprobación.",
+                      "Revisa tus notificaciones regularmente para estar al tanto de aprobaciones y rechazos.",
+                    ]
+                  },
+                ].map(sec => (
+                  <div key={sec.titulo} style={{ marginBottom:24 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <span style={{ fontSize:24 }}>{sec.icon}</span>
+                      <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
+                    </div>
+                    <div style={{ paddingLeft:34 }}>
+                      {sec.items.map((item, i) => (
+                        <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
+                          <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
+                          <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                   <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>📞 ¿Necesitas ayuda?</div>
-                  <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>Si tienes problemas para acceder al sistema, contacta directamente al Administrador.</div>
-                </div>
+                  <div style={{ color:"#9A8A6A", fontSize:12, lineHeight:1.7 }}>
+                    Si tienes problemas para acceder al sistema, un registro incorrecto o cualquier duda, contacta directamente al Administrador del sistema de Gestión de Personas Paz Vial SpA.
+                  </div>
+                </div>)()}
               </div>
             </div>
           )}
@@ -4868,14 +3476,10 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
     { k:"compensat",    l:"📅 Compensatorios" },
     { k:"calendario",   l:"🗓 Calendario" },
     { k:"dashboard",    l:"📊 Dashboard" },
-    { k:"cuadrillas",   l:"👥 Cuadrillas" },
-    { k:"contingencias",l:"⚠️ Contingencias" },
-    { k:"parametros",   l:"⚙️ Parámetros" },
+    { k:"prueba",      l:"🧪 Modo Prueba" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
     { k:"manual",       l:"📖 Manual de Uso" },
   ];
-
-
 
   return (
     <div style={S.app}>
@@ -4887,7 +3491,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
             // HE clásica (día especial)
             setRegistros(p => p.map(r => r.id===motivoModal.id ? {...r, estado:"rechazado", motivoRechazo:mot} : r));
             const r = registros.find(x => x.id===motivoModal.id);
-            if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${r.fecha} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
+            if (r) pushNotif(r.tId, `❌ Tus horas extraordinarias del ${fmtFecha(r.fecha)} fueron rechazadas. Motivo: ${mot||"Sin motivo especificado"}`);
           } else if (motivoModal.tipo==="heEntrada") {
             // HE entrada anticipada
             rechazarHEEntrada(motivoModal.id, mot);
@@ -4901,7 +3505,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
             const s = solicitudes.find(x => x.id===motivoModal.id);
             if (s) {
               const tipo = s.tipo==="permiso" ? "Permiso" : "Vacaciones";
-              pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${s.fechaDesde} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
+              pushNotif(s.tId, `❌ Tu solicitud de ${tipo} del ${fmtFecha(s.fechaDesde)} fue rechazada. Motivo: ${mot||"Sin motivo especificado"}`);
             }
           }
           setMotivoModal(null);
@@ -4987,7 +3591,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <tr key={r.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
-                      <td style={S.td}><span style={{fontWeight:"bold"}}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(r.fecha+"T12:00:00").getDay()]}</span> {r.fecha}</td>
+                      <td style={S.td}>{fmtFecha(r.fecha, true)}</td>
                       <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{r.entrada}</td>
                       <td style={S.td}>
                         <button onClick={()=>setEntradaAnticModal({id:r.id,horaCorregida:"08:00"})} style={{...S.btnB,fontSize:12}}>
@@ -5023,7 +3627,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>
-                        <span style={{fontWeight:"bold",marginRight:4}}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date(r.fecha+"T12:00:00").getDay()]}</span>{r.fecha}
+                        {fmtFecha(r.fecha)}
                         {esDiaEsp && <span style={{...S.bdg("#8e44ad"),marginLeft:4,fontSize:10}}>
                           {esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}
                         </span>}
@@ -5047,67 +3651,27 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         ) : r.estadoEntrada==="aprobado" ? (
                           <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
                         ) : r.estadoEntrada==="rechazado" ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                            <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
-                            <button onClick={()=>reabrirHEEntrada(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
-                          </div>
+                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
                         ) : <span style={{color:"#aaa"}}>—</span>}
                       </td>
 
                       {/* ── Columna HE Salida ── */}
                       <td style={S.td}>
-                        {esDiaEsp && r.estado==="pendiente" ? (
+                        {esDiaEsp ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
-                            {r.esContingencia ? (
-                              <div>
-                                <span style={{...S.bdg("#e67e22"),fontSize:10,display:"block",marginBottom:3}}>⚠️ Contingencia</span>
-                                {hBruto.extra > 10 ? (
-                                  <>
-                                    <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
-                                      {hBruto.extra}h brutas · {hBruto.extra-10}h pagables
-                                    </span>
-                                    <span style={{color:"#9A8A6A",fontSize:10,display:"block"}}>Viático $50.000 cubre primeras 10h</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <span style={{color:"#27ae60",fontSize:11,fontWeight:"bold"}}>
-                                      ✓ Viático $50.000 — sin HE adicionales
-                                    </span>
-                                    <span style={{color:"#9A8A6A",fontSize:10,display:"block"}}>{hBruto.extra}h trabajadas (≤10h)</span>
-                                  </>
-                                )}
-                              </div>
-                            ) : (
-                              <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
-                                ⏱ {hBruto.extra}h (día especial)
-                              </span>
-                            )}
+                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                              ⏱ {hBruto.extra}h (día especial)
+                            </span>
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>aprobarExtra(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
                               <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
                             </div>
                           </div>
-                        ) : esDiaEsp && r.estado==="rechazado" ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                            <span style={{color:"#e74c3c",fontSize:11}}>✗ {hBruto.extra}h rechazadas</span>
-                            <button onClick={()=>reabrirExtra(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
-                          </div>
-                        ) : esDiaEsp && r.estado==="aprobado" ? (
-                          <span style={{color:"#27ae60",fontSize:11}}>
-                            ✓ {r.esContingencia
-                              ? `${r.horasExtraAprobadas!==undefined?r.horasExtraAprobadas:Math.max(0,hBruto.extra-10)}h + viático`
-                              : `${hBruto.extra}h aprobadas`}
-                          </span>
                         ) : r.estadoSalida==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extraSalida}h posteriores
                             </span>
-                            {r.motivoSobretiempo && (
-                              <div style={{background:"rgba(230,126,34,0.1)",border:"1px solid rgba(230,126,34,0.3)",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#e67e22"}}>
-                                💬 {r.motivoSobretiempo}
-                              </div>
-                            )}
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
                               <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
@@ -5116,10 +3680,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                         ) : r.estadoSalida==="aprobado" ? (
                           <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraSalida}h aprobadas</span>
                         ) : r.estadoSalida==="rechazado" ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                            <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
-                            <button onClick={()=>reabrirHESalida(r.id)} style={{background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
-                          </div>
+                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
                         ) : <span style={{color:"#aaa"}}>—</span>}
                       </td>
 
@@ -5155,7 +3716,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <tr key={s.id}>
                       <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                       <td style={S.td}><span style={S.bdg(s.tipo==="permiso"?"#3498db":"#27ae60")}>{s.tipo==="permiso"?"Permiso":"Vacaciones"}</span></td>
-                      <td style={S.td}>{s.fechaDesde}</td>
+                      <td style={S.td}>{fmtFecha(s.fechaDesde)}</td>
                       <td style={S.td}>{s.fechaHasta!==s.fechaDesde?s.fechaHasta:"—"}</td>
                       <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{s.motivo||"—"}</td>
                       <td style={S.td}>
@@ -5193,22 +3754,8 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <td style={{...S.td,color:"#9A8A6A",fontSize:12}}>{a.motivo||"—"}</td>
                       <td style={S.td}>
                         <div style={{display:"flex",gap:6}}>
-                          {editAnticipo.id===a.id ? (
-                            <>
-                              <input type="number" value={editAnticipo.monto}
-                                onChange={e=>setEditAnticipo(p=>({...p,monto:e.target.value}))}
-                                style={{...S.input,width:110,padding:"2px 6px",fontSize:11}}
-                                placeholder="Monto CLP" />
-                              <button onClick={()=>{editarMontoAnticipo(a.id,editAnticipo.monto);setEditAnticipo({id:null,monto:""}); }} style={{...S.btnG,fontSize:11,padding:"4px 8px"}}>✓</button>
-                              <button onClick={()=>setEditAnticipo({id:null,monto:""})} style={{...S.btnD,fontSize:11,padding:"4px 8px"}}>✗</button>
-                            </>
-                          ) : (
-                            <>
-                              <button onClick={()=>aprobarAnticipo(a.id)} style={S.btnG}>✓ Aprobar</button>
-                              <button onClick={()=>setMotivoModal({tipo:"anticipo",id:a.id,motivo:""})} style={S.btnD}>✗ Rechazar</button>
-                              <button onClick={()=>setEditAnticipo({id:a.id,monto:String(a.monto)})} style={{background:"transparent",border:"1px solid #C9A84C",color:"#C9A84C",borderRadius:4,fontSize:11,padding:"4px 8px",cursor:"pointer"}}>✏ Editar</button>
-                            </>
-                          )}
+                          <button onClick={()=>aprobarAnticipo(a.id)} style={S.btnG}>✓ Aprobar</button>
+                          <button onClick={()=>setMotivoModal({tipo:"anticipo",id:a.id,motivo:""})} style={S.btnD}>✗ Rechazar</button>
                         </div>
                       </td>
                     </tr>
@@ -5241,27 +3788,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                   <div style={{color:"#9A8A6A",marginBottom:6,fontWeight:"bold"}}>Anticipos resueltos</div>
                   {[...anticipos.filter(a=>a.estado!=="pendiente")].reverse().slice(0,5).map(a=>{
                     const t=trabajadores.find(x=>x.id===a.tId);
-                    return (
-                      <div key={a.id} style={{marginBottom:6,color:"#d0e0ff",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span>{t?.apellido}</span>
-                        {editAnticipo.id===a.id ? (
-                          <span style={{display:"flex",gap:4,alignItems:"center"}}>
-                            <input type="number" value={editAnticipo.monto}
-                              onChange={e=>setEditAnticipo(p=>({...p,monto:e.target.value}))}
-                              style={{...S.input,width:110,padding:"2px 6px",fontSize:11}}
-                              placeholder="Monto CLP" />
-                            <button onClick={()=>{editarMontoAnticipo(a.id,editAnticipo.monto);setEditAnticipo({id:null,monto:""}); }} style={{...S.btnG,fontSize:10,padding:"2px 8px"}}>✓</button>
-                            <button onClick={()=>setEditAnticipo({id:null,monto:""})} style={{...S.btnD,fontSize:10,padding:"2px 8px"}}>✗</button>
-                          </span>
-                        ) : (
-                          <span style={{display:"flex",gap:4,alignItems:"center"}}>
-                            <strong style={{color:"#C9A84C"}}>${Number(a.monto).toLocaleString("es-CL")}</strong>
-                            <span style={S.bdg(a.estado==="aprobado"?"#27ae60":"#c0392b")}>{a.estado==="aprobado"?"✓":"✗"}</span>
-                            <button onClick={()=>setEditAnticipo({id:a.id,monto:String(a.monto)})} style={{background:"transparent",border:"1px solid #C9A84C",color:"#C9A84C",borderRadius:4,fontSize:10,padding:"1px 6px",cursor:"pointer"}}>✏</button>
-                          </span>
-                        )}
-                      </div>
-                    );
+                    return <div key={a.id} style={{marginBottom:4,color:"#d0e0ff"}}>{t?.apellido} ${Number(a.monto).toLocaleString("es-CL")} <span style={S.bdg(a.estado==="aprobado"?"#27ae60":"#c0392b")}>{a.estado==="aprobado"?"✓":"✗"}</span></div>;
                   })}
                 </div>
               </div>
@@ -5353,24 +3880,6 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     </select>
                   </div>
                   <div>
-                    <label style={S.lbl}>Día específico</label>
-                    <input type="date" style={{...S.input,width:"100%"}}
-                      value={filtroRegFecha}
-                      onChange={e=>{
-                        setFiltroRegFecha(e.target.value);
-                        if(e.target.value){
-                          const d=new Date(e.target.value+"T12:00:00");
-                          setFiltroRegMes(String(d.getMonth()));
-                          setFiltroRegAnio(String(d.getFullYear()));
-                        }
-                      }}
-                    />
-                    {filtroRegFecha && <button onClick={()=>setFiltroRegFecha("")}
-                      style={{fontSize:10,padding:"2px 6px",background:"transparent",border:"1px solid #9A8A6A",color:"#9A8A6A",borderRadius:4,cursor:"pointer",marginTop:4}}>
-                      ✕ Limpiar día
-                    </button>}
-                  </div>
-                  <div>
                     <label style={S.lbl}>Orden por fecha</label>
                     <select style={{...S.sel,width:"100%"}} value={regOrden} onChange={e=>setRegOrden(e.target.value)}>
                       <option value="desc">↓ Más reciente primero</option>
@@ -5388,7 +3897,6 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       {[...registros]
                         .filter(r=>{
                           if(filtroRegTrab && r.tId!==Number(filtroRegTrab)) return false;
-                          if(filtroRegFecha) return r.fecha===filtroRegFecha;
                           if(filtroRegMes!=="" && new Date(r.fecha+"T12:00:00").getMonth()!==Number(filtroRegMes)) return false;
                           if(filtroRegAnio && new Date(r.fecha+"T12:00:00").getFullYear()!==Number(filtroRegAnio)) return false;
                           return true;
@@ -5443,39 +3951,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                     <button onClick={cancelarEdicion} style={S.btnD}>✗</button>
                                   </div>
                                 ) : (
-                                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                                  <div style={{display:"flex",gap:4}}>
                                     <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
-                                    {(r.estado==="rechazado"||(r.estadoEntrada==="rechazado"||r.estadoSalida==="rechazado")) && (
-                                      <button
-                                        title="Reenviar HE a pendiente para re-aprobación"
-                                        onClick={()=>{
-                                          setRegistros(p=>p.map(x=>{
-                                            if(x.id!==r.id) return x;
-                                            return {...x,
-                                              estado: x.estado==="rechazado"?"pendiente":x.estado,
-                                              estadoEntrada: x.estadoEntrada==="rechazado"?"pendiente":x.estadoEntrada,
-                                              estadoSalida: x.estadoSalida==="rechazado"?"pendiente":x.estadoSalida,
-                                              motivoRechazo:"",motivoRechazoEntrada:"",motivoRechazoSalida:"",
-                                            };
-                                          }));
-                                          if(t) pushNotif(r.tId,`🔄 Tu solicitud de HE del ${r.fecha} fue reenviada a revisión.`);
-                                        }}
-                                        style={{...S.btnG,fontSize:11,padding:"4px 10px"}}
-                                      >↩ HE</button>
-                                    )}
-                                    {esEspecial(r.fecha) && (
-                                      <button
-                                        title={r.esContingencia?"Quitar contingencia":"Marcar como contingencia (viático $50.000)"}
-                                        onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:!x.esContingencia}:x))}
-                                        style={{background:r.esContingencia?"rgba(230,126,34,0.3)":"transparent",
-                                          border:`1px solid ${r.esContingencia?"#e67e22":"rgba(230,126,34,0.4)"}`,
-                                          color:r.esContingencia?"#e67e22":"#9A8A6A",
-                                          borderRadius:4,fontSize:11,padding:"4px 8px",cursor:"pointer"}}
-                                      >{r.esContingencia?"⚠️ Cont.":"⚠️"}</button>
-                                    )}
                                     <button
                                       onClick={()=>{
-                                        if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${r.fecha}?`)){
+                                        if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${fmtFecha(r.fecha)}?`)){
                                           registrosEliminados.current.add(r.id);
                                           setRegistros(p=>p.filter(x=>x.id!==r.id));
                                         }
@@ -5675,18 +4155,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                     <td style={{...S.td,textAlign:"center"}}>{reg&&reg.salida?reg.salida:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h?"#27ae60":"#aaa"}}>{h?`${h.normales}h`:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${h.extra}h`:"—"}</td>
-                                    <td style={{...S.td,fontSize:10,color:obsColor}}>
-                                      {obsLabel}
-                                      {h&&h.extra>0&&reg&&reg.estado==="rechazado" && (
-                                        <button onClick={()=>reabrirExtra(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Aprobar</button>
-                                      )}
-                                      {h&&(h.extraEntrada>0||h.extraSalida>0)&&reg&&reg.estadoEntrada==="rechazado" && (
-                                        <button onClick={()=>reabrirHEEntrada(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Entrada</button>
-                                      )}
-                                      {h&&h.extraSalida>0&&reg&&reg.estadoSalida==="rechazado" && (
-                                        <button onClick={()=>reabrirHESalida(reg.id)} style={{display:"block",marginTop:3,background:"rgba(39,174,96,0.15)",border:"1px solid #27ae60",color:"#27ae60",borderRadius:4,fontSize:9,padding:"1px 6px",cursor:"pointer"}}>↩ Salida</button>
-                                      )}
-                                    </td>
+                                    <td style={{...S.td,fontSize:10,color:obsColor}}>{obsLabel}</td>
                                   </tr>
                                 );
                               })}
@@ -6051,62 +4520,8 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>
                         Vista Previa — {liqPreview.nombre}
                       </div>
-                      <div style={{ color:"#9A8A6A", fontSize:12, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                        <span>{mesNombre(liqPreview.mes)} {liqPreview.anio}</span>
-                        <span>·</span>
-                        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                          <span>Días:</span>
-                          <input type="number" min="0" max="30"
-                            value={liqDiasManual !== null ? liqDiasManual : (liqPreview.diasTrabFinal ?? liqPreview.diasTrab)}
-                            onChange={e => {
-                              const v = Math.min(30, Math.max(0, Number(e.target.value)));
-                              setLiqDiasManual(v);
-                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
-                              if (t2) {
-                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, v, liqIMM);
-                                setLiqPreview(d2);
-                              }
-                            }}
-                            style={{ width:46, padding:"1px 4px", background:"rgba(201,168,76,0.15)",
-                              border:"1px solid #C9A84C", borderRadius:4, color:"#C9A84C",
-                              fontSize:12, textAlign:"center" }}
-                          />
-                          <span>/30</span>
-                          {liqDiasManual !== null && (
-                            <button onClick={() => {
-                              setLiqDiasManual(null);
-                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
-                              if (t2) {
-                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, null);
-                                setLiqPreview(d2);
-                              }
-                            }} style={{ fontSize:10, padding:"1px 5px", background:"transparent",
-                              border:"1px solid #9A8A6A", color:"#9A8A6A", borderRadius:3, cursor:"pointer" }}>
-                              ↩ Auto
-                            </button>
-                          )}
-                        </span>
-                        <span>· {liqPreview.horasExtraImponibles||liqPreview.horasExtra}h extra
-                          {(liqPreview.horasExtraExcedentes||0)>0 && <span style={{color:"#e67e22"}}> (+{liqPreview.horasExtraExcedentes}h viático operacional)</span>}
-                        </span>
-                        <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                          <span style={{color:"#9A8A6A"}}>· IMM $</span>
-                          <input type="number"
-                            value={liqIMM !== null ? liqIMM : (params?.IMM || 510000)}
-                            onChange={e => {
-                              const v = Math.max(0, Number(e.target.value));
-                              setLiqIMM(v);
-                              const t2 = trabajadores.find(x => x.id === liqPreview.tId);
-                              if (t2) {
-                                const d2 = calcularLiquidacion(t2, registros, anticipos, liqMes, liqAnio, params, solicitudes, compensatorios, liqDiasManual, v);
-                                setLiqPreview(d2);
-                              }
-                            }}
-                            style={{ width:80, padding:"1px 4px", background:"rgba(201,168,76,0.15)",
-                              border:"1px solid #C9A84C", borderRadius:4, color:"#C9A84C",
-                              fontSize:12, textAlign:"center" }}
-                          />
-                        </span>
+                      <div style={{ color:"#9A8A6A", fontSize:12 }}>
+                        {mesNombre(liqPreview.mes)} {liqPreview.anio} · {liqPreview.diasTrab} días trabajados · {liqPreview.horasExtra}h extra
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
@@ -6119,14 +4534,11 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
                         ["Sueldo Base", liqPreview.sueldoBase],
-                        ...(liqPreview.sueldoProporcional!==liqPreview.sueldoBase?[[`Sueldo Proporcional (${liqPreview.diasTrabFinal||liqPreview.diasTrab}/30 días)`,liqPreview.sueldoProporcional]]:[]),
-                        ...(liqPreview.valorHHExtra>0?[["Horas Extra ("+liqPreview.horasExtra+"h × $"+(liqPreview.valorHoraExtra||0).toLocaleString("es-CL")+"/h)", liqPreview.valorHHExtra]]:[]),
+                        ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+liqPreview.horasExtra+"h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
-                        ...((liqPreview.colacion||0)>0?[["Asig. Colación", liqPreview.colacion]]:[]),
-                        ...((liqPreview.movilizacion||0)>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
-                        ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
-                        ...((liqPreview.viaticosOperacional||0)>0?[[`⚙️ Viático Operacional (${liqPreview.horasExtraExcedentes}h exc.)`, liqPreview.viaticosOperacional]]:[]),
+                        ["Asig. Colación", liqPreview.colacion],
+                        ["Asig. Movilización", liqPreview.movilizacion],
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
@@ -6138,15 +4550,13 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                     <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>DESCUENTOS</div>
                       {[
-                        [`AFP ${liqPreview.afp||""} Cotiz. (${liqPreview.pctAFP}%)`, liqPreview.afpOblig||0],
-                        [`AFP Comisión (${liqPreview.comisionAFP||""}%)`, liqPreview.comisionAFPmonto||0],
-                        [`Salud ${liqPreview.sistSalud||"FONASA"}`, liqPreview.salud_monto||0],
-                        ...(liqPreview.segCesantia>0?[["Seg. Cesantía AFC", liqPreview.segCesantia]]:[]),
+                        [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
+                        ["Salud (7%)", liqPreview.salud_monto],
+                        ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
-                        ...(liqPreview.impuesto>0?[["Impuesto Único 2ª Cat.", liqPreview.impuesto]]:[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
+                        ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
-                        ["Base Tributable", liqPreview.baseTributable||0],
                       ].map(([l,v,b,c])=>(
                         <div key={l} style={{ display:"flex", justifyContent:"space-between", fontWeight:b?"bold":"normal", color:c||"#fff", borderTop:b?"1px solid rgba(255,255,255,0.1)":"none", paddingTop:b?4:0, marginTop:b?4:2 }}>
                           <span>{l}</span><span>${(v||0).toLocaleString("es-CL")}</span>
@@ -6172,7 +4582,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                       <thead><tr>{["Trabajador","Período","Total Haberes","Descuentos","Alcance Líquido","Estado","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                       <tbody>
                         {[...liquidaciones].reverse().map(liq=>{
-                          const d=liq.datos||{};
+                          const d=liq.datos;
                           const t=trabajadores.find(x=>x.id===liq.tId);
                           return(
                             <tr key={liq.id}>
@@ -6185,9 +4595,9 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                                 <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
                                   {liq.estado==="firmada"?"✓ Firmada":liq.estado==="enviada"?"● Enviada":"Borrador"}
                                 </span>
-                                {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{liq.firmadaFecha} {liq.firmadaHora}</div>}
+                                {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{fmtFecha(liq.firmadaFecha)} {liq.firmadaHora}</div>}
                               </td>
-                              <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={{...S.btnB,border:"1px solid #C9A84C",color:"#C9A84C"}}>📄 PDF</button></td>
+                              <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={S.btnB}>🖨 PDF</button></td>
                             </tr>
                           );
                         })}
@@ -6257,24 +4667,23 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
             <div style={S.card}>
               <h4 style={{ color:"#9A8A6A", marginTop:0 }}>Resumen por Trabajador</h4>
               <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-                <table style={S.tbl}>
-                  <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>{
-                      const cs=compensatorios.filter(c=>c.tId===t.id);
-                      return(
-                        <tr key={t.id}>
-                          <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#C9A84C"}}>({t.codigo})</span></td>
-                          <td style={S.td}>{cs.length}</td>
-                          <td style={{...S.td,color:"#27ae60"}}>{cs.filter(c=>c.estado==="tomado").length}</td>
-                          <td style={{...S.td,color:"#3498db"}}>{cs.filter(c=>c.estado==="pagado").length}</td>
-                          <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{cs.filter(c=>c.estado==="pendiente").length}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <table style={S.tbl}>
+                <thead><tr>{["Trabajador","Total","Tomados","Pagados","Pendientes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>{
+                    const cs=compensatorios.filter(c=>c.tId===t.id);
+                    return(
+                      <tr key={t.id}>
+                        <td style={S.td}>{nombreCompleto(t)} <span style={{color:"#C9A84C"}}>({t.codigo})</span></td>
+                        <td style={S.td}>{cs.length}</td>
+                        <td style={{...S.td,color:"#27ae60"}}>{cs.filter(c=>c.estado==="tomado").length}</td>
+                        <td style={{...S.td,color:"#3498db"}}>{cs.filter(c=>c.estado==="pagado").length}</td>
+                        <td style={{...S.td,color:"#e67e22",fontWeight:"bold"}}>{cs.filter(c=>c.estado==="pendiente").length}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -6344,6 +4753,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                 <div>
                   {/* Leyenda */}
                   <div style={{...S.card, display:"flex", flexWrap:"wrap", gap:10, padding:"12px 16px", marginBottom:14}}>
+                    <div style={{display:"contents"}}>
                     {trabActivos.map((t,i) => (
                       <div key={t.id} style={{display:"flex",alignItems:"center",gap:6}}>
                         <div style={{width:12,height:12,borderRadius:3,background:COLORES[i%COLORES.length],flexShrink:0}}/>
@@ -6498,7 +4908,6 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                 </select>
               </div>
               <div style={{ marginLeft:"auto", color:"#C9A84C", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
-              <button onClick={()=>generarReporteHEPDF(trabajadores,registros,dMes,dAnio,LOGO_SRC)} style={{...S.btn,fontSize:12,padding:"6px 14px"}}>📊 Reporte HE PDF</button>
             </div>
 
             {/* KPIs */}
@@ -6521,7 +4930,7 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
 
             {/* Tabla detalle */}
             <div style={S.card}>
-              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — Período {periodoLiquidacion(dMes,dAnio).desde} al {periodoLiquidacion(dMes,dAnio).hasta}</h3>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Detalle por Trabajador — {mesNombre(dMes)} {dAnio}</h3>
               <div style={{ overflowX:"auto" }}>
                 <table style={S.tbl}>
                   <thead><tr>{["Trabajador","Cód","Días Háb","Días Trab","Asistencia","Ausencias","Dom/Fer","H. Extra","C. Pend","C. Tom","C. Pag"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
@@ -6567,94 +4976,45 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
                 </table>
               </div>
             </div>
+          </div>
+        )}
 
-
-            {/* Detalle día a día de HE aprobadas */}
+        {/* ── TAB: MODO PRUEBA ─────────────────────────────────── */}
+        {tabAdmin==="prueba" && (
+          <div style={{ marginTop:4 }}>
             <div style={S.card}>
-              <h3 style={{ color:"#C9A84C", marginTop:0 }}>⏱ Detalle de Horas Extras — Período {periodoLiquidacion(dMes,dAnio).desde} al {periodoLiquidacion(dMes,dAnio).hasta}</h3>
-              <div style={{ overflowX:"auto" }}>
-                <table style={S.tbl}>
-                  <thead><tr>{["Trabajador","Fecha","Día","Tipo","Entrada","Salida","H. Extra","Estado"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {(()=>{
-                      const { desde: pD, hasta: pH } = periodoLiquidacion(dMes, dAnio);
-                      const nombresDias = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-                      const filas = [];
-                      trabajadores.filter(t=>t.activo&&t.id!==999).forEach(t => {
-                        const regsT = registros.filter(r=>r.tId===t.id&&r.salida&&r.fecha>=pD&&r.fecha<=pH);
-                        regsT.forEach(r => {
-                          const esp = esEspecial(r.fecha);
-                          const h = calcularHoras(r.entrada, r.salida, r.fecha,
-                            esp ? null : r.estadoEntrada||null,
-                            esp ? null : r.estadoSalida||null);
-                          if (h.extra <= 0) return;
-                          const estadoHE = esp
-                            ? r.estado
-                            : (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "aprobado"
-                            : (r.estadoEntrada==="rechazado"&&r.estadoSalida==="rechazado") ? "rechazado"
-                            : "pendiente";
-                          const diaSem = new Date(r.fecha+"T12:00:00").getDay();
-                          const tipo = esFeriado(r.fecha) ? "Feriado" : diaSem===0 ? "Domingo" : diaSem===6 ? "Sábado" : "Día Normal";
-                          filas.push({ trab:t, r, h, estadoHE, diaSem, tipo });
-                        });
-                      });
-                      if (filas.length === 0) return (
-                        <tr><td colSpan={8} style={{...S.td, textAlign:"center", color:"#9A8A6A", padding:20}}>No hay horas extras en este período</td></tr>
-                      );
-                      return filas.map((f,i) => (
-                        <tr key={i} style={{ background: f.estadoHE==="aprobado" ? "rgba(39,174,96,0.06)" : f.estadoHE==="rechazado" ? "rgba(192,57,43,0.06)" : "rgba(230,126,34,0.06)" }}>
-                          <td style={S.td}><span style={{color:"#C9A84C",fontWeight:"bold"}}>{f.trab.codigo}</span> {nombreCompleto(f.trab)}</td>
-                          <td style={S.td}>{f.r.fecha}</td>
-                          <td style={S.td}>{["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][f.diaSem]}</td>
-                          <td style={S.td}><span style={S.bdg(f.tipo==="Día Normal"?"#3498db":f.tipo==="Sábado"?"#8e44ad":"#e67e22")}>{f.tipo}</span></td>
-                          <td style={S.td}>{f.r.entrada}</td>
-                          <td style={S.td}>{f.r.salida}</td>
-                          <td style={{...S.td, color:"#FFD700", fontWeight:"bold"}}>{f.h.extra}h</td>
-                          <td style={S.td}>
-                            <span style={S.bdg(f.estadoHE==="aprobado"?"#27ae60":f.estadoHE==="rechazado"?"#c0392b":"#e67e22")}>
-                              {f.estadoHE==="aprobado"?"✓ Aprobada":f.estadoHE==="rechazado"?"✗ Rechazada":"● Pendiente"}
-                            </span>
-                          </td>
-                        </tr>
-                      ));
-                    })()}
-                  </tbody>
-                </table>
+              <h3 style={{ color:"#e67e22", marginTop:0 }}>🧪 Modo Prueba</h3>
+              <p style={{ color:"#9A8A6A", fontSize:13, lineHeight:1.6 }}>
+                Crea un trabajador ficticio con registros del período actual para probar todos los módulos sin afectar datos reales.
+              </p>
+              <div style={{ background:"rgba(230,126,34,0.08)", border:"1px solid rgba(230,126,34,0.3)",
+                borderRadius:10, padding:"14px 16px", marginBottom:16, fontSize:12, color:"#9A8A6A" }}>
+                <div style={{ color:"#e67e22", fontWeight:"bold", marginBottom:8 }}>¿Qué incluye?</div>
+                <div>👤 <strong>Carlos Prueba Test</strong> — Código: <strong>PRB01</strong></div>
+                <div>💰 $800.000 · AFP Habitat · FONASA · Contrato indefinido · Colación $3.500 · Movilización $3.500</div>
+                <div>📆 22 días hábiles trabajados en el período actual</div>
+                <div>⏱ HE de entrada aprobadas (1 día a las 06:45)</div>
+                <div>⏱ HE de salida aprobadas (1 día a las 19:15)</div>
+                <div>📅 1 día especial (fin de semana) aprobado</div>
+                <div style={{ marginTop:8, color:"#C9A84C" }}>
+                  Puedes calcular liquidación, ajustar días/IMM, ver gratificación, HE, viáticos y enviarla para firmar con código PRB01.
+                </div>
               </div>
+              <div style={{ display:"flex", gap:12 }}>
+                <button onClick={crearDatosPrueba} style={{ flex:2, ...S.btnG, fontSize:14, padding:"12px 0" }}>
+                  🧪 Crear / Reiniciar Datos de Prueba
+                </button>
+                <button onClick={limpiarDatosPrueba} style={{ flex:1, ...S.btnD, fontSize:13, padding:"12px 0" }}>
+                  🗑 Limpiar
+                </button>
+              </div>
+              {trabajadores.find(t=>t.esDePrueba) && (
+                <div style={{ marginTop:12, background:"rgba(39,174,96,0.1)", border:"1px solid #27ae60",
+                  borderRadius:8, padding:"10px 14px", fontSize:12, color:"#27ae60" }}>
+                  ✅ Trabajador de prueba activo — código <strong>PRB01</strong>
+                </div>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* ── TAB: CUADRILLAS ───────────────────────────────── */}
-        {tabAdmin==="cuadrillas" && (
-          <div style={{ marginTop:4 }}>
-            <CuadrillasAdmin
-              trabajadores={trabajadores}
-              cuadrillas={cuadrillas}
-              onGuardar={guardarCuadrilla}
-              onEliminar={eliminarCuadrilla}
-              S={S}
-              nombreCompleto={nombreCompleto}
-            />
-          </div>
-        )}
-
-        {/* ── TAB: CONTINGENCIAS ────────────────────────────── */}
-        {tabAdmin==="contingencias" && (
-          <div style={{ marginTop:4 }}>
-            <ContingenciasAdmin
-              contingencias={contingencias}
-              onGuardar={(c) => setContingencias(p => c.id ? p.map(x=>x.id===c.id?c:x) : [...p,{...c,id:Date.now()}])}
-              onEliminar={(id) => setContingencias(p=>p.filter(c=>c.id!==id))}
-              S={S}
-            />
-          </div>
-        )}
-
-        {/* ── TAB: PARÁMETROS ────────────────────────────────── */}
-        {tabAdmin==="parametros" && (
-          <div style={{ marginTop:4 }}>
-            <ParametrosAdmin params={params} onSave={setParams} S={S} />
           </div>
         )}
 
@@ -6712,46 +5072,222 @@ function generarReporteHEPDF(trabajadores, registros, mes, anio, LOGO_SRC) {
         {tabAdmin==="manual" && (
           <div style={{ marginTop:4, maxWidth:820, margin:"4px auto 0" }}>
             <div style={{ ...S.card, border:"2px solid rgba(255,215,0,0.4)" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20, borderBottom:"1px solid rgba(255,215,0,0.2)", paddingBottom:16 }}>
                 <Logo size={48} />
                 <div>
-                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:1 }}>Manual del Administrador</h2>
-                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, marginTop:4 }}>Guía de administración · Paz Vial SpA</div>
+                  <h2 style={{ color:"#C9A84C", margin:0, fontSize:20, letterSpacing:2 }}>MANUAL DE USO</h2>
+                  <div style={{ color:"#9A8A6A", fontSize:12, letterSpacing:1, textTransform:"uppercase" }}>Perfil Administrador — Gestión de Personas Paz Vial SpA</div>
                 </div>
               </div>
-              <div style={{ marginBottom:24 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>🔑</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>1. Acceso al Panel</h3></div>
-                <div style={{ paddingLeft:34 }}>{["Selecciona el botón Administrador desde la portada.","Ingresa la contraseña: Negra2026.","Tendrás acceso a 9 módulos en la barra de tabs."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-              </div>
-              <div style={{ marginBottom:24 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>👥</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>2. Gestión de Trabajadores</h3></div>
-                <div style={{ paddingLeft:34 }}>{["En Nómina puedes agregar, editar o desactivar trabajadores.","Cada trabajador recibe un código único automático.","Los trabajadores desactivados conservan su historial."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-              </div>
-              <div style={{ marginBottom:24 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>⚡</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>3. Horas Extraordinarias</h3></div>
-                <div style={{ paddingLeft:34 }}>{["Las HE aparecen en Pendientes separadas por tipo (entrada anticipada / salida posterior).","Entrada anticipada y salida posterior se aprueban de forma independiente.","Los domingos y feriados generan compensatorio; los sábados no.","El período de liquidación va del día 26 del mes anterior al día 25 del mes actual.","El detalle diario de HE por trabajador está disponible en el tab Dashboard."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-              </div>
-              <div style={{ marginBottom:24 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💰</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>4. Liquidaciones</h3></div>
-                <div style={{ paddingLeft:34 }}>{["Selecciona mes y trabajador en la pestaña Liquidaciones.","El sistema calcula sueldo base, HE aprobadas y descuentos.","Puedes previsualizar, enviar por email y marcar como firmada."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-              </div>
-              <div style={{ marginBottom:24 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}><span style={{ fontSize:24 }}>💾</span><h3 style={{ color:"#C9A84C", margin:0, fontSize:15 }}>5. Exportar e Importar</h3></div>
-                <div style={{ paddingLeft:34 }}>{["Usa Exportar / Importar para hacer backups del sistema.","El backup es un archivo JSON con todos los datos.","Para restaurar, carga el archivo JSON de backup."].map((item,i) => (<div key={i} style={{ display:"flex", gap:10, marginBottom:8 }}><span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0 }}>→</span><span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span></div>))}</div>
-              </div>
-              <div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
+
+              {[
+                {
+                  icon:"🔑", titulo:"1. Acceso al Panel de Administración",
+                  items:[
+                    "Desde la portada, selecciona el botón Administrador.",
+                    "Ingresa la contraseña de administrador: Negra2026.",
+                    "Al ingresar tendrás acceso a 8 módulos principales en la barra de tabs.",
+                    "La barra superior muestra la fecha actual, el botón Limpiar pantalla y el botón Limpiar datos de prueba.",
+                    "Para salir usa el botón Cerrar sesión en la parte superior derecha.",
+                  ]
+                },
+                {
+                  icon:"🔔", titulo:"2. Módulo: Bandeja de Pendientes",
+                  items:[
+                    "Punto de control central. El contador en el tab muestra el total de ítems pendientes de revisión.",
+                    "Agrupa en una sola pantalla: horas extraordinarias, permisos/vacaciones y anticipos de remuneración.",
+                    "HE en días hábiles: la tabla muestra dos columnas independientes — 'HE Entrada' (tiempo antes de las 08:00 para entradas antes de las 07:00) y 'HE Salida' (tiempo después del horario normal). Cada una tiene sus propios botones ✓ Aprobar / ✗ Rechazar.",
+                    "HE en días especiales (sáb/dom/feriado): flujo clásico con un solo botón de aprobación por registro.",
+                    "Puedes aprobar la HE de entrada y rechazar la de salida del mismo día, o viceversa — son decisiones completamente independientes.",
+                    "Al rechazar siempre deberás ingresar un motivo obligatorio que el trabajador verá en sus notificaciones.",
+                  ]
+                },
+                {
+                  icon:"📋", titulo:"3. Módulo: Asistencia",
+                  items:[
+                    "Tiene tres subtabs: Ver Registros, Ingresar / Editar, y Hoja Mensual PDF.",
+                    "Ver Registros: muestra el historial filtrable por trabajador, mes y año, con opción de ordenar por fecha (más reciente o más antiguo primero). Las horas extra pendientes de aprobación aparecen con ⏳. Cada fila tiene botón ✏️ para editar y botón 🗑️ para eliminar el registro (pide confirmación antes de borrar).",
+                    "Ingresar / Editar: permite crear registros cuando el trabajador olvidó marcar. Los registros manuales quedan con etiqueta azul 'Manual'.",
+                    "Hoja Mensual PDF: genera una hoja de asistencia con logo, por trabajador o para todos. Incluye vista previa en pantalla antes de imprimir.",
+                  ]
+                },
+                {
+                  icon:"👥", titulo:"4. Módulo: Nómina",
+                  items:[
+                    "Tiene dos subtabs: Lista y Alta, y Fichas de Personal. Ambas están conectadas — la ficha alimenta la lista automáticamente.",
+                    "Lista y Alta: tabla completa de todos los trabajadores con código, nombre, RUT, cargo, AFP, previsión, fecha de ingreso y estado. Botón 'Ver Ficha' lleva directamente a la ficha del trabajador.",
+                    "Fichas de Personal: es donde se crean y editan los registros. Tiene tres modos: Ver (solo lectura), Editar y Nueva Ficha.",
+                    "Para crear un trabajador: presiona '➕ Nueva Ficha' (disponible en ambos subtabs y en la lista lateral). Se abre el formulario en blanco. Completa los datos y presiona '💾 Grabar' para registrar al trabajador en el sistema.",
+                    "Para editar: selecciona un trabajador de la lista lateral y presiona '✏️ Editar'. Modifica los campos necesarios y presiona '💾 Grabar'. Presiona '✗ Cancelar' para descartar cambios.",
+                    "El código se genera automáticamente al grabar, siguiendo el formato P + inicial apellido + número correlativo (Ej: PP01).",
+                    "En modo Ver, todos los campos aparecen en gris (solo lectura). Solo se pueden editar en modo Editar.",
+                    "La ficha incluye: nombres, apellido paterno, apellido materno, RUT, cargo, dirección, teléfono, correo, contacto de emergencia, previsión de salud, AFP, sueldo pactado, colación, movilización, gratificación legal, fecha de ingreso, fecha de salida, motivo de salida, antigüedad calculada automáticamente y observaciones.",
+                    "Al crear un trabajador con sueldo pactado, se genera automáticamente el primer registro del Historial de Remuneraciones.",
+                    "Para registrar un aumento o ajuste de renta: ve a la ficha del trabajador (modo Ver), baja hasta la sección 💰 Historial de Remuneraciones, completa la fecha de vigencia, nuevo sueldo, colación, movilización, motivo y presiona 'Registrar Cambio de Remuneración'. El registro antiguo queda en el historial y no se elimina.",
+                    "El registro marcado como VIGENTE es el que se usa automáticamente para calcular la liquidación del mes correspondiente. Si una liquidación es de enero y el aumento es de marzo, la liquidación de enero usa el sueldo anterior.",
+                    "Los motivos disponibles son: Sueldo inicial, Ajuste anual, Incremento por mérito, Promoción, Cambio de cargo, Negociación colectiva, Corrección, Otro.",
+                  ]
+                },
+
+                {
+                  icon:"💰", titulo:"5. Módulo: Liquidaciones de Sueldo",
+                  items:[
+                    "Genera las liquidaciones mensuales de cada trabajador tomando datos automáticamente de la ficha: sueldo, AFP, previsión, colación, movilización y gratificación.",
+                    "También considera los días trabajados, horas extra aprobadas y anticipos aprobados del mes.",
+                    "El resultado muestra la vista previa completa antes de enviar. Puedes ver el PDF antes de enviarlo.",
+                    "Al presionar Enviar al Trabajador, la liquidación llega al perfil del trabajador con notificación.",
+                    "La liquidación queda firmada por el empleador con fecha y hora de envío automáticas.",
+                    "El historial muestra el estado de cada liquidación: Enviada o Firmada (por el trabajador).",
+                  ]
+                },
+                {
+                  icon:"⏰", titulo:"3b. Módulo: Entradas Anticipadas",
+                  items:[
+                    "Si un trabajador marca su entrada antes de las 08:00, el registro queda automáticamente en estado 'Pendiente de validación' y aparece en este módulo.",
+                    "El contador en el tab muestra cuántas entradas anticipadas están pendientes de revisión.",
+                    "Al hacer clic en 'Revisar', se abre un panel con la hora marcada por el trabajador.",
+                    "Opción 1 — Aprobar: se mantiene la hora original marcada por el trabajador.",
+                    "Opción 2 — Corregir: ingresa la hora correcta (por defecto 08:00) y el sistema registrará esa hora. El trabajador recibe notificación de la corrección.",
+                  ]
+                },
+                {
+                  icon:"✏️", titulo:"3c. Módulo: Asistencia Manual",
+                  items:[
+                    "Permite ingresar registros de asistencia cuando un trabajador olvidó marcar su entrada o salida.",
+                    "Selecciona el trabajador, la fecha, la hora de entrada y salida. El sistema calcula automáticamente horas normales y extra.",
+                    "Los registros ingresados manualmente quedan identificados con la etiqueta azul 'Manual'.",
+                    "También puedes editar registros existentes directamente desde la tabla, haciendo clic en el botón ✏️ Editar de cada fila, o eliminarlos con el botón 🗑️ (con confirmación previa).",
+                    "Al editar, los campos fecha, entrada y salida se vuelven editables. Usa ✓ para guardar y ✗ para cancelar.",
+                  ]
+                },
+                {
+                  icon:"📝", titulo:"4. Módulo: Solicitudes (Permisos y Vacaciones)",
+                  items:[
+                    "Aquí aparecen todas las solicitudes de permiso y vacaciones enviadas por los trabajadores.",
+                    "El número en el tab indica cuántas solicitudes están pendientes de revisión.",
+                    "Para Aprobar: haz clic en ✓ Aprobar. El trabajador recibirá notificación inmediata.",
+                    "Para Rechazar: haz clic en ✗ Rechazar e ingresa el motivo en el formulario que se abre. Es obligatorio.",
+                    "Las vacaciones solo pueden solicitarse con inicio en día hábil; el sistema ya lo valida en el perfil del trabajador.",
+                    "El historial de solicitudes ya resueltas se muestra en la parte inferior del módulo.",
+                  ]
+                },
+                {
+                  icon:"👥", titulo:"5. Módulo: Trabajadores",
+                  items:[
+                    "Permite agregar nuevos trabajadores ingresando Nombre, Apellido Paterno y RUT.",
+                    "El sistema valida que el RUT no esté ya registrado por otro trabajador antes de crear el perfil.",
+                    "El sistema genera automáticamente un código único con el formato: P + inicial del apellido + número correlativo (Ej: PP01, PR02). El código nunca se repite, incluso si un trabajador anterior con esa inicial fue eliminado definitivamente.",
+                    "Antes de confirmar, se muestra una vista previa del código que se asignará.",
+                    "Puedes Desactivar un trabajador (sin eliminarlo) para que no pueda iniciar sesión, o Activarlo nuevamente.",
+                    "El botón 🗑 elimina al trabajador definitivamente de la nómina. Su código queda reservado para siempre y no se reasignará a otro trabajador.",
+                    "El Perfil de Prueba (Administrador / RUT: Pruebas) no debe eliminarse, sirve para testear el sistema.",
+                  ]
+                },
+                {
+                  icon:"📅", titulo:"6. Módulo: Compensatorios",
+                  items:[
+                    "Se generan automáticamente cuando un trabajador registra asistencia en domingo o feriado.",
+                    "Cada compensatorio puede estar en estado: Pendiente, Tomado (con fecha en que se tomó) o Pagado.",
+                    "Al marcar como Tomado, debes ingresar la fecha en que el trabajador usó su día libre; esto lo descuenta del total pendiente.",
+                    "El resumen al pie del módulo muestra el total de compensatorios por trabajador, separados por estado.",
+                  ]
+                },
+                {
+                  icon:"📊", titulo:"7. Módulo: Dashboard",
+                  items:[
+                    "Panel de control mensual. Usa los selectores de Mes y Año para filtrar el período.",
+                    "Las tarjetas superiores muestran KPIs globales: trabajadores activos, días trabajados, horas extra aprobadas, días especiales y compensatorios pendientes.",
+                    "La tabla detalla por cada trabajador: días hábiles del mes, días trabajados, barra de asistencia (% en color), ausencias, horas extra y compensatorios.",
+                    "La fila de Totales al pie suma todas las columnas del período seleccionado.",
+                    "Verde ≥ 90% asistencia, Amarillo ≥ 70%, Rojo < 70%.",
+                  ]
+                },
+                {
+                  icon:"🗓", titulo:"8. Módulo: Calendario",
+                  items:[
+                    "Vista mensual que muestra visualmente quién tiene vacaciones o permisos aprobados en cada día del mes.",
+                    "Navega entre meses con las flechas ‹ › o vuelve al mes actual con el botón 'Hoy'.",
+                    "Cada trabajador tiene un color único asignado automáticamente. Los días con ausencias muestran el código del trabajador en su color.",
+                    "El día de hoy aparece resaltado en dorado. Los feriados en rojo y los fines de semana en gris oscuro.",
+                    "La leyenda superior muestra el color y nombre de cada trabajador para identificarlos fácilmente.",
+                    "Al pie del calendario aparece un resumen con los trabajadores que tienen días aprobados en el mes y cuántos días.",
+                    "Solo muestra vacaciones y permisos en estado Aprobado — las solicitudes pendientes no aparecen en el calendario.",
+                  ]
+                },
+                {
+                  icon:"📄", titulo:"9. Módulo: Hoja de Asistencia Mensual",
+                  items:[
+                    "Genera un documento PDF con el registro diario de asistencia de uno o todos los trabajadores activos.",
+                    "Selecciona trabajador (opcional), mes y año, luego haz clic en 'Generar PDF'.",
+                    "Si no seleccionas trabajador, el PDF incluirá una sección por cada trabajador activo.",
+                    "El documento incluye: logo de la empresa, nombre del trabajador, RUT, código, y una tabla con todos los días del mes.",
+                    "Cada fila muestra: día, día de la semana, hora de entrada, hora de salida, horas normales, horas extra y observaciones.",
+                    "Los domingos y feriados aparecen en amarillo. Los sábados en gris claro.",
+                    "Al pie del documento aparecen líneas de firma del trabajador y de administración.",
+                    "La vista previa en pantalla permite revisar la información antes de generar el PDF.",
+                  ]
+                },
+                {
+                  icon:"💾", titulo:"10. Módulo: Exportar / Importar",
+                  items:[
+                    "Exportar: descarga un archivo JSON con todos los datos del sistema (trabajadores, registros, compensatorios, solicitudes y notificaciones). Guárdalo en un lugar seguro.",
+                    "El nombre del archivo incluye la fecha del día: pazvial-rrhh-backup-AAAA-MM-DD.json.",
+                    "Importar: permite restaurar todos los datos desde un backup previo. Esta acción reemplaza todos los datos actuales.",
+                    "Solo se aceptan archivos .json exportados desde este mismo sistema.",
+                    "Se recomienda exportar un backup al menos una vez por semana o antes de cualquier cambio importante en la nómina.",
+                  ]
+                },
+                {
+                  icon:"⏱", titulo:"10b. Cálculo de Horas Extraordinarias",
+                  items:[
+                    "Entrada anticipada (antes de las 07:00): el tiempo entre la hora real de entrada y las 08:00 genera HE de entrada, con estado pendiente independiente. Puedes aprobarla o rechazarla sin afectar la HE de salida del mismo día.",
+                    "Salida posterior (después de las 18:00 de lunes a jueves, o 14:00 los viernes): el excedente genera HE de salida, también con estado pendiente independiente.",
+                    "Ambas aprobaciones son independientes y aparecen en columnas separadas en la bandeja de Pendientes. Puedes aprobar una y rechazar la otra para el mismo registro.",
+                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas. Si el trabajador labora más de 8h, se registran las horas reales. Esta HE usa el flujo de aprobación clásico (un solo estado).",
+                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. El sábado NO genera compensatorio, solo HE.",
+                    "El calendario de feriados considera solo los feriados de carácter general de Chile (aplican a todas las personas a nivel nacional), según la ley vigente.",
+                    "Las horas extra rechazadas no se contabilizan en ningún reporte: ni en el Dashboard, ni en la Hoja Mensual, ni en las Liquidaciones.",
+                  ]
+                },
+                {
+                  icon:"💡", titulo:"11. Buenas Prácticas de Administración",
+                  items:[
+                    "Revisa diariamente las horas extraordinarias y solicitudes pendientes para dar respuesta oportuna a los trabajadores.",
+                    "Siempre indica un motivo claro y constructivo al rechazar una solicitud o horas extra, ya que el trabajador lo leerá.",
+                    "Mantén la nómina actualizada: desactiva a trabajadores que salieron de la empresa en lugar de eliminarlos, para conservar el historial.",
+                    "Realiza backups frecuentes usando el módulo Exportar / Importar.",
+                    "El perfil de prueba (Administrador / Pruebas) permite simular el flujo completo sin afectar datos reales de trabajadores.",
+                  ]
+                },
+              ].map(sec => (
+                <div key={sec.titulo} style={{ marginBottom:24 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                    <span style={{ fontSize:24 }}>{sec.icon}</span>
+                    <h3 style={{ color:"#C9A84C", margin:0, fontSize:15, letterSpacing:0.5 }}>{sec.titulo}</h3>
+                  </div>
+                  <div style={{ paddingLeft:34 }}>
+                    {sec.items.map((item, i) => (
+                      <div key={i} style={{ display:"flex", gap:10, marginBottom:8, alignItems:"flex-start" }}>
+                        <span style={{ color:"#C9A84C", fontWeight:"bold", flexShrink:0, fontSize:13 }}>→</span>
+                        <span style={{ color:"#d0e0ff", fontSize:13, lineHeight:1.6 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {(()=><div style={{ background:"rgba(255,215,0,0.08)", border:"1px solid rgba(255,215,0,0.3)", borderRadius:10, padding:"14px 18px", marginTop:8 }}>
                 <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:13, marginBottom:6 }}>🔐 Credenciales del Sistema</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                   <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Administrador</div>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Acceso Administrador</div>
                     <div style={{ color:"#fff", fontSize:13 }}>Contraseña: <strong style={{color:"#C9A84C"}}>Negra2026</strong></div>
                   </div>
                   <div style={{ background:"rgba(8,6,3,0.5)", borderRadius:8, padding:"10px 14px" }}>
-                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba</div>
+                    <div style={{ color:"#9A8A6A", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Perfil de Prueba (Trabajador)</div>
                     <div style={{ color:"#fff", fontSize:13 }}>Código: <strong style={{color:"#C9A84C"}}>Administrador</strong> · RUT: <strong style={{color:"#C9A84C"}}>Pruebas</strong></div>
                   </div>
                 </div>
-              </div>
+              </div>)()}
             </div>
           </div>
         )}
