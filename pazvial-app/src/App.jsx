@@ -1240,6 +1240,10 @@ export default function App() {
   const [aPass,  setAPass]  = useState("");
   const [aError, setAError] = useState("");
 
+  // ── Login supervisor ───────────────────────────────────
+  const [supActivo, setSupActivo] = useState(null);
+  const [tabSup,    setTabSup]    = useState("hoy");
+
   // ── Marca asistencia ───────────────────────────────────
   const [tipoMarca,   setTipoMarca]   = useState("entrada");
   const [marcaMsg,    setMarcaMsg]    = useState({ tipo:"", txt:"" });
@@ -1599,6 +1603,23 @@ export default function App() {
     setTabTrab("marcar");
     setLCodigo(""); setLRut("");
     marcarLeidas(t.id);
+  }
+
+  function loginSupervisor() {
+    const codigo = lCodigo.trim().toUpperCase();
+    const rut    = lRut.trim();
+    if (!codigo || !rut) { setLError("Ingresa tu código y RUT."); return; }
+    const trab = trabajadores.find(t =>
+      t.codigo?.toUpperCase() === codigo &&
+      t.rut?.replace(/\s/g,"") === rut.replace(/\s/g,"") &&
+      t.activo
+    );
+    if (!trab) { setLError("Código o RUT incorrecto."); return; }
+    // Verificar que tiene cuadrilla asignada como supervisor
+    const cuad = (typeof cuadrillas !== "undefined" ? cuadrillas : []).find(c => c.supervisorId === trab.id);
+    setSupActivo(trab);
+    setVista("supervisor");
+    setLError(""); setLCodigo(""); setLRut("");
   }
 
   function loginAdmin() {
@@ -2765,6 +2786,7 @@ export default function App() {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:14, width:"100%", maxWidth:480 }}>
             {[
               { label:"Trabajador", sub:"Registrar entrada / salida", icon:"👷", action:()=>setVista("trabLogin"), gold:false },
+              { label:"Supervisor", sub:"Ver mi cuadrilla", icon:"👁", action:()=>setVista("supLogin"), gold:false },
               { label:"Administrador", sub:"Gestión y reportes", icon:"🔐", action:()=>setVista("adminLogin"), gold:true },
             ].map(b => (
               <button key={b.label} onClick={b.action} style={{
@@ -2786,6 +2808,35 @@ export default function App() {
         </div>
         <div style={{ textAlign:"center", paddingBottom:20, color:"rgba(201,168,76,0.3)", fontSize:10, letterSpacing:3, textTransform:"uppercase" }}>
           Sistema de Gestión de Personas © Paz Vial SpA
+        </div>
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════
+  // VISTA: LOGIN SUPERVISOR
+  // ═══════════════════════════════════════════════════════
+  if (vista==="supLogin") return (
+    <div style={S.app}>
+      <Hdr titulo="GESTIÓN DE PERSONAS PAZ VIAL SpA" sub="Acceso Supervisor" onBack={()=>setVista("portada")} />
+      <div style={{ display:"flex", justifyContent:"center", alignItems:"center", minHeight:"70vh", padding:16 }}>
+        <div style={{ width:"100%", maxWidth:360 }}>
+          <div style={S.card}>
+            <h3 style={{ color:"#C9A84C", marginTop:0, textAlign:"center" }}>👷 Acceso Supervisor</h3>
+            <label style={S.lbl}>Código de trabajador</label>
+            <input style={S.input} value={lCodigo}
+              onChange={e=>setLCodigo(e.target.value.toUpperCase())}
+              onKeyDown={e=>{ if(e.key==="Enter") loginSupervisor(); }}
+              placeholder="Ej: PR01" />
+            <label style={{...S.lbl, marginTop:12}}>RUT</label>
+            <input style={S.input} value={lRut}
+              onChange={e=>handleRutInput(e.target.value, setLRut)}
+              placeholder="Ej: 12.345.678-9" />
+            {lError && <MsgBox m={{ tipo:"err", txt:lError }} />}
+            <button onClick={loginSupervisor} style={{ ...S.btn, width:"100%", marginTop:14 }}>
+              Ingresar como Supervisor
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2842,6 +2893,95 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   // VISTA: TRABAJADOR
   // ═══════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════
+  // VISTA: SUPERVISOR
+  // ═══════════════════════════════════════════════════════
+  if (vista === "supervisor" && supActivo) {
+    const allCuadrillas = typeof cuadrillas !== "undefined" ? cuadrillas : [];
+    const cuad = allCuadrillas.find(c => c.supervisorId === supActivo.id);
+    const misTrabIds = cuad?.miembros || [];
+    const misTrabs = trabajadores.filter(t => misTrabIds.includes(t.id));
+    const hoyStr = hoy();
+    const regsHoy = registros.filter(r => misTrabIds.includes(r.tId) && r.fecha===hoyStr);
+    const pendSols = solicitudes.filter(s => misTrabIds.includes(s.tId) && s.estado==="pendiente");
+
+    return (
+      <div style={S.app}>
+        <div style={{ background:"linear-gradient(135deg,#001a4d,#003080)", padding:"12px 16px",
+          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:14 }}>👷 Supervisor</div>
+            <div style={{ color:"#fff", fontSize:13 }}>{nombreCompleto(supActivo)}{cuad?` · ${cuad.nombre}`:""}</div>
+          </div>
+          <button onClick={()=>{ setVista("portada"); setSupActivo(null); }}
+            style={{ background:"transparent", border:"1px solid rgba(201,168,76,0.4)",
+              color:"#C9A84C", borderRadius:8, padding:"6px 12px", cursor:"pointer", fontSize:12 }}>
+            ← Salir
+          </button>
+        </div>
+        <div style={{ padding:"12px 16px" }}>
+          <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+            {[["hoy","📋 Hoy"],["solicitudes",`📝 Solicitudes${pendSols.length>0?" ("+pendSols.length+")":""}`]].map(([k,l])=>(
+              <button key={k} onClick={()=>setTabSup(k)} style={{
+                padding:"7px 14px", borderRadius:16, border:"none", cursor:"pointer", fontSize:12,
+                background:tabSup===k?"#C9A84C":"rgba(201,168,76,0.12)",
+                color:tabSup===k?"#0A0A0A":"#C9A84C", fontWeight:tabSup===k?"bold":"normal"
+              }}>{l}</button>
+            ))}
+          </div>
+          {tabSup==="hoy" && (
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Asistencia hoy</h3>
+              {misTrabs.length===0
+                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>
+                    {cuad ? "No hay miembros en tu cuadrilla" : "No tienes una cuadrilla asignada"}
+                  </div>
+                : misTrabs.map(t => {
+                    const regsT = regsHoy.filter(r=>r.tId===t.id);
+                    const reg = regsT.find(r=>!r.salida) || regsT[regsT.length-1];
+                    return (
+                      <div key={t.id} style={{ display:"flex", justifyContent:"space-between",
+                        alignItems:"center", padding:"10px 0",
+                        borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                        <div>
+                          <div style={{ color:"#d0e0ff", fontSize:13, fontWeight:"bold" }}>{nombreCompleto(t)}</div>
+                          <div style={{ color:"#9A8A6A", fontSize:11 }}>{t.codigo}</div>
+                        </div>
+                        <div style={{ textAlign:"right", fontSize:12 }}>
+                          {reg
+                            ? <><div style={{ color:"#27ae60" }}>▶ {reg.entrada}</div>
+                                {reg.salida&&<div style={{ color:"#e74c3c" }}>■ {reg.salida}</div>}</>
+                            : <span style={{ color:"#9A8A6A" }}>Sin marca hoy</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+          )}
+          {tabSup==="solicitudes" && (
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>Solicitudes de mi cuadrilla</h3>
+              {pendSols.length===0
+                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>Sin solicitudes pendientes</div>
+                : pendSols.map(s => {
+                    const t = trabajadores.find(x=>x.id===s.tId);
+                    return (
+                      <div key={s.id} style={{ ...S.card, background:"rgba(201,168,76,0.06)", marginBottom:10 }}>
+                        <div style={{ color:"#d0e0ff", fontWeight:"bold" }}>{t?nombreCompleto(t):"—"}</div>
+                        <div style={{ color:"#9A8A6A", fontSize:12, marginTop:4 }}>
+                          {s.tipo} · {s.fechaDesde}{s.fechaHasta&&s.fechaHasta!==s.fechaDesde?" → "+s.fechaHasta:""}
+                        </div>
+                        {s.motivo&&<div style={{ color:"#9A8A6A", fontSize:11, marginTop:4 }}>{s.motivo}</div>}
+                      </div>
+                    );
+                  })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (vista==="trab" && trabActivo) {
     const misRegistros = registros.filter(r => r.tId===trabActivo.id);
     const misNotifs    = notificaciones.filter(n => n.tId===trabActivo.id);
