@@ -121,6 +121,19 @@ const esEspecial = d => esSabado(d) || esDomingo(d) || esFeriado(d);
 const esCompensable = d => esDomingo(d) || esFeriado(d); // genera día compensatorio (sábado NO genera)
 const esHabilVacaciones = d => !esSabado(d) && !esDomingo(d) && !esFeriado(d);
 
+function periodoLiquidacion(mes, anio) {
+  const mesAnterior = mes === 0 ? 11 : mes - 1;
+  const anioAnterior = mes === 0 ? anio - 1 : anio;
+  const desde = `${anioAnterior}-${String(mesAnterior+1).padStart(2,"0")}-26`;
+  const hasta = `${anio}-${String(mes+1).padStart(2,"0")}-25`;
+  return { desde, hasta };
+}
+
+function esDiaContingencia(fecha, contingencias) {
+  if (!contingencias || !fecha) return false;
+  return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
+}
+
 function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
@@ -255,6 +268,48 @@ function fmtFecha(f, conDia=false) {
 
 // Tasas AFP 2026
 const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
+
+const PARAMS_DEFAULT = {
+  jornadaSemanal: 42, diasBaseMensual: 30, recargHE: 1.5,
+  IMM: 510000, topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
+  tasaAFP: 0.10, tasaSalud: 0.07, tasaAFCindefinido: 0.006, tasaAFCplazoFijo: 0.0,
+  valorUF: 39700, valorUTM: 71506,
+  afps: [
+    { nombre:"Capital",   comision:0.0144 },
+    { nombre:"Provida",   comision:0.0145 },
+    { nombre:"Habitat",   comision:0.0127 },
+    { nombre:"Cuprum",    comision:0.0144 },
+    { nombre:"PlanVital", comision:0.0116 },
+    { nombre:"Uno",       comision:0.0046 },
+    { nombre:"Modelo",    comision:0.0058 },
+  ],
+  tablaImpuesto: [
+    { desde:0,    hasta:13.5,  factor:0,     rebaja:0     },
+    { desde:13.5, hasta:30,    factor:0.04,  rebaja:0.54  },
+    { desde:30,   hasta:50,    factor:0.08,  rebaja:1.74  },
+    { desde:50,   hasta:70,    factor:0.135, rebaja:4.49  },
+    { desde:70,   hasta:90,    factor:0.23,  rebaja:11.14 },
+    { desde:90,   hasta:120,   factor:0.304, rebaja:17.8  },
+    { desde:120,  hasta:310,   factor:0.35,  rebaja:23.32 },
+    { desde:310,  hasta:999999,factor:0.4,   rebaja:38.82 },
+  ],
+};
+
+function getAfpComision(afpNombre, params) {
+  const p = params || PARAMS_DEFAULT;
+  const afp = (p.afps||[]).find(a => a.nombre.toUpperCase()===afpNombre?.toUpperCase());
+  return afp ? afp.comision : 0.0144;
+}
+
+function calcularImpuesto(baseTributable, params) {
+  const p = params || PARAMS_DEFAULT;
+  const utm = p.valorUTM || 71506;
+  const baseUTM = baseTributable / utm;
+  const tabla = p.tablaImpuesto || PARAMS_DEFAULT.tablaImpuesto;
+  const tramo = tabla.find(t => baseUTM >= t.desde && baseUTM < t.hasta) || tabla[tabla.length-1];
+  if (!tramo || tramo.factor === 0) return 0;
+  return Math.max(0, Math.round(baseTributable * tramo.factor - tramo.rebaja * utm));
+}
 
 function getRemuneracionVigente(ficha, mes, anio) {
   // Busca el registro del historial vigente para el período dado
@@ -1340,6 +1395,19 @@ export default function App() {
   const [marcaGuardando, setMarcaGuardando] = useState(false);  // true mientras se guarda en Firebase
   const [syncEstado,     setSyncEstado]     = useState("ok");   // "ok" | "guardando" | "error"
   const [showTutorial,   setShowTutorial]   = useState(false);  // tutorial de marcas
+  const [modalSobretiempo, setModalSobretiempo] = useState(null);
+  const [motivoSobretiempo, setMotivoSobretiempo] = useState("");
+  const [modalSegundoTurno, setModalSegundoTurno] = useState(null);
+  const [modalContingencia, setModalContingencia] = useState(null);
+  const [liqDiasManual, setLiqDiasManual] = useState(null);
+  const [liqIMM, setLiqIMM] = useState(null);
+
+  // ── Contingencias y parámetros ────────────────────────
+  const [contingencias, setContingencias] = useState([]);
+  const [params, setParams] = useState(PARAMS_DEFAULT);
+
+  // ── Cuadrillas ─────────────────────────────────────────
+  const [cuadrillas, setCuadrillas] = useState([]);
 
   // ── Liquidaciones ──────────────────────────────────────
   const [liquidaciones, setLiquidaciones] = useState([]);
@@ -1462,6 +1530,9 @@ export default function App() {
         setNotifs(data.notificaciones || []);
         setLiquidaciones(data.liquidaciones || []);
         setAnticipos(data.anticipos || []);
+        setContingencias(data.contingencias || []);
+        setCuadrillas(data.cuadrillas || []);
+        if (data.params) setParams(p => ({...PARAMS_DEFAULT, ...data.params}));
         setCodigosUsados(data.codigosUsados || []);
         setTimeout(() => {
           cargandoDesdeFirebase.current = false;
@@ -1499,6 +1570,9 @@ export default function App() {
           trabajadores, registros,
           compensatorios, solicitudes,
           notificaciones, liquidaciones, anticipos,
+          contingencias,
+          cuadrillas,
+          params,
           codigosUsados,
           ultimaActualizacion: new Date().toISOString(),
           _eliminados: registrosEliminados.current, // no se guarda en Firebase, solo se usa en el merge
@@ -1603,6 +1677,37 @@ export default function App() {
     setTabTrab("marcar");
     setLCodigo(""); setLRut("");
     marcarLeidas(t.id);
+  }
+
+  function confirmarSobretiempo(motivo) {
+    if (!modalSobretiempo) return;
+    const { hora, fecha, regHoy } = modalSobretiempo;
+    setModalSobretiempo(null);
+    const nuevosRegistros = (typeof registros !== 'undefined' ? registros : []).map(r => {
+      if (r.id !== regHoy.id) return r;
+      return { ...r, salida: hora, estadoSalida: "pendiente",
+        motivoSobretiempo: motivo.trim(), motivoRechazoSalida: r.motivoRechazoSalida || "" };
+    });
+    if (typeof setRegistros === 'function') setRegistros(nuevosRegistros);
+    setMotivoSobretiempo("");
+    if (typeof setMarcaMsg === 'function') setMarcaMsg({ tipo:"ok", txt:`✅ Salida registrada a las ${hora}. Sobretiempo pendiente de aprobación.` });
+    setTimeout(() => { if (typeof setMarcaMsg === 'function') setMarcaMsg({ tipo:"", txt:"" }); }, 4000);
+  }
+
+  function confirmarSegundoTurno() {
+    if (!modalSegundoTurno) return;
+    const { fechaHoy, hora, idReal } = modalSegundoTurno;
+    setModalSegundoTurno(null);
+    const nuevoReg = {
+      id: nowId(), tId: idReal, fecha: fechaHoy,
+      entrada: hora, salida: null, estado: "pendiente",
+      estadoEntrada: "pendiente", estadoSalida: null,
+      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+      entradaAnticipada: false, segundoTurno: true,
+    };
+    if (typeof setRegistros === 'function') setRegistros(p => [...p, nuevoReg]);
+    if (typeof setMarcaMsg === 'function') setMarcaMsg({ tipo:"ok", txt:`✅ Segundo turno iniciado a las ${hora}. Pendiente de aprobación.` });
+    setTimeout(() => { if (typeof setMarcaMsg === 'function') setMarcaMsg({ tipo:"", txt:"" }); }, 4000);
   }
 
   function loginSupervisor() {
@@ -1710,15 +1815,23 @@ export default function App() {
       nuevosRegistros = [...registros, nuevoReg];
     } else {
       // Al marcar salida: detectar si genera HE de salida
+      const toMinS = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      const finS = esViernes(fecha) ? 840 : 1080;
+      const tieneHESalidaS = !esEspecial(fecha) && toMinS(hora) > finS;
+      if (tieneHESalidaS) {
+        setMarcaGuardando(false);
+        setMotivoSobretiempo("");
+        setModalSobretiempo({ hora, fecha, regHoy });
+        return;
+      }
+      // Buscar el registro sin salida (puede ser segundo turno)
+      const regParaSalida = regsHoyAll.find(r => !r.salida) || regHoy;
       nuevosRegistros = registros.map(r => {
-        if (r.id !== regHoy.id) return r;
-        const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-        const fin = esViernes(fecha) ? 840 : 1080;
-        const tieneHESalida = !esEspecial(fecha) && toMin(hora) > fin;
+        if (!regParaSalida || r.id !== regParaSalida.id) return r;
         return {
           ...r,
           salida: hora,
-          estadoSalida: tieneHESalida ? "pendiente" : null,
+          estadoSalida: null,
           motivoRechazoSalida: r.motivoRechazoSalida || "",
         };
       });
@@ -2168,6 +2281,37 @@ export default function App() {
   }
 
   // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
+  function generarReporteHEPDF(trabsList, regsList, mes, anio) {
+    const { desde: pD, hasta: pH } = periodoLiquidacion(mes, anio);
+    const regs = regsList.filter(r => r.fecha >= pD && r.fecha <= pH && r.salida);
+    if (regs.length === 0) { alert("No hay registros de HE en el período."); return; }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte HE</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}
+    th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#2D2D2D;color:#fff;}
+    @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}</style>
+    </head><body>
+    <h2>Reporte HH Extras — Período: ${pD.split("-").reverse().join("-")} al ${pH.split("-").reverse().join("-")}</h2>
+    <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>HE</th><th>Estado</th></tr></thead>
+    <tbody>${regs.map(r => {
+      const t = (trabsList||[]).find(x=>x.id===r.tId);
+      const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida);
+      const esp = esEspecial(r.fecha);
+      const he = esp ? (r.estado==="aprobado"?(r.horasExtraAprobadas||calcularHoras(r.entrada,r.salida,r.fecha).extra):0) : (h.extra||0);
+      if (he <= 0) return "";
+      return \`<tr><td>\${t?nombreCompleto(t):"—"}</td><td>\${r.fecha.split("-").reverse().join("-")}</td>
+        <td>\${r.entrada}</td><td>\${r.salida}</td><td>\${he}h</td>
+        <td>\${r.estado==="aprobado"?"✓ Aprobada":"⏳ Pendiente"}</td></tr>\`;
+    }).join("")}</tbody></table></body></html>`;
+    const _b = new Blob([html],{type:"text/html;charset=utf-8"});
+    const _u = URL.createObjectURL(_b);
+    const _f = document.createElement("iframe");
+    _f.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+    _f.src = _u;
+    _f.onload = () => { _f.contentWindow.focus(); _f.contentWindow.print();
+      setTimeout(()=>{ _f.remove(); URL.revokeObjectURL(_u); },3000); };
+    document.body.appendChild(_f);
+  }
+
   function generarHojaAsistenciaPDF(tId, mes, anio) {
     const trab = tId ? trabajadores.find(t=>t.id===Number(tId)) : null;
     const titulo = trab
@@ -3043,6 +3187,62 @@ export default function App() {
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
 
+              {/* Modal de sobretiempo */}
+              {modalSobretiempo && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#0d1a0d,#2d1500)", border:"3px solid #e67e22",
+                    borderRadius:20, padding:28, maxWidth:400, width:"100%" }}>
+                    <div style={{ fontSize:40, textAlign:"center", marginBottom:8 }}>⏱</div>
+                    <div style={{ color:"#e67e22", fontSize:18, fontWeight:"bold", textAlign:"center", marginBottom:8 }}>Sobretiempo detectado</div>
+                    <div style={{ color:"#d0e0ff", fontSize:13, textAlign:"center", marginBottom:16 }}>
+                      Tu salida a las <strong style={{color:"#FFD700"}}>{modalSobretiempo.hora}</strong> supera el horario normal.<br/>Por favor indica el motivo:
+                    </div>
+                    <textarea value={motivoSobretiempo} onChange={e=>setMotivoSobretiempo(e.target.value)}
+                      placeholder="Ej: Término de faena pendiente, espera de materiales..."
+                      maxLength={200}
+                      style={{ width:"100%", minHeight:80, background:"rgba(0,0,0,0.3)",
+                        border:"1px solid rgba(230,126,34,0.5)", borderRadius:8,
+                        color:"#fff", padding:"10px 12px", fontSize:13, resize:"vertical", boxSizing:"border-box" }}
+                    />
+                    <div style={{ color:"#9A8A6A", fontSize:11, marginBottom:14, textAlign:"right" }}>{motivoSobretiempo.length}/200</div>
+                    <div style={{ display:"flex", gap:10 }}>
+                      <button onClick={()=>{ setModalSobretiempo(null); setMotivoSobretiempo(""); setMarcaMsg({tipo:"err",txt:"Marca cancelada."}); }}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10, padding:"12px 0", cursor:"pointer", fontSize:14 }}>Cancelar</button>
+                      <button disabled={!motivoSobretiempo.trim()} onClick={()=>confirmarSobretiempo(motivoSobretiempo)}
+                        style={{ flex:2, background:motivoSobretiempo.trim()?"linear-gradient(135deg,#e67e22,#d35400)":"rgba(100,80,50,0.4)",
+                          color:"#fff", border:"none", borderRadius:10, padding:"12px 0",
+                          cursor:motivoSobretiempo.trim()?"pointer":"not-allowed", fontSize:14, fontWeight:"bold" }}>✓ Registrar salida</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal de segundo turno */}
+              {modalSegundoTurno && (
+                <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
+                  display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+                  <div style={{ background:"linear-gradient(135deg,#0d1a2d,#0d2d1a)", border:"3px solid #27ae60",
+                    borderRadius:20, padding:28, maxWidth:380, width:"100%", textAlign:"center" }}>
+                    <div style={{ fontSize:40, marginBottom:8 }}>🔄</div>
+                    <div style={{ color:"#27ae60", fontSize:18, fontWeight:"bold", marginBottom:8 }}>Segundo turno</div>
+                    <div style={{ color:"#d0e0ff", fontSize:13, marginBottom:6 }}>Ya tienes una jornada completa hoy.</div>
+                    <div style={{ color:"#9A8A6A", fontSize:12, marginBottom:24 }}>
+                      ¿Estás iniciando un segundo turno?<br/>Quedará pendiente de aprobación.
+                    </div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <button onClick={()=>setModalSegundoTurno(null)}
+                        style={{ flex:1, background:"rgba(30,26,15,0.8)", color:"#9A8A6A",
+                          border:"1px solid rgba(255,255,255,0.2)", borderRadius:10, padding:"12px 0", cursor:"pointer", fontSize:14 }}>✗ No</button>
+                      <button onClick={confirmarSegundoTurno}
+                        style={{ flex:2, background:"linear-gradient(135deg,#27ae60,#1e8449)",
+                          color:"#fff", border:"none", borderRadius:10, padding:"12px 0", cursor:"pointer", fontSize:14, fontWeight:"bold" }}>✓ Sí, segundo turno</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Modal de confirmación */}
               {marcaConfirm && (
                 <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:999,
@@ -3624,6 +3824,9 @@ export default function App() {
     { k:"liquidaciones",l:"💰 Liquidaciones" },
     { k:"compensat",    l:"📅 Compensatorios" },
     { k:"calendario",   l:"🗓 Calendario" },
+    { k:"cuadrillas",   l:"👥 Cuadrillas" },
+    { k:"contingencias",l:"⚠️ Contingencias" },
+    { k:"parametros",   l:"⚙️ Parámetros" },
     { k:"dashboard",    l:"📊 Dashboard" },
     { k:"prueba",      l:"🧪 Modo Prueba" },
     { k:"exportar",     l:"💾 Exportar / Importar" },
@@ -5036,6 +5239,111 @@ export default function App() {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {/* ── TAB: CUADRILLAS ────────────────────────────────── */}
+        {tabAdmin==="cuadrillas" && (
+          <div style={{ marginTop:4 }}>
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>👥 Cuadrillas</h3>
+              {cuadrillas.length===0
+                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay cuadrillas creadas</div>
+                : cuadrillas.map(c => (
+                    <div key={c.id} style={{ ...S.card, background:"rgba(201,168,76,0.06)", marginBottom:10 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div>
+                          <div style={{ color:"#C9A84C", fontWeight:"bold" }}>{c.nombre}</div>
+                          <div style={{ color:"#9A8A6A", fontSize:12 }}>
+                            Supervisor: {trabajadores.find(t=>t.id===c.supervisorId) ? nombreCompleto(trabajadores.find(t=>t.id===c.supervisorId)) : "Sin asignar"}
+                          </div>
+                          <div style={{ color:"#9A8A6A", fontSize:12 }}>
+                            Miembros: {(c.miembros||[]).length} trabajadores
+                          </div>
+                        </div>
+                        <button onClick={()=>setContingencias(p=>p)} style={{...S.btnD,fontSize:11,padding:"4px 8px"}}
+                          title="La gestión completa de cuadrillas se realizaba desde este módulo">🗑</button>
+                      </div>
+                    </div>
+                  ))}
+              <div style={{ marginTop:12 }}>
+                <button onClick={()=>{
+                  const nombre = prompt("Nombre de la cuadrilla:");
+                  if (!nombre) return;
+                  setCuadrillas(p=>[...p,{id:nowId(),nombre:nombre.trim(),supervisorId:null,miembros:[]}]);
+                }} style={{...S.btnG,padding:"8px 16px"}}>+ Nueva Cuadrilla</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: CONTINGENCIAS ────────────────────────────────── */}
+        {tabAdmin==="contingencias" && (
+          <div style={{ marginTop:4 }}>
+            <div style={S.card}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+                <h3 style={{ color:"#e67e22", margin:0 }}>⚠️ Períodos de Contingencia</h3>
+                <button onClick={()=>{
+                  const desde = prompt("Fecha inicio (AAAA-MM-DD):");
+                  if (!desde) return;
+                  const hasta = prompt("Fecha término (AAAA-MM-DD):");
+                  if (!hasta) return;
+                  const desc = prompt("Descripción (opcional):") || "";
+                  setContingencias(p=>[...p,{id:nowId(),desde,hasta,descripcion:desc}]);
+                }} style={{...S.btnG,fontSize:12,padding:"6px 14px"}}>+ Nuevo Período</button>
+              </div>
+              {contingencias.length===0
+                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay períodos de contingencia</div>
+                : contingencias.map(c => {
+                    const hoyStr = hoy();
+                    const activo = hoyStr >= c.desde && hoyStr <= c.hasta;
+                    return (
+                      <div key={c.id} style={{ border:`1px solid ${activo?"#e67e22":"rgba(255,255,255,0.1)"}`,
+                        borderRadius:10, padding:"12px 16px", marginBottom:10,
+                        background:activo?"rgba(230,126,34,0.08)":"transparent" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <div>
+                            <div style={{ color:activo?"#e67e22":"#9A8A6A", fontWeight:"bold" }}>
+                              {activo?"🔴 ACTIVO":"⚪ INACTIVO"}
+                            </div>
+                            <div style={{ color:"#d0e0ff", fontSize:13 }}>
+                              📅 {fmtFecha(c.desde)} → {fmtFecha(c.hasta)}
+                            </div>
+                            {c.descripcion&&<div style={{ color:"#9A8A6A", fontSize:12 }}>{c.descripcion}</div>}
+                          </div>
+                          <button onClick={()=>setContingencias(p=>p.filter(x=>x.id!==c.id))}
+                            style={{...S.btnD,fontSize:11,padding:"4px 8px"}}>🗑</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+          </div>
+        )}
+
+        {/* ── TAB: PARÁMETROS ────────────────────────────────── */}
+        {tabAdmin==="parametros" && (
+          <div style={{ marginTop:4 }}>
+            <div style={S.card}>
+              <h3 style={{ color:"#C9A84C", marginTop:0 }}>⚙️ Parámetros del Sistema</h3>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                {[
+                  ["IMM ($)", "IMM", params?.IMM||510000],
+                  ["Jornada semanal (h)", "jornadaSemanal", params?.jornadaSemanal||42],
+                  ["Valor UF ($)", "valorUF", params?.valorUF||39700],
+                  ["Valor UTM ($)", "valorUTM", params?.valorUTM||71506],
+                  ["Tope AFP/Salud (UF)", "topeAFPSaludUF", params?.topeAFPSaludUF||90],
+                  ["Tope gratif. (× IMM)", "topeGratifIMM", params?.topeGratifIMM||4.75],
+                ].map(([label, key, val]) => (
+                  <div key={key}>
+                    <label style={S.lbl}>{label}</label>
+                    <input type="number" style={S.input} defaultValue={val}
+                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+                  </div>
+                ))}
+              </div>
+              <button onClick={()=>setParams({...PARAMS_DEFAULT})} style={{...S.btn,marginTop:14,fontSize:12}}>↩ Restaurar valores por defecto</button>
+            </div>
           </div>
         )}
 
