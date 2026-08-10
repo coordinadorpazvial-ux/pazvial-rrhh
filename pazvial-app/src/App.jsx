@@ -156,6 +156,13 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
   const minEntrada = toMin(entrada);
   const minSalida  = toMin(salida);
 
+  // ── Segundo turno: entrada después del fin de jornada → todo son HE reales ──
+  if (minEntrada >= fin) {
+    const heReales = +((minSalida - minEntrada) / 60).toFixed(2);
+    const aprobadas = estadoSalida === "aprobado" || estadoSalida === undefined ? heReales : 0;
+    return { normales: 0, extra: aprobadas, extraEntrada: 0, extraSalida: aprobadas };
+  }
+
   // ── Bloque HE entrada anticipada (antes de 07:00) ──
   // Tiempo entre la entrada real y las 08:00
   let extraEntrada = 0;
@@ -252,7 +259,17 @@ function nombreCompleto(t) {
   return [t.nombre, t.apellido, t.apellidoM].filter(Boolean).join(" ");
 }
 
-function hoy() { return new Date().toISOString().split("T")[0]; }
+function hoy() {
+  const now = new Date();
+  // Usar zona horaria de Chile para evitar cambio de día a las ~21:00 UTC
+  const cl = new Intl.DateTimeFormat("es-CL", {
+    timeZone: "America/Santiago",
+    year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(now);
+  // cl viene en formato DD-MM-AAAA → convertir a AAAA-MM-DD
+  const [d, m, y] = cl.split("-");
+  return `${y}-${m}-${d}`;
+}
 function horaActual() { return new Date().toTimeString().slice(0,5); }
 function nowId() { return Date.now() + Math.random(); }
 
@@ -1801,12 +1818,14 @@ export default function App() {
       // HE anticipada: entrada antes de las 07:00 (más de 1h antes de las 08:00)
       const tieneHEEntrada = !esEspecial(fecha) && minEntrada < 420;
       const estadoEntradaHE = tieneHEEntrada ? "pendiente" : null;
+      const esDiaConting = esDiaContingencia(fecha, contingencias);
       const nuevoReg = {
         id: nowId(), tId: trabVigente.id, fecha,
         entrada: hora, salida: null,
         estado: "pendiente",           // estado general del registro
         estadoEntrada: estadoEntradaHE, // HE anticipada (null = no aplica)
         estadoSalida: null,            // HE salida (se asigna al marcar salida)
+        esContingencia: esDiaConting,
         motivoRechazoEntrada: "",
         motivoRechazoSalida: "",
         motivoRechazo: "",
@@ -4027,6 +4046,11 @@ export default function App() {
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extraSalida}h posteriores
                             </span>
+                            {r.motivoSobretiempo && (
+                              <span style={{color:"#C9A84C",fontSize:10,fontStyle:"italic",display:"block",marginTop:2}}>
+                                💬 {r.motivoSobretiempo}
+                              </span>
+                            )}
                             <div style={{display:"flex",gap:4}}>
                               <button onClick={()=>aprobarHESalida(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
                               <button onClick={()=>setMotivoModal({tipo:"heSalida",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
