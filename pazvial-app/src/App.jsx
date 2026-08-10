@@ -372,10 +372,20 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const horasJornadaDia = 45/5; // 9h/día promedio
   const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
   let totalMinExtra = 0;
+  let totalViaticosContingencia = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
-      // Días especiales: usar estado general
-      if (r.estado==="aprobado") totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+      // Días especiales: usar horasExtraAprobadas si existe (contingencia/administrativo)
+      // o calcular normalmente (mín 8h)
+      if (r.estado==="aprobado") {
+        if (r.horasExtraAprobadas !== undefined) {
+          totalMinExtra += r.horasExtraAprobadas * 60;
+        } else {
+          totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
+        }
+        // Viático contingencia: $50.000 si es contingencia
+        if (r.esContingencia) totalViaticosContingencia += 50000;
+      }
     } else {
       // Días normales: sumar HE entrada y HE salida según sus estados independientes
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
@@ -391,7 +401,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
 
   // Haberes
   const totalImponible = sueldoBase + valorHHExtra + gratif;
-  const totalNoImponible = colacion + movilizacion;
+  const viaticosContingencia = totalViaticosContingencia;
+  const totalNoImponible = colacion + movilizacion + viaticosContingencia;
   const totalHaberes = totalImponible + totalNoImponible;
 
   // Descuentos
@@ -417,7 +428,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
     afp:ficha.afp||"", prevision:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
     diasTrab, horasExtra, mes, anio,
     sueldoBase, valorHHExtra, gratif,
-    totalImponible, colacion, movilizacion, totalNoImponible, totalHaberes,
+    totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     prevision_monto:prevision, salud_monto:salud, segCesantia, totalDescLegales,
     anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
     cc:"001",
@@ -4054,14 +4065,46 @@ export default function App() {
                       {/* ── Columna HE Salida ── */}
                       <td style={S.td}>
                         {esDiaEsp ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
-                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
-                              ⏱ {hBruto.extra}h (día especial)
-                            </span>
-                            <div style={{display:"flex",gap:4}}>
-                              <button onClick={()=>aprobarExtra(r.id)} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓ Aprobar</button>
-                              <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗ Rechazar</button>
+                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:200}}>
+                            <div style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
+                              ⏱ {r.esContingencia
+                                ? (()=>{
+                                    const heReal = hBruto.extra;
+                                    const heConting = Math.max(0, heReal - 10);
+                                    return heConting > 0
+                                      ? `Contingencia: viático + ${heConting}h HE`
+                                      : "Contingencia: solo viático ($50.000)";
+                                  })()
+                                : r.esAdministrativo
+                                  ? `${hBruto.extra}h admin (horas reales)`
+                                  : `${hBruto.extra}h día especial (mín. 8h)`}
                             </div>
+                            {r.estado==="pendiente" && (
+                              <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                                {!r.esContingencia && !r.esAdministrativo && (
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:true,esAdministrativo:false}:x))}
+                                    style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(230,126,34,0.3)",color:"#e67e22",border:"1px solid #e67e22"}}>
+                                    ⚠️ Contingencia
+                                  </button>
+                                )}
+                                {!r.esAdministrativo && !r.esContingencia && (
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esAdministrativo:true,esContingencia:false}:x))}
+                                    style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(52,152,219,0.3)",color:"#3498db",border:"1px solid #3498db"}}>
+                                    🖥 Administrativo
+                                  </button>
+                                )}
+                                {(r.esContingencia||r.esAdministrativo) && (
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:false,esAdministrativo:false}:x))}
+                                    style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(150,150,150,0.2)",color:"#aaa"}}>
+                                    ✕ Quitar
+                                  </button>
+                                )}
+                                <button onClick={()=>aprobarExtra(r.id)} style={{...S.btnG,fontSize:10,padding:"2px 6px"}}>✓</button>
+                                <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"2px 6px"}}>✗</button>
+                              </div>
+                            )}
+                            {r.estado==="aprobado" && <span style={{color:"#27ae60",fontSize:11}}>✓ Aprobado</span>}
+                            {r.estado==="rechazado" && <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazado</span>}
                           </div>
                         ) : r.estadoSalida==="pendiente" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
