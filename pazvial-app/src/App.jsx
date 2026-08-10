@@ -134,7 +134,7 @@ function esDiaContingencia(fecha, contingencias) {
   return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
 }
 
-function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
+function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinMinimo=false) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
   if (!entrada || !salida) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
@@ -145,7 +145,7 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida) {
   // ── Días especiales (sáb/dom/feriado): todo es HE con mínimo 8h ──
   if (esEspecial(fecha)) {
     const efectivas = +(total/60).toFixed(2);
-    const extra = Math.max(efectivas, 8);
+    const extra = sinMinimo ? efectivas : Math.max(efectivas, 8);
     return { normales: 0, extra, extraEntrada: 0, extraSalida: 0 };
   }
 
@@ -4418,7 +4418,7 @@ export default function App() {
                         )
                         .map(r=>{
                           const t=trabajadores.find(x=>x.id===r.tId);
-                          const h=r.salida?calcularHoras(r.entrada,r.salida,r.fecha):null;
+                          const h=r.salida?calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null,!!r.esAdministrativo):null;
                           const esp=esEspecial(r.fecha);
                           const editando=regEditando===r.id;
                           return (
@@ -4440,7 +4440,7 @@ export default function App() {
                                   ? <input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
                                   : r.salida||<span style={{color:"#aaa"}}>—</span>}
                               </td>
-                              <td style={{...S.td,color:h?.extra>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
+                              <td style={{...S.td,color:((r.horasExtraAprobadas!==undefined?r.horasExtraAprobadas:h?.extra)||0)>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
                                 {h?(()=>{ const he=(r.horasExtraAprobadas!==undefined&&r.estado==="aprobado")?r.horasExtraAprobadas:h.extra; return `${he}h${r.estado!=="aprobado"&&he>0?" ⏳":""}`; })() : "—"}
                               </td>
                               <td style={S.td}>
@@ -5595,6 +5595,10 @@ export default function App() {
                 </select>
               </div>
               <div style={{ marginLeft:"auto", color:"#C9A84C", fontWeight:"bold", fontSize:17 }}>{mesNombre(dMes)} {dAnio}</div>
+              <button onClick={()=>generarReporteHEPDF(trabajadores, registros, dMes, dAnio)}
+                style={{...S.btn,fontSize:12,padding:"6px 14px"}}>
+                📊 Reporte HE PDF
+              </button>
             </div>
 
             {/* KPIs */}
