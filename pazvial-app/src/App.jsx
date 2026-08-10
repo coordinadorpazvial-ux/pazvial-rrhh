@@ -790,6 +790,19 @@ function FichaForm({
                 <span style={{color:"#fff",fontSize:12}}>Mensual</span>
               </div>
             </div>
+            <div>
+              <FichaLBL>Coordinador</FichaLBL>
+              <div style={{display:"flex",alignItems:"center",gap:8,
+                background:enEdicion?"rgba(255,255,255,0.1)":"rgba(0,0,0,0.25)",
+                border:"1px solid rgba(255,255,255,0.1)",borderRadius:7,
+                padding:"9px 13px",height:41,boxSizing:"border-box"}}>
+                <input type="checkbox" disabled={!enEdicion}
+                  checked={enEdicion ? !!fichaDraft?.esCoordinador : !!trabReal?.ficha?.esCoordinador}
+                  onChange={e => enEdicion && setD("esCoordinador", e.target.checked)}
+                  style={{width:15,height:15,accentColor:"#C9A84C",cursor:enEdicion?"pointer":"default"}}/>
+                <span style={{color:"#fff",fontSize:12}}>Ve todo el personal</span>
+              </div>
+            </div>
           </FichaRow>
 
           <FichaRow cols="1fr 1fr">
@@ -3074,8 +3087,16 @@ export default function App() {
   if (vista === "supervisor" && supActivo) {
     const allCuadrillas = typeof cuadrillas !== "undefined" ? cuadrillas : [];
     const cuad = allCuadrillas.find(c => c.supervisorId === supActivo.id);
-    const misTrabIds = cuad?.miembros || [];
-    const misTrabs = trabajadores.filter(t => misTrabIds.includes(t.id));
+    const esCoordinador = supActivo.ficha?.esCoordinador === true;
+    // Coordinador ve todo el personal activo; supervisor normal ve su cuadrilla + él mismo
+    const misTrabs = esCoordinador
+      ? trabajadores.filter(t => t.activo && t.id !== 999)
+      : [
+          ...trabajadores.filter(t => (cuad?.miembros||[]).includes(t.id)),
+          ...(cuad && !trabajadores.find(t => t.id === supActivo.id && (cuad?.miembros||[]).includes(t.id))
+            ? [supActivo] : []),
+        ];
+    const misTrabIds = misTrabs.map(t => t.id);
     const hoyStr = hoy();
     const regsHoy = registros.filter(r => misTrabIds.includes(r.tId) && r.fecha===hoyStr);
     const pendSols = solicitudes.filter(s => misTrabIds.includes(s.tId) && s.estado==="pendiente");
