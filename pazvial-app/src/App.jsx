@@ -2285,30 +2285,33 @@ export default function App() {
     const { desde: pD, hasta: pH } = periodoLiquidacion(mes, anio);
     const regs = regsList.filter(r => r.fecha >= pD && r.fecha <= pH && r.salida);
     if (regs.length === 0) { alert("No hay registros de HE en el período."); return; }
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte HE</title>
-    <style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}
-    th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#2D2D2D;color:#fff;}
-    @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}</style>
-    </head><body>
-    <h2>Reporte HH Extras - Período: ${pD.split("-").reverse().join("-")} al ${pH.split("-").reverse().join("-")}</h2>
-    <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>HE</th><th>Estado</th></tr></thead>
-    <tbody>${regs.map(r => {
-      const t = (trabsList||[]).find(x=>x.id===r.tId);
+    const fmtD = function(f) { return f ? f.split("-").reverse().join("-") : ""; };
+    const filas = regs.map(function(r) {
+      const t = (trabsList||[]).find(function(x){ return x.id===r.tId; });
       const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida);
       const esp = esEspecial(r.fecha);
-      const he = esp ? (r.estado==="aprobado"?(r.horasExtraAprobadas||calcularHoras(r.entrada,r.salida,r.fecha).extra):0) : (h.extra||0);
+      const he = esp ? (r.estado==="aprobado"?(r.horasExtraAprobadas||0):0) : (h.extra||0);
       if (he <= 0) return "";
-      return \`<tr><td>\${t?nombreCompleto(t):"&mdash;"}</td><td>\${r.fecha.split("-").reverse().join("-")}</td>
-        <td>\${r.entrada}</td><td>\${r.salida}</td><td>\${he}h</td>
-        <td>\${r.estado==="aprobado"?"✓ Aprobada":"⏳ Pendiente"}</td></tr>\`;
-    }).join("")}</tbody></table></body></html>`;
+      const nom = t ? nombreCompleto(t) : "-";
+      const est = r.estado==="aprobado" ? "Aprobada" : "Pendiente";
+      return "<tr><td>" + nom + "</td><td>" + fmtD(r.fecha) + "</td><td>" +
+        r.entrada + "</td><td>" + r.salida + "</td><td>" + he + "h</td><td>" + est + "</td></tr>";
+    }).join("");
+    const html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Reporte HE</title>" +
+      "<style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}" +
+      "th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#2D2D2D;color:#fff;}" +
+      "@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}" +
+      "</style></head><body>" +
+      "<h2>Reporte HH Extras - Periodo: " + fmtD(pD) + " al " + fmtD(pH) + "</h2>" +
+      "<table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>HE</th><th>Estado</th></tr></thead>" +
+      "<tbody>" + filas + "</tbody></table></body></html>";
     const _b = new Blob([html],{type:"text/html;charset=utf-8"});
     const _u = URL.createObjectURL(_b);
     const _f = document.createElement("iframe");
     _f.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
     _f.src = _u;
-    _f.onload = () => { _f.contentWindow.focus(); _f.contentWindow.print();
-      setTimeout(()=>{ _f.remove(); URL.revokeObjectURL(_u); },3000); };
+    _f.onload = function() { _f.contentWindow.focus(); _f.contentWindow.print();
+      setTimeout(function(){ _f.remove(); URL.revokeObjectURL(_u); },3000); };
     document.body.appendChild(_f);
   }
 
