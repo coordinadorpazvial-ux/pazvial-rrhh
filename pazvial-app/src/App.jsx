@@ -2269,8 +2269,13 @@ export default function App() {
     // Evitar que al editar la fecha, el registro choque con otro existente del mismo trabajador
     const regActual = registros.find(r=>r.id===regEditando);
     if(regActual){
+      // Permitir editar si el choque es con un segundoTurno (mismo día válido)
       const choque = registros.find(r=>
-        r.id!==regEditando && r.tId===regActual.tId && r.fecha===regEditFecha
+        r.id!==regEditando &&
+        r.tId===regActual.tId &&
+        r.fecha===regEditFecha &&
+        // Solo bloquear si ambos son del mismo tipo (no mezclar turno normal con segundo)
+        !!(r.segundoTurno) === !!(regActual.segundoTurno)
       );
       if(choque){
         setRegEditMsg({tipo:"err",txt:`Ya existe otro registro de este trabajador en la fecha ${regEditFecha}. Elimina o edita ese registro primero.`});
@@ -2909,7 +2914,7 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   const regConExtraPendiente = registros.filter(r => {
     if (!r.salida) return false;
-    // HE clásica (día especial): estado general pendiente
+    // HE clásica (día especial): solo pendientes
     if (esEspecial(r.fecha) && r.estado==="pendiente") return true;
     // HE entrada anticipada pendiente
     if (r.estadoEntrada==="pendiente") return true;
@@ -4459,6 +4464,27 @@ export default function App() {
                                 ) : (
                                   <div style={{display:"flex",gap:4}}>
                                     <button onClick={()=>iniciarEdicion(r)} style={{...S.btnS,fontSize:11,padding:"4px 10px"}}>✏️</button>
+                                    {/* Revertir HE aprobadas */}
+                                    {(r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado"||(esEspecial(r.fecha)&&r.estado==="aprobado")) && (
+                                      <button
+                                        title="Revertir aprobación de HE"
+                                        onClick={()=>{
+                                          if(!window.confirm("¿Revertir la aprobación de HE de este registro?")) return;
+                                          setRegistros(p=>p.map(x=>{
+                                            if(x.id!==r.id) return x;
+                                            return {
+                                              ...x,
+                                              estado: esEspecial(r.fecha) ? "pendiente" : x.estado,
+                                              estadoEntrada: x.estadoEntrada==="aprobado" ? "pendiente" : x.estadoEntrada,
+                                              estadoSalida: x.estadoSalida==="aprobado" ? "pendiente" : x.estadoSalida,
+                                              horasExtraAprobadas: undefined,
+                                            };
+                                          }));
+                                        }}
+                                        style={{...S.btn,fontSize:11,padding:"4px 10px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>
+                                        ↩
+                                      </button>
+                                    )}
                                     <button
                                       onClick={()=>{
                                         if(window.confirm(`¿Eliminar el registro de ${t?nombreCompleto(t):"este trabajador"} del ${fmtFecha(r.fecha)}?`)){
