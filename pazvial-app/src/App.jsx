@@ -1566,7 +1566,20 @@ export default function App() {
       if (tieneReales) {
         cargandoDesdeFirebase.current = true;
         setTrabajadores(tFirebase);
-        setRegistros(data.registros || []);
+        // Merge inteligente: preservar registros locales no guardados aún
+        setRegistros(prev => {
+          const fbRegs = data.registros || [];
+          const idsFB = new Set(fbRegs.map(r => r.id));
+          const localesNuevos = prev.filter(r => !idsFB.has(r.id));
+          const merged = fbRegs.map(rFB => {
+            const rLocal = prev.find(r => r.id === rFB.id);
+            if (!rLocal) return rFB;
+            if (rLocal.salida && !rFB.salida) return rLocal;
+            if ((rLocal.estadoEntrada==="aprobado"||rLocal.estadoSalida==="aprobado") && rFB.estado==="pendiente") return rLocal;
+            return rFB;
+          });
+          return [...merged, ...localesNuevos];
+        });
         setComps(data.compensatorios || []);
         setSolicitudes(data.solicitudes || []);
         setNotifs(data.notificaciones || []);
@@ -3249,6 +3262,23 @@ export default function App() {
 
         <div style={{ padding:"0 8px 40px" }}>
 
+          {/* ── BANNER: LIQUIDACIÓN DISPONIBLE ─────────────── */}
+          {liquidaciones.some(l => Number(l.tId)===Number(trabActivo.id) && l.estado==="enviada" && !l.firmadaPor) && (
+            <div onClick={()=>setTabTrab("liquidacs")} style={{ margin:"12px 0 8px", padding:"14px 16px",
+              background:"linear-gradient(135deg,rgba(39,174,96,0.2),rgba(39,174,96,0.08))",
+              border:"2px solid #27ae60", borderRadius:12, cursor:"pointer",
+              display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ fontSize:28 }}>💰</div>
+              <div style={{ flex:1 }}>
+                <div style={{ color:"#27ae60", fontWeight:"bold", fontSize:14, marginBottom:2 }}>
+                  Liquidación de sueldo disponible
+                </div>
+                <div style={{ color:"#9A8A6A", fontSize:12 }}>Toca aquí para revisar y firmar</div>
+              </div>
+              <div style={{ color:"#27ae60", fontSize:20 }}>›</div>
+            </div>
+          )}
+
           {/* ── TAB: MARCAR ──────────────────────────────── */}
           {tabTrab==="marcar" && (
             <div style={{ maxWidth:480, margin:"0 auto" }}>
@@ -4372,6 +4402,7 @@ export default function App() {
                       {[...registros]
                         .filter(r=>{
                           if(filtroRegTrab && r.tId!==Number(filtroRegTrab)) return false;
+                          if(filtroRegDia && r.fecha!==filtroRegDia) return false;
                           if(filtroRegMes!=="" && new Date(r.fecha+"T12:00:00").getMonth()!==Number(filtroRegMes)) return false;
                           if(filtroRegAnio && new Date(r.fecha+"T12:00:00").getFullYear()!==Number(filtroRegAnio)) return false;
                           return true;
@@ -4405,7 +4436,7 @@ export default function App() {
                                   : r.salida||<span style={{color:"#aaa"}}>—</span>}
                               </td>
                               <td style={{...S.td,color:h?.extra>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
-                                {h?`${h.extra}h${r.estado!=="aprobado"&&h.extra>0?" ⏳":""}` : "—"}
+                                {h?(()=>{ const he=(r.horasExtraAprobadas!==undefined&&r.estado==="aprobado")?r.horasExtraAprobadas:h.extra; return `${he}h${r.estado!=="aprobado"&&he>0?" ⏳":""}`; })() : "—"}
                               </td>
                               <td style={S.td}>
                                 <span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":r.entradaAnticipada?"#e67e22":"#e67e22")}>
