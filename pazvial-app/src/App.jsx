@@ -2355,28 +2355,76 @@ export default function App() {
   // ── HOJA DE ASISTENCIA MENSUAL PDF ──────────────────
   function generarReporteHEPDF(trabsList, regsList, mes, anio) {
     const { desde: pD, hasta: pH } = periodoLiquidacion(mes, anio);
-    const regs = regsList.filter(r => r.fecha >= pD && r.fecha <= pH && r.salida);
-    if (regs.length === 0) { alert("No hay registros de HE en el período."); return; }
-    const fmtD = function(f) { return f ? f.split("-").reverse().join("-") : ""; };
-    const filas = regs.map(function(r) {
-      const t = (trabsList||[]).find(function(x){ return x.id===r.tId; });
-      const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida);
-      const esp = esEspecial(r.fecha);
-      const he = esp ? (r.estado==="aprobado"?(r.horasExtraAprobadas||0):0) : (h.extra||0);
-      if (he <= 0) return "";
-      const nom = t ? nombreCompleto(t) : "-";
-      const est = r.estado==="aprobado" ? "Aprobada" : "Pendiente";
-      return "<tr><td>" + nom + "</td><td>" + fmtD(r.fecha) + "</td><td>" +
-        r.entrada + "</td><td>" + r.salida + "</td><td>" + he + "h</td><td>" + est + "</td></tr>";
+    const DIAS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+    const fmtD = function(f) {
+      if (!f) return "";
+      const [y,m,d] = f.split("-");
+      const nomDia = DIAS[new Date(y+"-"+m+"-"+d+"T12:00:00").getDay()];
+      return nomDia + " " + d + "-" + m + "-" + y;
+    };
+
+    // Agrupar por trabajador
+    const trabsConHE = [];
+    (trabsList||[]).filter(t=>t.activo&&t.id!==999).forEach(function(t) {
+      const regsT = regsList.filter(function(r) {
+        return r.tId===t.id && r.fecha>=pD && r.fecha<=pH && r.salida;
+      });
+      const filasT = [];
+      let totalHE = 0;
+      regsT.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); }).forEach(function(r) {
+        const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida,!!r.esAdministrativo);
+        const esp = esEspecial(r.fecha);
+        const he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
+          : (esp ? (r.estado==="aprobado"?(h.extra||0):0) : (h.extra||0));
+        if (he <= 0) return;
+        const est = r.estado==="aprobado" ? "Aprobada" : "Pendiente";
+        const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : esp ? "Día especial" : "Normal";
+        const bgColor = r.estado==="aprobado" ? "#f0fff4" : "#fffbf0";
+        filasT.push("<tr style='background:"+bgColor+"'><td>"+fmtD(r.fecha)+"</td><td>"+r.entrada+"</td><td>"+r.salida+"</td><td style='color:#e67e22;font-weight:bold'>"+he+"h</td><td>"+tipo+"</td><td style='color:"+(r.estado==="aprobado"?"#27ae60":"#e67e22")+"'>"+est+"</td></tr>");
+        totalHE += he;
+      });
+      if (filasT.length > 0) trabsConHE.push({t, filasT, totalHE});
+    });
+
+    if (trabsConHE.length === 0) { alert("No hay registros de HE en el período."); return; }
+
+    const secciones = trabsConHE.map(function(item) {
+      return "<div style='margin-bottom:28px;page-break-inside:avoid'>" +
+        "<table style='width:100%;border-collapse:collapse;margin-bottom:6px'>" +
+        "<tr style='background:#1a1a2e;color:#C9A84C'>" +
+        "<td colspan='6' style='padding:10px 14px;font-size:14px;font-weight:bold'>" +
+        "&#128101; " + nombreCompleto(item.t) + " &nbsp;·&nbsp; " + item.t.codigo +
+        " &nbsp;·&nbsp; Total HE: <strong>" + item.totalHE.toFixed(2) + "h</strong></td></tr>" +
+        "<tr style='background:#2D2D2D;color:#fff;font-size:11px'>" +
+        "<th style='padding:6px 10px'>Fecha</th><th style='padding:6px 10px'>Entrada</th>" +
+        "<th style='padding:6px 10px'>Salida</th><th style='padding:6px 10px'>HE</th>" +
+        "<th style='padding:6px 10px'>Tipo</th><th style='padding:6px 10px'>Estado</th></tr>" +
+        item.filasT.join("") + "</table></div>";
     }).join("");
-    const html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Reporte HE</title>" +
-      "<style>body{font-family:Arial,sans-serif;padding:20px;}table{width:100%;border-collapse:collapse;}" +
-      "th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#2D2D2D;color:#fff;}" +
+
+    const totalGeneral = trabsConHE.reduce(function(s,x){ return s+x.totalHE; }, 0);
+
+    const html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" +
+      "<title>Reporte HH Extras " + mesNombre(mes) + " " + anio + "</title>" +
+      "<style>body{font-family:Arial,sans-serif;margin:0;padding:0;}" +
+      "th,td{border:1px solid #ddd;text-align:left;}" +
       "@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}" +
       "</style></head><body>" +
-      "<h2>Reporte HH Extras - Periodo: " + fmtD(pD) + " al " + fmtD(pH) + "</h2>" +
-      "<table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>HE</th><th>Estado</th></tr></thead>" +
-      "<tbody>" + filas + "</tbody></table></body></html>";
+      "<div style='padding:20px 28px'>" +
+      "<div style='display:flex;align-items:center;gap:16px;border-bottom:3px solid #C9A84C;padding-bottom:14px;margin-bottom:20px'>" +
+      "<img src='" + LOGO_SRC + "' style='height:60px;object-fit:contain'/>" +
+      "<div><div style='font-size:20px;font-weight:bold;color:#1a1a2e'>PAZ VIAL SpA</div>" +
+      "<div style='font-size:12px;color:#555'>RUT: 78.351.313-7 &nbsp;·&nbsp; Seguridad Vial</div></div>" +
+      "<div style='margin-left:auto;text-align:right'>" +
+      "<div style='font-size:16px;font-weight:bold;color:#C9A84C'>Reporte de Horas Extras</div>" +
+      "<div style='font-size:12px;color:#555'>Período: " + fmtD(pD) + " al " + fmtD(pH) + "</div>" +
+      "<div style='font-size:12px;color:#555'>Total general: <strong>" + totalGeneral.toFixed(2) + "h</strong></div>" +
+      "</div></div>" +
+      secciones +
+      "<div style='border-top:2px solid #C9A84C;margin-top:20px;padding-top:10px;font-size:10px;color:#aaa;text-align:center'>" +
+      "Gestión de Personas Paz Vial SpA &nbsp;·&nbsp; Documento generado automáticamente</div>" +
+      "</div></body></html>";
+
     const _b = new Blob([html],{type:"text/html;charset=utf-8"});
     const _u = URL.createObjectURL(_b);
     const _f = document.createElement("iframe");
@@ -2386,7 +2434,6 @@ export default function App() {
       setTimeout(function(){ _f.remove(); URL.revokeObjectURL(_u); },3000); };
     document.body.appendChild(_f);
   }
-
   function generarHojaAsistenciaPDF(tId, mes, anio) {
     const trab = tId ? trabajadores.find(t=>t.id===Number(tId)) : null;
     const titulo = trab
@@ -4080,7 +4127,7 @@ export default function App() {
                       <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
                       <td style={{...S.td,color:"#C9A84C",fontWeight:"bold"}}>{t?.codigo}</td>
                       <td style={S.td}>
-                        {fmtFecha(r.fecha)}
+                        {fmtFecha(r.fecha, true)}
                         {esDiaEsp && <span style={{...S.bdg("#8e44ad"),marginLeft:4,fontSize:10}}>
                           {esDomingo(r.fecha)?"Dom":esSabado(r.fecha)?"Sáb":"Feriado"}
                         </span>}
@@ -4428,7 +4475,7 @@ export default function App() {
                               <td style={S.td}>
                                 {editando
                                   ? <input type="date" style={{...S.input,padding:"4px 8px",fontSize:12,width:130}} value={regEditFecha} onChange={e=>setRegEditFecha(e.target.value)}/>
-                                  : r.fecha}
+                                  : fmtFecha(r.fecha, true)}
                               </td>
                               <td style={S.td}>
                                 {editando
