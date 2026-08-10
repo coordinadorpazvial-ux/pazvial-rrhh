@@ -2290,7 +2290,7 @@ export default function App() {
     th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;}th{background:#2D2D2D;color:#fff;}
     @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}</style>
     </head><body>
-    <h2>Reporte HH Extras — Período: ${pD.split("-").reverse().join("-")} al ${pH.split("-").reverse().join("-")}</h2>
+    <h2>Reporte HH Extras - Período: ${pD.split("-").reverse().join("-")} al ${pH.split("-").reverse().join("-")}</h2>
     <table><thead><tr><th>Trabajador</th><th>Fecha</th><th>Entrada</th><th>Salida</th><th>HE</th><th>Estado</th></tr></thead>
     <tbody>${regs.map(r => {
       const t = (trabsList||[]).find(x=>x.id===r.tId);
@@ -2298,7 +2298,7 @@ export default function App() {
       const esp = esEspecial(r.fecha);
       const he = esp ? (r.estado==="aprobado"?(r.horasExtraAprobadas||calcularHoras(r.entrada,r.salida,r.fecha).extra):0) : (h.extra||0);
       if (he <= 0) return "";
-      return \`<tr><td>\${t?nombreCompleto(t):"—"}</td><td>\${r.fecha.split("-").reverse().join("-")}</td>
+      return \`<tr><td>\${t?nombreCompleto(t):"&mdash;"}</td><td>\${r.fecha.split("-").reverse().join("-")}</td>
         <td>\${r.entrada}</td><td>\${r.salida}</td><td>\${he}h</td>
         <td>\${r.estado==="aprobado"?"✓ Aprobada":"⏳ Pendiente"}</td></tr>\`;
     }).join("")}</tbody></table></body></html>`;
