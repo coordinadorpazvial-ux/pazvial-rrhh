@@ -1384,6 +1384,7 @@ export default function App() {
   const [filtroRegTrab, setFiltroRegTrab] = useState("");
   const [filtroRegMes,  setFiltroRegMes]  = useState("");
   const [filtroRegAnio, setFiltroRegAnio] = useState(String(new Date().getFullYear()));
+  const [filtroRegDia,  setFiltroRegDia]  = useState("");
   const [regOrden,      setRegOrden]      = useState("desc"); // "asc" | "desc"
 
   // ── Hoja de asistencia mensual ─────────────────────────
@@ -1949,6 +1950,16 @@ export default function App() {
   }
 
   // ── HE entrada anticipada (antes de 07:00) ──
+  function revertirHEEntrada(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"pendiente"} : r));
+  }
+  function revertirHESalida(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoSalida:"pendiente"} : r));
+  }
+  function revertirExtra(id) {
+    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"pendiente"} : r));
+  }
+
   function aprobarHEEntrada(id) {
     setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado"} : r));
     const r = registros.find(x => x.id===id);
@@ -4056,7 +4067,10 @@ export default function App() {
                             </div>
                           </div>
                         ) : r.estadoEntrada==="aprobado" ? (
-                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
+                            <button onClick={()=>revertirHEEntrada(r.id)} title="Revertir aprobación"
+                              style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
+                          </div>
                         ) : r.estadoEntrada==="rechazado" ? (
                           <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
                         ) : <span style={{color:"#aaa"}}>—</span>}
@@ -4076,7 +4090,11 @@ export default function App() {
                                       : "Contingencia: solo viático ($50.000)";
                                   })()
                                 : r.esAdministrativo
-                                  ? `${hBruto.extra}h admin (horas reales)`
+                                  ? (()=>{
+                                      const toMin = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+                                      const reales = r.entrada && r.salida ? +((toMin(r.salida)-toMin(r.entrada))/60).toFixed(1) : hBruto.extra;
+                                      return reales + "h administrativo (horas reales)";
+                                    })()
                                   : `${hBruto.extra}h día especial (mín. 8h)`}
                             </div>
                             {r.estado==="pendiente" && (
@@ -4103,7 +4121,11 @@ export default function App() {
                                 <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"2px 6px"}}>✗</button>
                               </div>
                             )}
-                            {r.estado==="aprobado" && <span style={{color:"#27ae60",fontSize:11}}>✓ Aprobado</span>}
+                            {r.estado==="aprobado" && <div style={{display:"flex",alignItems:"center",gap:4}}>
+                              <span style={{color:"#27ae60",fontSize:11}}>✓ Aprobado</span>
+                              <button onClick={()=>revertirExtra(r.id)} title="Revertir"
+                                style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
+                            </div>}
                             {r.estado==="rechazado" && <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazado</span>}
                           </div>
                         ) : r.estadoSalida==="pendiente" ? (
@@ -4122,7 +4144,11 @@ export default function App() {
                             </div>
                           </div>
                         ) : r.estadoSalida==="aprobado" ? (
-                          <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraSalida}h aprobadas</span>
+                          <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraSalida}h aprobadas</span>
+                            <button onClick={()=>revertirHESalida(r.id)} title="Revertir aprobación"
+                              style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
+                          </div>
                         ) : r.estadoSalida==="rechazado" ? (
                           <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
                         ) : <span style={{color:"#aaa"}}>—</span>}
@@ -4308,6 +4334,11 @@ export default function App() {
                         <option key={t.id} value={t.id}>{nombreCompleto(t)} ({t.codigo})</option>
                       ))}
                     </select>
+                  </div>
+                  <div>
+                    <label style={S.lbl}>Día</label>
+                    <input type="date" style={{...S.input,width:"100%"}} value={filtroRegDia}
+                      onChange={e=>setFiltroRegDia(e.target.value)}/>
                   </div>
                   <div>
                     <label style={S.lbl}>Mes</label>
