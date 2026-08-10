@@ -5248,33 +5248,83 @@ export default function App() {
         {/* ── TAB: CUADRILLAS ────────────────────────────────── */}
         {tabAdmin==="cuadrillas" && (
           <div style={{ marginTop:4 }}>
-            <div style={S.card}>
-              <h3 style={{ color:"#C9A84C", marginTop:0 }}>👥 Cuadrillas</h3>
-              {cuadrillas.length===0
-                ? <div style={{ color:"#9A8A6A", textAlign:"center", padding:24 }}>No hay cuadrillas creadas</div>
-                : cuadrillas.map(c => (
-                    <div key={c.id} style={{ ...S.card, background:"rgba(201,168,76,0.06)", marginBottom:10 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <div>
-                          <div style={{ color:"#C9A84C", fontWeight:"bold" }}>{c.nombre}</div>
-                          <div style={{ color:"#9A8A6A", fontSize:12 }}>
-                            Supervisor: {trabajadores.find(t=>t.id===c.supervisorId) ? nombreCompleto(trabajadores.find(t=>t.id===c.supervisorId)) : "Sin asignar"}
+            {/* Lista de cuadrillas */}
+            {cuadrillas.map(c => {
+              const sup = trabajadores.find(t=>t.id===c.supervisorId);
+              const miembros = trabajadores.filter(t=>(c.miembros||[]).includes(t.id));
+              const noMiembros = trabajadores.filter(t=>t.activo && t.id!==999 && !(c.miembros||[]).includes(t.id));
+              return (
+                <div key={c.id} style={{ ...S.card, marginBottom:12 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                    <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:15 }}>👥 {c.nombre}</div>
+                    <button onClick={()=>{ if(window.confirm("¿Eliminar cuadrilla "+c.nombre+"?")) setCuadrillas(p=>p.filter(x=>x.id!==c.id)); }}
+                      style={{...S.btnD,fontSize:11,padding:"4px 10px"}}>🗑 Eliminar</button>
+                  </div>
+
+                  {/* Supervisor */}
+                  <div style={{ marginBottom:12 }}>
+                    <label style={S.lbl}>Supervisor</label>
+                    <select style={S.sel} value={c.supervisorId||""}
+                      onChange={e=>{
+                        const val = e.target.value ? Number(e.target.value) : null;
+                        setCuadrillas(p=>p.map(x=>x.id===c.id?{...x,supervisorId:val}:x));
+                      }}>
+                      <option value="">— Sin supervisor —</option>
+                      {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>(
+                        <option key={t.id} value={t.id}>{nombreCompleto(t)} ({t.codigo})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Miembros actuales */}
+                  <div style={{ marginBottom:8 }}>
+                    <label style={S.lbl}>Miembros ({miembros.length})</label>
+                    {miembros.length===0
+                      ? <div style={{ color:"#9A8A6A", fontSize:12, padding:"6px 0" }}>Sin miembros asignados</div>
+                      : miembros.map(t=>(
+                          <div key={t.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                            padding:"6px 10px", background:"rgba(201,168,76,0.08)", borderRadius:6, marginBottom:4 }}>
+                            <span style={{ color:"#d0e0ff", fontSize:13 }}>{nombreCompleto(t)} <span style={{color:"#9A8A6A",fontSize:11}}>({t.codigo})</span></span>
+                            <button onClick={()=>setCuadrillas(p=>p.map(x=>x.id===c.id?{...x,miembros:(x.miembros||[]).filter(id=>id!==t.id)}:x))}
+                              style={{ background:"transparent", border:"none", color:"#e74c3c", cursor:"pointer", fontSize:14, padding:"0 4px" }}>✕</button>
                           </div>
-                          <div style={{ color:"#9A8A6A", fontSize:12 }}>
-                            Miembros: {(c.miembros||[]).length} trabajadores
-                          </div>
-                        </div>
-                        <button onClick={()=>setContingencias(p=>p)} style={{...S.btnD,fontSize:11,padding:"4px 8px"}}
-                          title="La gestión completa de cuadrillas se realizaba desde este módulo">🗑</button>
-                      </div>
+                        ))}
+                  </div>
+
+                  {/* Agregar miembro */}
+                  {noMiembros.length > 0 && (
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <select style={{...S.sel, flex:1}} id={"sel-"+c.id}>
+                        <option value="">— Agregar trabajador —</option>
+                        {noMiembros.map(t=>(
+                          <option key={t.id} value={t.id}>{nombreCompleto(t)} ({t.codigo})</option>
+                        ))}
+                      </select>
+                      <button onClick={()=>{
+                        const sel = document.getElementById("sel-"+c.id);
+                        const val = Number(sel?.value);
+                        if (!val) return;
+                        setCuadrillas(p=>p.map(x=>x.id===c.id?{...x,miembros:[...(x.miembros||[]),val]}:x));
+                        if (sel) sel.value="";
+                      }} style={{...S.btnG,padding:"6px 14px",fontSize:12,whiteSpace:"nowrap"}}>+ Agregar</button>
                     </div>
-                  ))}
-              <div style={{ marginTop:12 }}>
-                <button onClick={()=>{
-                  const nombre = prompt("Nombre de la cuadrilla:");
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Nueva cuadrilla */}
+            <div style={S.card}>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <input style={{...S.input, flex:1}} placeholder="Nombre de la nueva cuadrilla..."
+                  id="nueva-cuad-nombre" onKeyDown={e=>{ if(e.key==="Enter") document.getElementById("btn-nueva-cuad").click(); }}/>
+                <button id="btn-nueva-cuad" onClick={()=>{
+                  const inp = document.getElementById("nueva-cuad-nombre");
+                  const nombre = inp?.value?.trim();
                   if (!nombre) return;
-                  setCuadrillas(p=>[...p,{id:nowId(),nombre:nombre.trim(),supervisorId:null,miembros:[]}]);
-                }} style={{...S.btnG,padding:"8px 16px"}}>+ Nueva Cuadrilla</button>
+                  setCuadrillas(p=>[...p,{id:nowId(),nombre,supervisorId:null,miembros:[]}]);
+                  if (inp) inp.value="";
+                }} style={{...S.btnG,padding:"8px 16px",whiteSpace:"nowrap"}}>+ Nueva Cuadrilla</button>
               </div>
             </div>
           </div>
