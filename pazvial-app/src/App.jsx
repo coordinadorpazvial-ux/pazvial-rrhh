@@ -2241,15 +2241,26 @@ export default function App() {
     </body></html>`;
     const _blob = new Blob([html], {type:"text/html;charset=utf-8"});
     const _url = URL.createObjectURL(_blob);
-    const _ifr = document.createElement("iframe");
-    _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
-    _ifr.src = _url;
-    _ifr.onload = () => {
-      _ifr.contentWindow.focus();
-      _ifr.contentWindow.print();
-      setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
-    };
-    document.body.appendChild(_ifr);
+    // Abrir en ventana nueva — compatible con todos los browsers incluyendo Safari/iOS
+    const _win = window.open(_url, "_blank");
+    if (_win) {
+      _win.onload = () => {
+        _win.focus();
+        _win.print();
+        setTimeout(() => { _win.close(); URL.revokeObjectURL(_url); }, 1500);
+      };
+    } else {
+      // Fallback: iframe si popup bloqueado
+      const _ifr = document.createElement("iframe");
+      _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
+      _ifr.src = _url;
+      _ifr.onload = () => {
+        _ifr.contentWindow.focus();
+        _ifr.contentWindow.print();
+        setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
+      };
+      document.body.appendChild(_ifr);
+    }
   }
 
   // ── REGISTRO MANUAL ──────────────────────────────────
