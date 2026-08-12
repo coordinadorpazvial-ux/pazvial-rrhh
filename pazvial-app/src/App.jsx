@@ -1566,7 +1566,7 @@ export default function App() {
       if (tieneReales) {
         cargandoDesdeFirebase.current = true;
         setTrabajadores(tFirebase);
-        // Merge inteligente: preservar registros locales no guardados aún
+        // Merge inteligente: preservar registros locales más recientes
         setRegistros(prev => {
           const fbRegs = data.registros || [];
           const idsFB = new Set(fbRegs.map(r => r.id));
@@ -1574,7 +1574,11 @@ export default function App() {
           const merged = fbRegs.map(rFB => {
             const rLocal = prev.find(r => r.id === rFB.id);
             if (!rLocal) return rFB;
+            // Local gana si fue editado más recientemente
+            if (rLocal._updatedAt && (!rFB._updatedAt || rLocal._updatedAt > rFB._updatedAt)) return rLocal;
+            // Local gana si tiene salida reciente no guardada
             if (rLocal.salida && !rFB.salida) return rLocal;
+            // Local gana si tiene HE aprobada
             if ((rLocal.estadoEntrada==="aprobado"||rLocal.estadoSalida==="aprobado") && rFB.estado==="pendiente") return rLocal;
             return rFB;
           });
@@ -2150,7 +2154,8 @@ export default function App() {
 
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
-    const d = liq.datos;
+    const d = liq.datos || liq || {};
+    if (!d.mes && !d.nombre) { alert("Esta liquidación no tiene datos disponibles para imprimir."); return; }
     const firmaEmpleador = `
       <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:11px;color:#1a1a2e;">
         ✅ <strong>Firmado Electrónicamente por María Paz Espinoza</strong><br/>
@@ -2320,6 +2325,7 @@ export default function App() {
         estadoEntrada: tieneHEEnt ? (r.estadoEntrada || "pendiente") : null,
         estadoSalida:  tieneHESal ? (r.estadoSalida  || "pendiente") : null,
         entradaAnticipada: tieneHEEnt,
+        _updatedAt: Date.now(),
       };
     }));
     setRegEditando(null);
@@ -5249,7 +5255,7 @@ export default function App() {
                             <td style={S.td}>
                               <button
                                 onClick={()=>{
-                                  if(window.confirm(`¿Eliminar el compensatorio de ${t?nombreCompleto(t):"este trabajador"} del ${c.fecha}?`)){
+                                  if(window.confirm(`¿Eliminar el compensatorio de ${t?nombreCompleto(t):"este trabajador"} del ${fmtFecha(c.fecha)}?`)){
                                     setComps(p=>p.filter(x=>x.id!==c.id));
                                   }
                                 }}
