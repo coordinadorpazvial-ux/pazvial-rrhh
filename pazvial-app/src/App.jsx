@@ -1793,23 +1793,32 @@ export default function App() {
     const fechaHoy = hoy();
     const hora     = horaActual();
 
-    // Verificar que el trabajador logueado sigue siendo válido en el sistema actual
     const trabVigente = trabajadores.find(x => x.id === trabActivo.id && x.activo);
     const idReal = trabVigente ? trabVigente.id
       : trabajadores.find(x =>
           x.codigo.toUpperCase() === trabActivo.codigo.toUpperCase() && x.activo
         )?.id;
+    const tId = idReal ?? trabActivo.id;
 
-    const regHoy = registros.find(r => r.tId === (idReal ?? trabActivo.id) && r.fecha === fechaHoy);
+    // Todos los registros de hoy
+    const regsHoyTodos = registros.filter(r => r.tId === tId && r.fecha === fechaHoy);
+    const regSinSalida = regsHoyTodos.find(r => !r.salida);
+    const regCompleto  = regsHoyTodos.find(r => r.salida && !r.segundoTurno);
 
-    // Validaciones previas
     if (tipoMarca === "entrada") {
-      if (regHoy) { setMarcaMsg({ tipo:"err", txt:"Ya tiene registro de entrada hoy." }); return; }
+      if (regSinSalida) {
+        // Tiene entrada sin salida — no puede entrar de nuevo
+        setMarcaMsg({ tipo:"err", txt:"Ya tienes entrada registrada. Marca tu salida primero." });
+        return;
+      }
+      // Si tiene jornada completa, confirmarMarca lo manejará con el modal de segundo turno
+      // Solo mostramos el modal de confirmación
     } else {
-      if (!regHoy)       { setMarcaMsg({ tipo:"err", txt:"No tiene entrada registrada hoy." }); return; }
-      if (regHoy.salida) { setMarcaMsg({ tipo:"err", txt:"Ya tiene salida registrada hoy." }); return; }
+      if (!regSinSalida) {
+        setMarcaMsg({ tipo:"err", txt:"No tienes entrada registrada hoy." });
+        return;
+      }
     }
-    // Mostrar modal de confirmación con hora actual
     setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaHoy });
   }
 
@@ -1841,56 +1850,70 @@ export default function App() {
       return;
     }
 
-    const regHoy = registros.find(r => r.tId === trabVigente.id && r.fecha === fecha);
-    const [hh] = hora.split(":").map(Number);
-    const esAnticipada = hh < 8;
+    // Todos los registros del trabajador hoy
+    const regsHoy = registros.filter(r => r.tId === trabVigente.id && r.fecha === fecha);
+    const regHoySinSalida = regsHoy.find(r => !r.salida);
+    const regHoyCompleto  = regsHoy.find(r => r.salida && !r.segundoTurno);
+    const regHoy = regHoySinSalida || regsHoy[regsHoy.length-1] || null;
+
+    const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
 
     setMarcaConfirm(null);
-    setMarcaGuardando(true);
-    setSyncEstado("guardando");
 
     let nuevosRegistros;
     if (tipo === "entrada") {
-      const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      // Si ya tiene jornada completa → proponer segundo turno
+      if (regHoyCompleto && !regHoySinSalida) {
+        setMarcaGuardando(false);
+        setModalSegundoTurno({ fechaHoy: fecha, hora, idReal: trabVigente.id });
+        return;
+      }
+      // Si ya tiene entrada sin salida → error
+      if (regHoySinSalida) {
+        setMarcaGuardando(false);
+        setMarcaMsg({ tipo:"err", txt:"Ya tienes entrada registrada hoy. Marca tu salida primero." });
+        return;
+      }
       const minEntrada = toMin(hora);
-      // HE anticipada: entrada antes de las 07:00 (más de 1h antes de las 08:00)
       const tieneHEEntrada = !esEspecial(fecha) && minEntrada < 420;
       const estadoEntradaHE = tieneHEEntrada ? "pendiente" : null;
       const esDiaConting = esDiaContingencia(fecha, contingencias);
       const nuevoReg = {
         id: nowId(), tId: trabVigente.id, fecha,
         entrada: hora, salida: null,
-        estado: "pendiente",           // estado general del registro
-        estadoEntrada: estadoEntradaHE, // HE anticipada (null = no aplica)
-        estadoSalida: null,            // HE salida (se asigna al marcar salida)
+        estado: "pendiente",
+        estadoEntrada: estadoEntradaHE,
+        estadoSalida: null,
         esContingencia: esDiaConting,
         motivoRechazoEntrada: "",
         motivoRechazoSalida: "",
         motivoRechazo: "",
         entradaAnticipada: tieneHEEntrada,
       };
+      setMarcaGuardando(true);
+      setSyncEstado("guardando");
       nuevosRegistros = [...registros, nuevoReg];
     } else {
-      // Al marcar salida: detectar si genera HE de salida
-      const toMinS = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+      // Marcar salida
+      const regParaSalida = regHoySinSalida;
+      if (!regParaSalida) {
+        setMarcaGuardando(false);
+        setMarcaMsg({ tipo:"err", txt:"No tienes entrada registrada hoy." });
+        return;
+      }
       const finS = esViernes(fecha) ? 840 : 1080;
-      const tieneHESalidaS = !esEspecial(fecha) && toMinS(hora) > finS;
+      const tieneHESalidaS = !esEspecial(fecha) && toMin(hora) > finS;
       if (tieneHESalidaS) {
         setMarcaGuardando(false);
         setMotivoSobretiempo("");
-        setModalSobretiempo({ hora, fecha, regHoy });
+        setModalSobretiempo({ hora, fecha, regHoy: regParaSalida });
         return;
       }
-      // Buscar el registro sin salida (puede ser segundo turno)
-      const regParaSalida = regsHoyAll.find(r => !r.salida) || regHoy;
+      setMarcaGuardando(true);
+      setSyncEstado("guardando");
       nuevosRegistros = registros.map(r => {
-        if (!regParaSalida || r.id !== regParaSalida.id) return r;
-        return {
-          ...r,
-          salida: hora,
-          estadoSalida: null,
-          motivoRechazoSalida: r.motivoRechazoSalida || "",
-        };
+        if (r.id !== regParaSalida.id) return r;
+        return { ...r, salida: hora, estadoSalida: null, motivoRechazoSalida: r.motivoRechazoSalida || "" };
       });
     }
 
