@@ -2154,116 +2154,119 @@ export default function App() {
 
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
-    const d = liq.datos || liq || {};
-    if (!d.mes && !d.nombre) { alert("Esta liquidación no tiene datos disponibles para imprimir."); return; }
+    if (!liq) return;
+    // Normalizar estructura — puede venir de distintas versiones
+    const d = liq.datos || {};
+    const fmt = v => (v||0).toLocaleString("es-CL");
+    const str = v => v||"—";
+    const mes = d.mes !== undefined ? d.mes : liq.mes;
+    const anio = d.anio !== undefined ? d.anio : liq.anio;
+    const nombre = d.nombre || d.trabajador || "—";
+
+    // Firmas
     const firmaEmpleador = `
-      <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:11px;color:#1a1a2e;">
+      <div style="margin-top:6px;padding:10px 14px;background:#f0f4ff;border:1.5px solid #2D2D2D;border-radius:6px;font-size:10px;">
         ✅ <strong>Firmado Electrónicamente por María Paz Espinoza</strong><br/>
         Paz Vial SpA — RUT: 78.351.313-7<br/>
-        Fecha: ${liq.enviadaFecha ? fmtFecha(liq.enviadaFecha) : new Date().toLocaleDateString("es-CL")} &nbsp;|&nbsp; Hora: ${liq.enviadaHora||new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}
+        Fecha: ${liq.enviadaFecha||new Date().toLocaleDateString("es-CL")}
       </div>`;
     const firmaTrabajador = liq.estado==="firmada"
-      ? `<div style="margin-top:6px;padding:10px 14px;background:#e8f5e9;border:1.5px solid #27ae60;border-radius:6px;font-size:11px;color:#1b5e20;">
-          ✅ <strong>Firmada electrónicamente por ${liq.firmadaPor}</strong><br/>
-          Fecha: ${liq.firmadaFecha ? liq.firmadaFecha.split("-").reverse().join("-") : ""} &nbsp;|&nbsp; Hora: ${liq.firmadaHora}
-         </div>` : `<div style="margin-top:6px;padding:10px 14px;background:#fff8e1;border:1.5px dashed #f39c12;border-radius:6px;font-size:11px;color:#7d5a00;">
+      ? `<div style="margin-top:6px;padding:10px 14px;background:#e8f5e9;border:1.5px solid #27ae60;border-radius:6px;font-size:10px;">
+          ✅ <strong>Firmada electrónicamente por ${str(liq.firmadaPor)}</strong><br/>
+          Fecha: ${str(liq.firmadaFecha)} &nbsp;|&nbsp; Hora: ${str(liq.firmadaHora)}
+         </div>`
+      : `<div style="margin-top:6px;padding:10px 14px;background:#fff8e1;border:1.5px dashed #e67e22;border-radius:6px;font-size:10px;">
           ⏳ Pendiente de firma del trabajador
          </div>`;
+
+    const colacionRow = (d.colacion||0)>0 ? `<tr><td>Asig. Colación</td><td style="text-align:right">$${fmt(d.colacion)}</td><td></td><td></td></tr>` : "";
+    const movilRow = (d.movilizacion||0)>0 ? `<tr><td>Asig. Movilización</td><td style="text-align:right">$${fmt(d.movilizacion)}</td><td></td><td></td></tr>` : "";
+    const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
+    const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
+    const gratifRow = (d.gratif||0)>0 ? `<tr><td>Gratificación Legal</td><td style="text-align:right">$${fmt(d.gratif)}</td><td></td><td></td></tr>` : "";
+
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>Liquidación ${mesNombre(d.mes)} ${d.anio} — ${d.nombre}</title>
+    <title>Liquidación ${mesNombre(mes)} ${anio} — ${nombre}</title>
     <style>
       *{box-sizing:border-box;}
-      body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:0;padding:24px;max-width:780px;margin:0 auto;}
+      body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:0;padding:24px;max-width:780px;}
       .top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:3px solid #FF6B00;}
-      .logo-box{background:#fff;border-radius:10px;padding:4px;border:1px solid #eee;}
-      .logo-box img{width:120px;height:auto;display:block;}
+      .logo-box img{width:120px;height:auto;}
       .empresa-info{text-align:right;font-size:11px;color:#444;}
       .empresa-info strong{font-size:14px;color:#2D2D2D;display:block;}
       h2{text-align:center;font-size:15px;margin:6px 0 2px;color:#2D2D2D;}
       h3{text-align:center;font-size:12px;margin:0 0 10px;color:#FF6B00;letter-spacing:2px;}
-      .row{display:flex;gap:16px;background:#f2f2f2;padding:5px 12px;margin-bottom:2px;border-radius:3px;flex-wrap:wrap;}
+      .row{display:flex;gap:16px;background:#f2f2f2;padding:5px 12px;margin-bottom:2px;border-radius:4px;flex-wrap:wrap;}
       .row span{font-weight:bold;}
       table{width:100%;border-collapse:collapse;margin-top:8px;}
       th{background:#2D2D2D;color:#fff;padding:6px 10px;font-size:10px;text-align:left;}
       td{padding:5px 10px;border-bottom:1px solid #eee;font-size:11px;}
       .tot{background:#f2f2f2;font-weight:bold;}
-      .totbar{display:flex;justify-content:space-between;background:#2D2D2D;color:#fff;padding:7px 12px;margin-top:6px;border-radius:4px;}
-      .alc{background:#1E6B2E;color:#fff;font-size:15px;font-weight:bold;text-align:center;padding:12px;margin-top:8px;border-radius:5px;}
+      .totbar{display:flex;justify-content:space-between;background:#2D2D2D;color:#fff;padding:7px 12px;margin-top:4px;border-radius:4px;flex-wrap:wrap;gap:8px;}
+      .alc{background:#1E6B2E;color:#fff;font-size:15px;font-weight:bold;text-align:center;padding:10px;margin-top:6px;border-radius:4px;}
       .firmas{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
       .firma-box{border:1px solid #ccc;border-radius:6px;padding:10px;font-size:10px;}
       .firma-box strong{display:block;margin-bottom:6px;font-size:11px;color:#2D2D2D;}
       @media print{body{padding:10px;} .no-print{display:none;}}
     </style></head><body>
     <div class="no-print" style="text-align:center;margin-bottom:16px;">
-      <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;font-size:13px;border-radius:6px;cursor:pointer;font-weight:bold;">🖨 Imprimir / Guardar como PDF</button>
+      <button onclick="window.print()" style="background:#FF6B00;color:#fff;border:none;padding:10px 28px;border-radius:6px;font-size:14px;cursor:pointer;">🖨 Imprimir / Guardar PDF</button>
     </div>
     <div class="top-bar">
-      <div class="logo-box">
-        <img src="${LOGO_SRC}" alt="Paz Vial SpA" />
-      </div>
-      <div class="empresa-info">
-        <strong>PAZ VIAL SpA</strong>
-        RUT Empresa: 78.351.313-7<br/>
-        Gestión de Personas
-      </div>
+      <div class="logo-box"><img src="${LOGO_SRC}" alt="Paz Vial SpA"/></div>
+      <div class="empresa-info"><strong>PAZ VIAL SpA</strong>RUT: 78.351.313-7<br/>Gestión de Personas</div>
     </div>
     <h2>LIQUIDACIÓN DE SUELDO</h2>
-    <h3>REMUNERACIONES MES DE: ${mesNombre(d.mes).toUpperCase()} ${d.anio}</h3>
-    <div class="row"><span>Trabajador:</span><span>${d.nombre}</span></div>
-    <div class="row"><span>RUT:</span><span>${d.rut}</span><span>Código:</span><span>${d.codigo}</span><span>C.C.:</span><span>${d.cc}</span></div>
-    <div class="row"><span>AFP:</span><span>${d.afp} (${d.pctAFP}%)</span><span>Previsión Salud:</span><span>${d.prevision} (7%)</span></div>
+    <h3>REMUNERACIONES: ${mesNombre(mes).toUpperCase()} ${anio}</h3>
+    <div class="row"><span>Trabajador:</span><span>${nombre}</span></div>
+    <div class="row"><span>RUT:</span><span>${str(d.rut)}</span><span>Código:</span><span>${str(d.codigo||d.cc)}</span><span>Cargo:</span><span>${str(d.cargo)}</span></div>
+    <div class="row"><span>AFP:</span><span>${str(d.afp)} (${d.pctAFP||"10"}%)</span><span>Salud:</span><span>${str(d.sistSalud||d.prevision)}</span><span>Contrato:</span><span>${str(d.tipoContrato)}</span></div>
     <div class="row">
-      <span>Días trabajados: <strong>${d.diasTrab}</strong></span>
-      <span>HH Extras: <strong>${d.horasExtra}h</strong></span>
-      <span>Imponible: <strong>$${d.totalImponible.toLocaleString("es-CL")}</strong></span>
-      <span>Tributable: <strong>$${d.tributable.toLocaleString("es-CL")}</strong></span>
+      <span>Días trabajados: <strong>${d.diasTrab||d.diasTrabFinal||0}</strong></span>
+      <span>HH Extras: <strong>${d.horasExtra||0}h</strong></span>
+      <span>Imponible: <strong>$${fmt(d.totalImponible)}</strong></span>
     </div>
     <table>
       <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>Sueldo Base</td><td style="text-align:right">$${d.sueldoBase.toLocaleString("es-CL")}</td><td>Previsión AFP (${d.pctAFP}%)</td><td style="text-align:right">$${d.prevision_monto.toLocaleString("es-CL")}</td></tr>
-      ${d.valorHHExtra>0?`<tr><td>Horas Extra 50% <span style="color:#888;font-size:10px">(${d.horasExtra}h)</span></td><td style="text-align:right">$${d.valorHHExtra.toLocaleString("es-CL")}</td><td></td><td></td></tr>`:""}
-      ${d.gratif>0?`<tr><td>Gratificación Legal</td><td style="text-align:right">$${d.gratif.toLocaleString("es-CL")}</td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`:`<tr><td></td><td></td><td>Salud (7%)</td><td style="text-align:right">$${d.salud_monto.toLocaleString("es-CL")}</td></tr>`}
-      <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${d.totalImponible.toLocaleString("es-CL")}</td><td>Seguro Cesantía</td><td style="text-align:right">$${d.segCesantia.toLocaleString("es-CL")}</td></tr>
-      <tr><td>Asig. Colación</td><td style="text-align:right">$${d.colacion.toLocaleString("es-CL")}</td><td class="tot">TOTAL DESC. LEGALES</td><td class="tot" style="text-align:right">$${d.totalDescLegales.toLocaleString("es-CL")}</td></tr>
-      <tr><td>Asig. Movilización</td><td style="text-align:right">$${d.movilizacion.toLocaleString("es-CL")}</td>${d.anticipo>0?`<td>Anticipo de Remuneración</td><td style="text-align:right;color:#c0392b">$${d.anticipo.toLocaleString("es-CL")}</td>`:"<td></td><td></td>"}</tr>
-      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${d.totalNoImponible.toLocaleString("es-CL")}</td><td>TOTAL OTROS DESC.</td><td style="text-align:right">$${d.totalOtrosDesc.toLocaleString("es-CL")}</td></tr>
+      <tr><td>Sueldo Base Proporcional</td><td style="text-align:right">$${fmt(d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
+      ${heRow}
+      ${gratifRow}
+      <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalImponible)}</td><td style="color:#c0392b">Comisión AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.comisionAFPmonto)}</td></tr>
+      ${colacionRow}
+      ${movilRow}
+      ${viaticRow}
+      <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalNoImponible)}</td><td style="color:#c0392b">Salud (${d.sistSalud||"FONASA"} 7%)</td><td style="text-align:right;color:#c0392b">$${fmt(d.salud_monto)}</td></tr>
+      ${(d.segCesantia||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Seg. Cesantía</td><td style="text-align:right;color:#c0392b">$${fmt(d.segCesantia)}</td></tr>`:""}
+      ${(d.impuesto||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Imp. Único</td><td style="text-align:right;color:#c0392b">$${fmt(d.impuesto)}</td></tr>`:""}
+      ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo Remuneración</td><td style="text-align:right;color:#c0392b">$${fmt(d.anticipo)}</td></tr>`:""}
     </table>
     <div class="totbar">
-      <span>TOTAL HABERES: <strong>$${d.totalHaberes.toLocaleString("es-CL")}</strong></span>
-      <span>TOTAL DESCUENTOS: <strong>$${d.totalDescuentos.toLocaleString("es-CL")}</strong></span>
+      <span>TOTAL HABERES: <strong>$${fmt(d.totalHaberes)}</strong></span>
+      <span>TOTAL DESCUENTOS: <strong>$${fmt(d.totalDescuentos)}</strong></span>
     </div>
-    <div class="alc">ALCANCE LÍQUIDO: $${d.alcanceLiquido.toLocaleString("es-CL")}</div>
+    <div class="alc">ALCANCE LÍQUIDO: $${fmt(d.alcanceLiquido)}</div>
     <div class="firmas">
       <div class="firma-box"><strong>FIRMA DEL EMPLEADOR</strong>${firmaEmpleador}</div>
       <div class="firma-box"><strong>FIRMA DEL TRABAJADOR</strong>${firmaTrabajador}</div>
     </div>
-    <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado el ${new Date().toLocaleDateString("es-CL")} ${new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"})}</p>
+    <p style="text-align:center;font-size:9px;color:#aaa;margin-top:16px;">Gestión de Personas Paz Vial SpA — Documento generado automáticamente</p>
     </body></html>`;
+
     const _blob = new Blob([html], {type:"text/html;charset=utf-8"});
     const _url = URL.createObjectURL(_blob);
-    // Abrir en ventana nueva — compatible con todos los browsers incluyendo Safari/iOS
     const _win = window.open(_url, "_blank");
     if (_win) {
-      _win.onload = () => {
-        _win.focus();
-        _win.print();
-        setTimeout(() => { _win.close(); URL.revokeObjectURL(_url); }, 1500);
-      };
+      _win.onload = () => { _win.focus(); _win.print(); setTimeout(() => { _win.close(); URL.revokeObjectURL(_url); }, 2000); };
     } else {
-      // Fallback: iframe si popup bloqueado
       const _ifr = document.createElement("iframe");
       _ifr.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:0;";
       _ifr.src = _url;
-      _ifr.onload = () => {
-        _ifr.contentWindow.focus();
-        _ifr.contentWindow.print();
-        setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000);
-      };
+      _ifr.onload = () => { _ifr.contentWindow.focus(); _ifr.contentWindow.print(); setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000); };
       document.body.appendChild(_ifr);
     }
   }
 
-  // ── REGISTRO MANUAL ──────────────────────────────────
+  // ── REGISTRO MANUAL ──────────────────────────────────  // ── REGISTRO MANUAL ──────────────────────────────────
   function guardarRegistroManual() {
     setRegManMsg({tipo:"",txt:""});
     if(!regManTrabId){ setRegManMsg({tipo:"err",txt:"Selecciona un trabajador."}); return; }
@@ -3788,7 +3791,7 @@ export default function App() {
                     No tienes liquidaciones disponibles aún.
                   </div>
                 : [...liquidaciones.filter(l=>l.tId===trabActivo.id)].reverse().map(liq=>{
-                    const d = liq.datos;
+                    const d = liq.datos || {};
                     return (
                       <div key={liq.id} style={{ ...S.card, border: liq.estado==="firmada"?"1px solid #27ae60":"1px solid rgba(255,215,0,0.3)" }}>
                         {/* Encabezado */}
@@ -3797,7 +3800,7 @@ export default function App() {
                             <div style={{ color:"#C9A84C", fontWeight:"bold", fontSize:16 }}>
                               Liquidación {mesNombre(liq.mes)} {liq.anio}
                             </div>
-                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${d.alcanceLiquido.toLocaleString("es-CL")}</strong></div>
+                            <div style={{ color:"#9A8A6A", fontSize:12 }}>Alcance Líquido: <strong style={{color:"#27ae60",fontSize:16}}>${(d.alcanceLiquido||0).toLocaleString("es-CL")}</strong></div>
                           </div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
@@ -3811,21 +3814,21 @@ export default function App() {
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${d.sueldoBase.toLocaleString("es-CL")}</span></div>
-                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${d.valorHHExtra.toLocaleString("es-CL")}</span></div>}
-                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${d.gratif.toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${d.totalImponible.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${d.colacion.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${d.movilizacion.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#C9A84C" }}><span>TOTAL HABERES</span><span>${d.totalHaberes.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${(d.sueldoBase||0).toLocaleString("es-CL")}</span></div>
+                            {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${(d.valorHHExtra||0).toLocaleString("es-CL")}</span></div>}
+                            {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${(d.gratif||0).toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${(d.totalImponible||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Colación</span><span>${(d.colacion||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Movilización</span><span>${(d.movilizacion||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#C9A84C" }}><span>TOTAL HABERES</span><span>${(d.totalHaberes||0).toLocaleString("es-CL")}</span></div>
                           </div>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP}%)</span><span>${d.prevision_monto.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${d.salud_monto.toLocaleString("es-CL")}</span></div>
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${d.totalDescLegales.toLocaleString("es-CL")}</span></div>
-                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${d.anticipo.toLocaleString("es-CL")}</span></div>}
-                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${d.totalDescuentos.toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP||"10"}%)</span><span>${(d.prevision_monto||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${(d.salud_monto||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${(d.totalDescLegales||0).toLocaleString("es-CL")}</span></div>
+                            {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${(d.anticipo||0).toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${(d.totalDescuentos||0).toLocaleString("es-CL")}</span></div>
                           </div>
                         </div>
                         {/* Firma sello */}
@@ -5201,15 +5204,15 @@ export default function App() {
                       <thead><tr>{["Trabajador","Período","Total Haberes","Descuentos","Alcance Líquido","Estado","Acciones"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                       <tbody>
                         {[...liquidaciones].reverse().map(liq=>{
-                          const d=liq.datos;
+                          const d=liq.datos||{};
                           const t=trabajadores.find(x=>x.id===liq.tId);
                           return(
                             <tr key={liq.id}>
                               <td style={S.td}>{t?nombreCompleto(t):"—"} <span style={{color:"#C9A84C",fontSize:11}}>({t?.codigo})</span></td>
                               <td style={S.td}>{mesNombre(liq.mes)} {liq.anio}</td>
-                              <td style={{ ...S.td, color:"#C9A84C" }}>${d.totalHaberes.toLocaleString("es-CL")}</td>
-                              <td style={{ ...S.td, color:"#e74c3c" }}>${d.totalDescuentos.toLocaleString("es-CL")}</td>
-                              <td style={{ ...S.td, color:"#27ae60", fontWeight:"bold" }}>${d.alcanceLiquido.toLocaleString("es-CL")}</td>
+                              <td style={{ ...S.td, color:"#C9A84C" }}>${(d.totalHaberes||0).toLocaleString("es-CL")}</td>
+                              <td style={{ ...S.td, color:"#e74c3c" }}>${(d.totalDescuentos||0).toLocaleString("es-CL")}</td>
+                              <td style={{ ...S.td, color:"#27ae60", fontWeight:"bold" }}>${(d.alcanceLiquido||0).toLocaleString("es-CL")}</td>
                               <td style={S.td}>
                                 <span style={S.bdg(liq.estado==="firmada"?"#27ae60":liq.estado==="enviada"?"#e67e22":"#555")}>
                                   {liq.estado==="firmada"?"✓ Firmada":liq.estado==="enviada"?"● Enviada":"Borrador"}
