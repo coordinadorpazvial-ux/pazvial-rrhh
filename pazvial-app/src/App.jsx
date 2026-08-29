@@ -1804,26 +1804,37 @@ export default function App() {
         )?.id;
     const tId = idReal ?? trabActivo.id;
 
-    // Todos los registros de hoy
-    const regsHoyTodos = registros.filter(r => r.tId === tId && r.fecha === fechaHoy);
-    const regSinSalida = regsHoyTodos.find(r => !r.salida);
-    const regCompleto  = regsHoyTodos.find(r => r.salida && !r.segundoTurno);
+    // Buscar registros de hoy Y del día anterior (para salidas después de medianoche)
+    const fechaAyer = (function() {
+      const d = new Date(fechaHoy + "T12:00:00");
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+
+    const regsHoy  = registros.filter(r => r.tId === tId && r.fecha === fechaHoy);
+    const regsAyer = registros.filter(r => r.tId === tId && r.fecha === fechaAyer);
+
+    // Registro sin salida: primero buscar hoy, luego ayer (turno nocturno)
+    const regSinSalidaHoy  = regsHoy.find(r => !r.salida);
+    const regSinSalidaAyer = regsAyer.find(r => !r.salida);
+    const regSinSalida = regSinSalidaHoy || regSinSalidaAyer || null;
+    const fechaParaMarca = regSinSalidaAyer && !regSinSalidaHoy ? fechaAyer : fechaHoy;
+
+    const regsHoyTodos = regsHoy;
+    const regCompleto  = regsHoy.find(r => r.salida && !r.segundoTurno);
 
     if (tipoMarca === "entrada") {
       if (regSinSalida) {
-        // Tiene entrada sin salida — no puede entrar de nuevo
         setMarcaMsg({ tipo:"err", txt:"Ya tienes entrada registrada. Marca tu salida primero." });
         return;
       }
-      // Si tiene jornada completa, confirmarMarca lo manejará con el modal de segundo turno
-      // Solo mostramos el modal de confirmación
     } else {
       if (!regSinSalida) {
         setMarcaMsg({ tipo:"err", txt:"No tienes entrada registrada hoy." });
         return;
       }
     }
-    setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaHoy });
+    setMarcaConfirm({ tipo: tipoMarca, hora, fecha: fechaParaMarca });
   }
 
   // Paso 2: confirmar y registrar
@@ -1854,7 +1865,7 @@ export default function App() {
       return;
     }
 
-    // Todos los registros del trabajador hoy
+    // Todos los registros del trabajador en la fecha de la marca (puede ser ayer si es turno nocturno)
     const regsHoy = registros.filter(r => r.tId === trabVigente.id && r.fecha === fecha);
     const regHoySinSalida = regsHoy.find(r => !r.salida);
     const regHoyCompleto  = regsHoy.find(r => r.salida && !r.segundoTurno);
