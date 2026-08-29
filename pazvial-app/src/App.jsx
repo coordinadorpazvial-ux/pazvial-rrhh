@@ -2143,8 +2143,6 @@ export default function App() {
     if(!anticMonto||isNaN(Number(anticMonto))||Number(anticMonto)<=0){
       setAnticMsg({tipo:"err",txt:"Ingresa un monto válido."}); return; }
     const mes = new Date().getMonth(); const anio = new Date().getFullYear();
-    const ya = anticipos.find(a=>a.tId===trabActivo.id&&a.mes===mes&&a.anio===anio&&a.estado!=="rechazado");
-    if(ya){ setAnticMsg({tipo:"err",txt:"Ya tienes una solicitud de anticipo para este mes."}); return; }
     const nuevo = { id:nowId(), tId:trabActivo.id, monto:Number(anticMonto), motivo:anticMotivo,
       estado:"pendiente", motivoRechazo:"", mes, anio, creado:hoy() };
     setAnticipos(p=>[...p,nuevo]);
