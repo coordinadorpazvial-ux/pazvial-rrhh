@@ -4659,16 +4659,41 @@ export default function App() {
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Entrada</label>
-                    <input type="time" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)} placeholder="HH:MM"/>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <select style={{...S.sel,flex:1,fontSize:15,textAlign:"center"}} value={(regManEntrada||"08:00").split(":")[0]}
+                        onChange={e=>{const m=(regManEntrada||"08:00").split(":")[1]||"00";setRegManEntrada(e.target.value+":"+m);}}>
+                        {Array.from({length:24},(_,i)=>String(i).padStart(2,"0")).map(h=><option key={h} value={h}>{h}h</option>)}
+                      </select>
+                      <span style={{color:"#C9A84C",fontWeight:"bold",fontSize:18}}>:</span>
+                      <select style={{...S.sel,flex:1,fontSize:15,textAlign:"center"}} value={(regManEntrada||"08:00").split(":")[1]||"00"}
+                        onChange={e=>{const h=(regManEntrada||"08:00").split(":")[0]||"08";setRegManEntrada(h+":"+e.target.value);}}>
+                        {["00","05","10","15","20","25","30","35","40","45","50","55"].map(m=><option key={m} value={m}>{m}m</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Salida <span style={{color:"#aaa",fontWeight:"normal"}}>(opcional)</span></label>
-                    <input type="time" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)} placeholder="HH:MM"/>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <select style={{...S.sel,flex:1,fontSize:15,textAlign:"center"}} value={(regManSalida||"").split(":")[0]||""}
+                        onChange={e=>{const m=(regManSalida||"18:00").split(":")[1]||"00";setRegManSalida(e.target.value?(e.target.value+":"+m):"");}}>
+                        <option value="">--</option>
+                        {Array.from({length:24},(_,i)=>String(i).padStart(2,"0")).map(h=><option key={h} value={h}>{h}h</option>)}
+                      </select>
+                      <span style={{color:"#C9A84C",fontWeight:"bold",fontSize:18}}>:</span>
+                      <select style={{...S.sel,flex:1,fontSize:15,textAlign:"center"}} value={(regManSalida||"").split(":")[1]||""}
+                        onChange={e=>{const h=(regManSalida||"18:00").split(":")[0]||"18";setRegManSalida(h&&e.target.value?(h+":"+e.target.value):"");}}>
+                        <option value="">--</option>
+                        {["00","05","10","15","20","25","30","35","40","45","50","55"].map(m=><option key={m} value={m}>{m}m</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div style={{gridColumn:"1/-1"}}>
                     <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginTop:4}}>
                       <input type="checkbox" checked={regManEsNocturno}
-                        onChange={e=>setRegManEsNocturno(e.target.checked)}
+                        onChange={e=>{
+                          setRegManEsNocturno(e.target.checked);
+                          if(e.target.checked) setRegManEntrada("00:00");
+                        }}
                         style={{width:15,height:15,accentColor:"#3498db"}}/>
                       <span style={{color:"#3498db",fontSize:13}}>🌙 Continuación de turno nocturno (todas las horas son HE)</span>
                     </label>
