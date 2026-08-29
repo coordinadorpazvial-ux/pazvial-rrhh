@@ -350,11 +350,12 @@ function getRemuneracionVigente(ficha, mes, anio) {
       gratificacion: historial[0].gratificacion,
     };
   }
-  // Fallback: datos actuales de la ficha
+  // Fallback: datos actuales de la ficha (quitar puntos y comas del formato)
+  const parseMonto = v => Number(String(v||"0").replace(/[^0-9]/g,""))||0;
   return {
-    sueldoPactado: Number(ficha.sueldoPactado)||0,
-    colacion:      Number(ficha.colacion)||0,
-    movilizacion:  Number(ficha.movilizacion)||0,
+    sueldoPactado: parseMonto(ficha.sueldoPactado),
+    colacion:      parseMonto(ficha.colacion),
+    movilizacion:  parseMonto(ficha.movilizacion),
     gratificacion: ficha.gratificacion||false,
   };
 }
@@ -5336,12 +5337,14 @@ export default function App() {
                     <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
-                        ["Sueldo Base", liqPreview.sueldoBase],
-                        ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+liqPreview.horasExtra+"h)", liqPreview.valorHHExtra]]:[]),
+                        [(liqPreview.diasTrabProporcional>0&&liqPreview.diasTrabProporcional<30)?"Sueldo Proporcional ("+liqPreview.diasTrabProporcional+"/30 días)":"Sueldo Base", liqPreview.sueldoProporcional||liqPreview.sueldoBase],
+                        ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+(liqPreview.horasExtraLegales||liqPreview.horasExtra)+"h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
-                        ["Asig. Colación", liqPreview.colacion],
-                        ["Asig. Movilización", liqPreview.movilizacion],
+                        ...(liqPreview.viaticOper>0?[["🚗 Viático Operacional", liqPreview.viaticOper]]:[]),
+                        ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
+                        ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
+                        ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
