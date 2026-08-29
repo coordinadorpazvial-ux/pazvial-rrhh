@@ -343,10 +343,12 @@ function getRemuneracionVigente(ficha, mes, anio) {
     .filter(h => h.desde <= fechaPeriodo)
     .sort((a,b) => b.desde.localeCompare(a.desde));
   if (historial.length > 0) {
+    const parseMonto = v => Number(String(v||"0").replace(/[^0-9]/g,""))||0;
     return {
       sueldoPactado: historial[0].sueldo,
-      colacion:      historial[0].colacion,
-      movilizacion:  historial[0].movilizacion,
+      // Si el historial no tiene colación/movilización, usar la de la ficha actual
+      colacion:      Number(historial[0].colacion) || parseMonto(ficha.colacion),
+      movilizacion:  Number(historial[0].movilizacion) || parseMonto(ficha.movilizacion),
       gratificacion: historial[0].gratificacion,
     };
   }
@@ -370,30 +372,34 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
   const movilizacion = remVigente.movilizacion;
 
   // ── Días proporcionales según fecha de ingreso ────────────────────────────
-  // Si el trabajador ingresó dentro del período, calcular proporcional
   const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
   const fechaIngreso = ficha.fechaIngreso || "";
-  // Determinar fecha efectiva de inicio del período
-  const inicioEfectivo = fechaIngreso && fechaIngreso > pDesde ? fechaIngreso : pDesde;
-  // Días del período completo vs días efectivos
-  const diasPeriodoCompleto = 30; // base legal
   const msPerDia = 1000 * 60 * 60 * 24;
-  const diasEfectivos = fechaIngreso && fechaIngreso > pDesde
+  // Solo aplicar proporcional si el trabajador ingresó DENTRO del período actual
+  const ingresoEnEstePeriodo = fechaIngreso && fechaIngreso >= pDesde && fechaIngreso <= pHasta;
+  const inicioEfectivo = ingresoEnEstePeriodo ? fechaIngreso : pDesde;
+  const diasPeriodoCompleto = 30; // base legal chilena
+  const diasEfectivos = ingresoEnEstePeriodo
     ? Math.round((new Date(pHasta+"T12:00:00") - new Date(fechaIngreso+"T12:00:00")) / msPerDia) + 1
     : diasPeriodoCompleto;
   const diasTrabProporcional = Math.min(diasEfectivos, diasPeriodoCompleto);
   const factorProporcional = diasTrabProporcional / diasPeriodoCompleto;
 
-  // Sueldo base proporcional
-  const sueldoProporcional = fechaIngreso && fechaIngreso > pDesde
+  // Sueldo proporcional (solo si ingresó en este período)
+  const sueldoProporcional = ingresoEnEstePeriodo
     ? Math.round(sueldoBase * factorProporcional)
     : sueldoBase;
 
   // ── Registros del período ─────────────────────────────────────────────────
-  const regs = registros.filter(r =>
-    r.tId===trab.id && r.fecha>=inicioEfectivo && r.fecha<=pHasta && r.salida
+  const regsAll = registros.filter(r =>
+    r.tId===trab.id && r.fecha>=inicioEfectivo && r.fecha<=pHasta
   );
+  const regs = regsAll.filter(r => r.salida);
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
+  // Ausencias injustificadas → descuento proporcional por día
+  const ausencias = regsAll.filter(r => r.esAusencia).length;
+  const valorDia = Math.round(sueldoProporcional / diasTrabProporcional);
+  const descuentoAusencias = ausencias * valorDia;
 
   // ── Valor hora base ───────────────────────────────────────────────────────
   const diasMes = new Date(anio, mes+1, 0).getDate();
@@ -452,7 +458,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
   ).reduce((s,a)=>s+Number(a.monto),0);
 
-  const totalOtrosDesc  = anticMes;
+  const totalOtrosDesc  = anticMes + descuentoAusencias;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
   const alcanceLiquido  = totalHaberes - totalDescuentos;
   const tributable      = totalImponible - prevision - salud;
@@ -468,7 +474,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
     totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
-    anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
+    anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
     cc:"001",
   };
 }
@@ -5331,6 +5337,18 @@ export default function App() {
                     <div style={{ display:"flex", gap:8 }}>
                       <button onClick={()=>imprimirLiquidacion({datos:liqPreview,estado:"borrador",firmadaPor:"",firmadaFecha:"",firmadaHora:""})} style={S.btnS}>🖨 Vista PDF</button>
                       <button onClick={enviarLiquidacion} style={{ ...S.btn, background:"#27ae60", color:"#fff" }}>📤 Enviar al Trabajador</button>
+                      <button onClick={()=>{
+                        const dias = prompt("Modificar días base de liquidación (actual: "+(liqPreview.diasTrabProporcional||30)+"):", liqPreview.diasTrabProporcional||30);
+                        if(!dias||isNaN(Number(dias))) return;
+                        const d = Number(dias);
+                        const factor = d/30;
+                        const nuevoSueldo = Math.round((liqPreview.sueldoBase||liqPreview.sueldoProporcional) * factor);
+                        setLiqPreview(p=>({...p, diasTrabProporcional:d, sueldoProporcional:nuevoSueldo,
+                          totalImponible: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0),
+                          totalHaberes: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0) + (p.totalNoImponible||0),
+                          alcanceLiquido: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0) + (p.totalNoImponible||0) - (p.totalDescuentos||0),
+                        }));
+                      }} style={{...S.btn, fontSize:11, padding:"6px 10px"}}>✏️ Ajustar días</button>
                     </div>
                   </div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, fontSize:12 }}>
