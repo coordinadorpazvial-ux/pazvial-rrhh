@@ -1421,6 +1421,9 @@ export default function App() {
   const [regManTrabId,  setRegManTrabId]  = useState("");
   const [regManFecha,   setRegManFecha]   = useState(hoy());
   const [regManEntrada, setRegManEntrada] = useState("08:00");
+  const [regManEsNocturno, setRegManEsNocturno] = useState(false);
+  const [compFiltroTrab, setCompFiltroTrab] = useState("");
+  const [compFiltroFecha, setCompFiltroFecha] = useState("");
   const [regManSalida,  setRegManSalida]  = useState("18:00");
   const [regManMsg,     setRegManMsg]     = useState({tipo:"",txt:""});
 
@@ -2295,7 +2298,8 @@ export default function App() {
     const esDiaEspMan = esEspecial(fechaMan);
     const minEntradaMan = toMin(regManEntrada);
     const finMan = esViernes(fechaMan) ? 840 : 1080;
-    const tieneHEEntradaMan = !esDiaEspMan && minEntradaMan < 420; // antes de 07:00
+    // Continuación nocturna: no es entrada anticipada aunque sea antes de 07:00
+    const tieneHEEntradaMan = !regManEsNocturno && !esDiaEspMan && minEntradaMan < 420;
     // Si salida < entrada, es turno nocturno (cruza medianoche) — no genera HE de salida extra
     const salidaCruzaMedia = regManSalida && toMin(regManSalida) < toMin(regManEntrada);
     const tieneHESalidaMan  = !esDiaEspMan && regManSalida && !salidaCruzaMedia && toMin(regManSalida) > finMan;
@@ -2307,11 +2311,14 @@ export default function App() {
       estadoSalida:  tieneHESalidaMan  ? "pendiente" : null,
       motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
       entradaAnticipada: tieneHEEntradaMan,
-      manual:true
+      manual:true,
+      esNocturno: regManEsNocturno,
+      // Si es nocturno, todo es HE — marcar para aprobación
+      estadoSalida: regManEsNocturno && regManSalida ? "pendiente" : (tieneHESalidaMan ? "pendiente" : null),
     };
     setRegistros(p=>[...p,nuevo]);
     setRegManMsg({tipo:"ok",txt:`✅ Registro ingresado manualmente para ${regManFecha}.`});
-    setRegManTrabId(""); setRegManFecha(hoy()); setRegManEntrada("08:00"); setRegManSalida("18:00");
+    setRegManTrabId(""); setRegManFecha(hoy()); setRegManEntrada("08:00"); setRegManEsNocturno(false); setRegManSalida("18:00");
   }
 
   function iniciarEdicion(reg) {
@@ -4652,12 +4659,20 @@ export default function App() {
                     <label style={S.lbl}>Hora de Salida <span style={{color:"#aaa",fontWeight:"normal"}}>(opcional)</span></label>
                     <input type="time" step="60" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)} placeholder="HH:MM"/>
                   </div>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginTop:4}}>
+                      <input type="checkbox" checked={regManEsNocturno}
+                        onChange={e=>setRegManEsNocturno(e.target.checked)}
+                        style={{width:15,height:15,accentColor:"#3498db"}}/>
+                      <span style={{color:"#3498db",fontSize:13}}>🌙 Continuación de turno nocturno (todas las horas son HE)</span>
+                    </label>
+                  </div>
                 </div>
                 {regManTrabId&&regManFecha&&regManEntrada&&regManSalida&&(
                   <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"12px 16px",marginTop:14,fontSize:12}}>
                     <div style={{color:"#9A8A6A",fontWeight:"bold",marginBottom:6}}>Preview:</div>
                     {(()=>{
-                      const hc=calcularHoras(regManEntrada,regManSalida,regManFecha);
+                      const hc=calcularHoras(regManEntrada,regManSalida,regManFecha,null,null,regManEsNocturno);
                       return <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
                         <span>H. normales: <strong style={{color:"#27ae60"}}>{hc.normales}h</strong></span>
                         <span>H. extra: <strong style={{color:hc.extra>0?"#FFD700":"#aaa"}}>{hc.extra}h</strong></span>
@@ -5252,7 +5267,19 @@ export default function App() {
         {tabAdmin==="compensat" && (
           <div>
             <div style={S.card}>
-              <h3 style={{ color:"#C9A84C", marginTop:0 }}>📅 Días Compensatorios</h3>
+              <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"flex-end"}}>
+                <h3 style={{ color:"#C9A84C", margin:0 }}>📅 Días Compensatorios</h3>
+                <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <select style={{...S.sel,minWidth:160}} value={compFiltroTrab||""} onChange={e=>setCompFiltroTrab(e.target.value)}>
+                    <option value="">— Todos los trabajadores —</option>
+                    {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>(
+                      <option key={t.id} value={t.id}>{nombreCompleto(t)}</option>
+                    ))}
+                  </select>
+                  <input type="date" style={{...S.input,padding:"6px 10px"}} value={compFiltroFecha||""} onChange={e=>setCompFiltroFecha(e.target.value)} placeholder="Filtrar fecha"/>
+                  {(compFiltroTrab||compFiltroFecha)&&<button onClick={()=>{setCompFiltroTrab("");setCompFiltroFecha("");}} style={{...S.btn,fontSize:12,padding:"6px 12px"}}>✕ Limpiar</button>}
+                </div>
+              </div>
               {compensatorios.length===0 ? (
                 <div style={{ color:"#9A8A6A", textAlign:"center", padding:36 }}>No hay días compensatorios</div>
               ) : (
@@ -5260,7 +5287,11 @@ export default function App() {
                   <table style={S.tbl}>
                     <thead><tr>{["Trabajador","Fecha","Tipo","Estado","Fecha Tomado","Acción",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
                     <tbody>
-                      {compensatorios.map(c => {
+                      {compensatorios.filter(c=>{
+                        if(compFiltroTrab && c.tId!==Number(compFiltroTrab)) return false;
+                        if(compFiltroFecha && c.fecha!==compFiltroFecha) return false;
+                        return true;
+                      }).map(c => {
                         const t=trabajadores.find(x=>x.id===c.tId);
                         // Etiqueta de tipo correcta: puede ser Dom, Feriado o Sáb (si quedó mal)
                         const tipoLabel = esDomingo(c.fecha) ? "Dom" : esSabado(c.fecha) ? "Sáb" : "Feriado";
