@@ -139,8 +139,9 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
   if (!entrada || !salida) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
   const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-  const total = toMin(salida) - toMin(entrada);
-  if (total <= 0) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
+  let total = toMin(salida) - toMin(entrada);
+  // Si total negativo → cruce de medianoche → sumar 24h
+  if (total <= 0) total += 24 * 60;
 
   // ── Días especiales (sáb/dom/feriado): todo es HE con mínimo 8h ──
   if (esEspecial(fecha)) {
@@ -158,7 +159,8 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
 
   // ── Segundo turno: entrada después del fin de jornada → todo son HE reales ──
   if (minEntrada >= fin) {
-    const heReales = +((minSalida - minEntrada) / 60).toFixed(2);
+    // total ya fue calculado arriba con corrección de medianoche
+    const heReales = +(total / 60).toFixed(2);
     const aprobadas = estadoSalida === "aprobado" || estadoSalida === undefined ? heReales : 0;
     return { normales: 0, extra: aprobadas, extraEntrada: 0, extraSalida: aprobadas };
   }
@@ -2281,8 +2283,12 @@ export default function App() {
     if(!regManTrabId){ setRegManMsg({tipo:"err",txt:"Selecciona un trabajador."}); return; }
     if(!regManFecha){ setRegManMsg({tipo:"err",txt:"Ingresa la fecha."}); return; }
     if(!regManEntrada){ setRegManMsg({tipo:"err",txt:"Ingresa hora de entrada."}); return; }
-    const yaExiste = registros.find(r=>r.tId===Number(regManTrabId)&&r.fecha===regManFecha);
-    if(yaExiste){ setRegManMsg({tipo:"err",txt:"Ya existe un registro para ese trabajador en esa fecha. Usa la opción Editar."}); return; }
+    // Permitir múltiples registros por día (segundo turno, turno nocturno, etc.)
+    // Solo bloquear si ya hay un registro sin salida (entrada sin cierre)
+    const regSinSalidaExist = registros.find(r=>
+      r.tId===Number(regManTrabId) && r.fecha===regManFecha && !r.salida
+    );
+    if(regSinSalidaExist){ setRegManMsg({tipo:"err",txt:"Ya existe un registro sin salida en esa fecha. Ciérralo antes de agregar uno nuevo."}); return; }
     // Detectar HE entrada anticipada y HE salida al ingresar manualmente
     const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
     const fechaMan = regManFecha;
@@ -2290,7 +2296,9 @@ export default function App() {
     const minEntradaMan = toMin(regManEntrada);
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     const tieneHEEntradaMan = !esDiaEspMan && minEntradaMan < 420; // antes de 07:00
-    const tieneHESalidaMan  = !esDiaEspMan && regManSalida && toMin(regManSalida) > finMan;
+    // Si salida < entrada, es turno nocturno (cruza medianoche) — no genera HE de salida extra
+    const salidaCruzaMedia = regManSalida && toMin(regManSalida) < toMin(regManEntrada);
+    const tieneHESalidaMan  = !esDiaEspMan && regManSalida && !salidaCruzaMedia && toMin(regManSalida) > finMan;
     const nuevo = {
       id:nowId(), tId:Number(regManTrabId), fecha:regManFecha,
       entrada:regManEntrada, salida:regManSalida||null,
