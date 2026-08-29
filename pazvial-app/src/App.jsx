@@ -134,7 +134,7 @@ function esDiaContingencia(fecha, contingencias) {
   return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
 }
 
-function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinMinimo=false) {
+function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinMinimo=false, esNocturno=false) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
   if (!entrada || !salida) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
@@ -144,6 +144,12 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
   if (total <= 0) total += 24 * 60;
 
   // ── Días especiales (sáb/dom/feriado): todo es HE con mínimo 8h ──
+  // Turno nocturno de continuación: todas las horas son HE reales
+  if (esNocturno) {
+    const heReales = +(total/60).toFixed(2);
+    return { normales: 0, extra: heReales, extraEntrada: 0, extraSalida: heReales };
+  }
+
   if (esEspecial(fecha)) {
     const efectivas = +(total/60).toFixed(2);
     const extra = sinMinimo ? efectivas : Math.max(efectivas, 8);
@@ -2295,7 +2301,7 @@ export default function App() {
     // Detectar HE entrada anticipada y HE salida al ingresar manualmente
     const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
     const fechaMan = regManFecha;
-    const esDiaEspMan = esEspecial(fechaMan);
+    const esDiaEspMan = regManEsNocturno ? false : esEspecial(fechaMan);
     const minEntradaMan = toMin(regManEntrada);
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     // Continuación nocturna: no es entrada anticipada aunque sea antes de 07:00
@@ -4428,7 +4434,7 @@ export default function App() {
                     </div>
                     <div style={{marginBottom:14}}>
                       <label style={S.lbl}>Hora corregida (si rechaza)</label>
-                      <input type="time" step="60" style={S.input}
+                      <input type="time" style={S.input}
                         value={entradaAnticModal.horaCorregida || "08:00"}
                         onChange={e => setEntradaAnticModal(p => ({...p, horaCorregida: e.target.value}))} />
                       <div style={{color:"#9A8A6A",fontSize:11,marginTop:4}}>
@@ -4546,12 +4552,12 @@ export default function App() {
                               </td>
                               <td style={S.td}>
                                 {editando
-                                  ? <input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>
+                                  ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>
                                   : <span style={{color:r.entradaAnticipada?"#e67e22":"inherit"}}>{r.entrada}</span>}
                               </td>
                               <td style={S.td}>
                                 {editando
-                                  ? <input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
+                                  ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
                                   : r.salida||<span style={{color:"#aaa"}}>—</span>}
                               </td>
                               <td style={{...S.td,color:((r.horasExtraAprobadas!==undefined?r.horasExtraAprobadas:h?.extra)||0)>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
@@ -4653,11 +4659,11 @@ export default function App() {
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Entrada</label>
-                    <input type="time" step="60" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)} placeholder="HH:MM"/>
+                    <input type="time" style={S.input} value={regManEntrada} onChange={e=>setRegManEntrada(e.target.value)} placeholder="HH:MM"/>
                   </div>
                   <div>
                     <label style={S.lbl}>Hora de Salida <span style={{color:"#aaa",fontWeight:"normal"}}>(opcional)</span></label>
-                    <input type="time" step="60" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)} placeholder="HH:MM"/>
+                    <input type="time" style={S.input} value={regManSalida} onChange={e=>setRegManSalida(e.target.value)} placeholder="HH:MM"/>
                   </div>
                   <div style={{gridColumn:"1/-1"}}>
                     <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginTop:4}}>
@@ -4672,7 +4678,7 @@ export default function App() {
                   <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"12px 16px",marginTop:14,fontSize:12}}>
                     <div style={{color:"#9A8A6A",fontWeight:"bold",marginBottom:6}}>Preview:</div>
                     {(()=>{
-                      const hc=calcularHoras(regManEntrada,regManSalida,regManFecha,null,null,regManEsNocturno);
+                      const hc=calcularHoras(regManEntrada,regManSalida,regManFecha,null,null,false,regManEsNocturno);
                       return <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>
                         <span>H. normales: <strong style={{color:"#27ae60"}}>{hc.normales}h</strong></span>
                         <span>H. extra: <strong style={{color:hc.extra>0?"#FFD700":"#aaa"}}>{hc.extra}h</strong></span>
@@ -4702,8 +4708,8 @@ export default function App() {
                         return (
                           <tr key={r.id} style={{background:editando?"rgba(41,128,185,0.2)":"transparent"}}>
                             <td style={S.td}>{editando?<input type="date" style={{...S.input,padding:"4px 8px",fontSize:12,width:130}} value={regEditFecha} onChange={e=>setRegEditFecha(e.target.value)}/>:r.fecha}</td>
-                            <td style={S.td}>{editando?<input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>:r.entrada}</td>
-                            <td style={S.td}>{editando?<input type="time" step="60" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>:r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
+                            <td style={S.td}>{editando?<input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>:r.entrada}</td>
+                            <td style={S.td}>{editando?<input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>:r.salida||<span style={{color:"#aaa"}}>—</span>}</td>
                             <td style={{...S.td,color:h?.extra>0?"#FFD700":"#aaa"}}>{h?`${h.extra}h`:"—"}</td>
                             <td style={S.td}><span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":"#e67e22")}>{r.estado==="aprobado"?"✓ Apr":r.estado==="rechazado"?"✗ Rec":"● Pend"}</span></td>
                             <td style={S.td}>{r.manual&&<span style={S.bdg("#2980b9")}>Manual</span>}</td>
