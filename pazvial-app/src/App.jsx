@@ -359,7 +359,7 @@ function getRemuneracionVigente(ficha, mes, anio) {
   };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra) {
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
   const sueldoBase = remVigente.sueldoPactado;
@@ -368,76 +368,105 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio) {
   const colacion = remVigente.colacion;
   const movilizacion = remVigente.movilizacion;
 
-  // Días trabajados del mes
-  const regs = registros.filter(r => {
-    const d = new Date(r.fecha+"T12:00:00");
-    return r.tId===trab.id && d.getMonth()===mes && d.getFullYear()===anio && r.salida;
-  });
+  // ── Días proporcionales según fecha de ingreso ────────────────────────────
+  // Si el trabajador ingresó dentro del período, calcular proporcional
+  const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
+  const fechaIngreso = ficha.fechaIngreso || "";
+  // Determinar fecha efectiva de inicio del período
+  const inicioEfectivo = fechaIngreso && fechaIngreso > pDesde ? fechaIngreso : pDesde;
+  // Días del período completo vs días efectivos
+  const diasPeriodoCompleto = 30; // base legal
+  const msPerDia = 1000 * 60 * 60 * 24;
+  const diasEfectivos = fechaIngreso && fechaIngreso > pDesde
+    ? Math.round((new Date(pHasta+"T12:00:00") - new Date(fechaIngreso+"T12:00:00")) / msPerDia) + 1
+    : diasPeriodoCompleto;
+  const diasTrabProporcional = Math.min(diasEfectivos, diasPeriodoCompleto);
+  const factorProporcional = diasTrabProporcional / diasPeriodoCompleto;
+
+  // Sueldo base proporcional
+  const sueldoProporcional = fechaIngreso && fechaIngreso > pDesde
+    ? Math.round(sueldoBase * factorProporcional)
+    : sueldoBase;
+
+  // ── Registros del período ─────────────────────────────────────────────────
+  const regs = registros.filter(r =>
+    r.tId===trab.id && r.fecha>=inicioEfectivo && r.fecha<=pHasta && r.salida
+  );
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
 
-  // Horas extra aprobadas del mes → valor
+  // ── Valor hora base ───────────────────────────────────────────────────────
   const diasMes = new Date(anio, mes+1, 0).getDate();
-  const horasJornadaDia = 45/5; // 9h/día promedio
-  const valorHoraBase = sueldoBase > 0 ? sueldoBase/(diasMes*horasJornadaDia) : 0;
+  const horasJornadaDia = 45/5; // 9h/día promedio (jornada 45h)
+  const valorHoraBase = sueldoBase > 0 ? sueldoBase / (diasMes * horasJornadaDia) : 0;
+  const valorHE = Math.round(valorHoraBase * 1.5); // valor de 1 HE
+
+  // ── Acumular HE del período ───────────────────────────────────────────────
   let totalMinExtra = 0;
   let totalViaticosContingencia = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
-      // Días especiales: usar horasExtraAprobadas si existe (contingencia/administrativo)
-      // o calcular normalmente (mín 8h)
       if (r.estado==="aprobado") {
-        if (r.horasExtraAprobadas !== undefined) {
-          totalMinExtra += r.horasExtraAprobadas * 60;
-        } else {
-          totalMinExtra += calcularHoras(r.entrada,r.salida,r.fecha).extra * 60;
-        }
-        // Viático contingencia: $50.000 si es contingencia
+        const hBruto = r.horasExtraAprobadas !== undefined
+          ? r.horasExtraAprobadas
+          : calcularHoras(r.entrada,r.salida,r.fecha).extra;
+        totalMinExtra += hBruto * 60;
         if (r.esContingencia) totalViaticosContingencia += 50000;
       }
     } else {
-      // Días normales: sumar HE entrada y HE salida según sus estados independientes
       const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
       totalMinExtra += h.extra * 60;
     }
   });
   const horasExtra = +(totalMinExtra/60).toFixed(2);
-  const valorHHExtra = Math.round(horasExtra * valorHoraBase * 1.5);
 
-  // Gratificación legal mensual (25% sueldo base / 12, tope 4.75 IMM)
-  const IMM = 500000; // Ingreso Mínimo Mensual referencial
-  const gratif = remVigente.gratificacion ? Math.min(Math.round(sueldoBase*0.25/12), Math.round(IMM*4.75/12)) : 0;
+  // ── Tope legal: 48 HE por período ────────────────────────────────────────
+  const TOPE_HE_LEGAL = 48;
+  const horasExtraLegales = Math.min(horasExtra, TOPE_HE_LEGAL);
+  const horasExtraExceso  = Math.max(0, horasExtra - TOPE_HE_LEGAL);
+  // HE dentro del tope → imponible (recargo 50%)
+  const valorHHExtra = Math.round(horasExtraLegales * valorHE);
+  // HE sobre el tope → Viático Operacional (no imponible, sin mostrar cálculo)
+  const viaticOper = Math.round(horasExtraExceso * valorHE);
 
-  // Haberes
-  const totalImponible = sueldoBase + valorHHExtra + gratif;
+  // ── Gratificación legal (sobre sueldo proporcional) ───────────────────────
+  const IMM = (paramsExtra && paramsExtra.IMM) || 510000;
+  const gratif = remVigente.gratificacion
+    ? Math.min(Math.round(sueldoProporcional*0.25/12), Math.round(IMM*4.75/12))
+    : 0;
+
+  // ── Haberes ───────────────────────────────────────────────────────────────
+  const totalImponible    = sueldoProporcional + valorHHExtra + gratif;
   const viaticosContingencia = totalViaticosContingencia;
-  const totalNoImponible = colacion + movilizacion + viaticosContingencia;
-  const totalHaberes = totalImponible + totalNoImponible;
+  const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper;
+  const totalHaberes      = totalImponible + totalNoImponible;
 
-  // Descuentos
-  const prevision = Math.round(totalImponible * pctAFP);
-  const salud = Math.round(totalImponible * pctSalud);
+  // ── Descuentos ────────────────────────────────────────────────────────────
+  const prevision   = Math.round(totalImponible * pctAFP);
+  const salud       = Math.round(totalImponible * pctSalud);
   const segCesantia = 0;
   const totalDescLegales = prevision + salud + segCesantia;
 
-  // Anticipo aprobado del mes
+  // Anticipos aprobados del mes
   const anticMes = anticipos.filter(a =>
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
   ).reduce((s,a)=>s+Number(a.monto),0);
 
-  const totalOtrosDesc = anticMes;
+  const totalOtrosDesc  = anticMes;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
-  const alcanceLiquido = totalHaberes - totalDescuentos;
-
-  // Tributable
-  const tributable = totalImponible - prevision - salud;
+  const alcanceLiquido  = totalHaberes - totalDescuentos;
+  const tributable      = totalImponible - prevision - salud;
 
   return {
     tId:trab.id, nombre:nombreCompleto(trab), rut:trab.rut, codigo:trab.codigo,
-    afp:ficha.afp||"", prevision:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
-    diasTrab, horasExtra, mes, anio,
-    sueldoBase, valorHHExtra, gratif,
+    cargo: ficha.cargo||"",
+    afp:ficha.afp||"", sistSalud:ficha.prevision||"FONASA", pctAFP:(pctAFP*100).toFixed(2),
+    tipoContrato: ficha.tipoContrato||"",
+    diasTrab, diasTrabProporcional, horasExtra, horasExtraLegales, horasExtraExceso, mes, anio,
+    fechaIngreso,
+    sueldoBase, sueldoProporcional, valorHHExtra, gratif, viaticOper,
     totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
-    prevision_monto:prevision, salud_monto:salud, segCesantia, totalDescLegales,
+    afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
+    prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
     cc:"001",
   };
@@ -823,6 +852,52 @@ function FichaForm({
               </div>
             </div>
           </FichaRow>
+
+          <FichaRow cols="1fr 1fr">
+            <div>
+              <FichaLBL>Tipo de Contrato</FichaLBL>
+              <select disabled={!enEdicion} style={fs}
+                value={val("tipoContrato")||"indefinido"}
+                onChange={e => enEdicion && setD("tipoContrato", e.target.value)}>
+                <option value="indefinido">Indefinido</option>
+                <option value="plazoFijo">Plazo Fijo</option>
+                <option value="honorarios">Honorarios</option>
+                <option value="obra">Por Obra o Faena</option>
+              </select>
+            </div>
+            {(val("tipoContrato")||"indefinido")==="plazoFijo" && (
+              <div>
+                <FichaLBL>Vencimiento Contrato</FichaLBL>
+                <input type="date" readOnly={!enEdicion} style={fi}
+                  value={val("vencimientoContrato")||""}
+                  onChange={e => enEdicion && setD("vencimientoContrato", e.target.value)}/>
+              </div>
+            )}
+          </FichaRow>
+
+          {(val("tipoContrato")||"indefinido")==="plazoFijo" && val("vencimientoContrato") && (()=>{
+            const venc = new Date(val("vencimientoContrato")+"T12:00:00");
+            const hoyD = new Date();
+            const diasRestantes = Math.ceil((venc - hoyD) / 86400000);
+            const vencido = diasRestantes < 0;
+            return (
+              <div style={{background:vencido?"rgba(192,57,43,0.1)":"rgba(255,215,0,0.07)",
+                border:`1px solid ${vencido?"#c0392b":"rgba(255,215,0,0.3)"}`,
+                borderRadius:8, padding:"10px 14px", fontSize:12, marginBottom:8}}>
+                {vencido
+                  ? <span style={{color:"#e74c3c"}}>⚠️ Contrato vencido hace {Math.abs(diasRestantes)} día(s)</span>
+                  : <span style={{color:"#C9A84C"}}>📅 Vence en {diasRestantes} día(s) — {fmtFecha(val("vencimientoContrato"))}</span>}
+                {enEdicion && (
+                  <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                    <button type="button" onClick={()=>{setD("tipoContrato","indefinido");setD("vencimientoContrato","");}}
+                      style={{...S.btnG,fontSize:11,padding:"3px 10px"}}>→ Convertir a Indefinido</button>
+                    <button type="button" onClick={()=>{const nueva=prompt("Nueva fecha de vencimiento (AAAA-MM-DD):"); if(nueva) setD("vencimientoContrato",nueva);}}
+                      style={{...S.btn,fontSize:11,padding:"3px 10px"}}>🔄 Renovar Plazo Fijo</button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <FichaRow cols="1fr 1fr">
             <div>
@@ -2199,10 +2274,14 @@ export default function App() {
           ⏳ Pendiente de firma del trabajador
          </div>`;
 
+    const sueldoLabel = d.fechaIngreso && d.diasTrabProporcional < 30
+      ? `Sueldo Proporcional (${d.diasTrabProporcional||0}/30 días)`
+      : "Sueldo Base";
     const colacionRow = (d.colacion||0)>0 ? `<tr><td>Asig. Colación</td><td style="text-align:right">$${fmt(d.colacion)}</td><td></td><td></td></tr>` : "";
     const movilRow = (d.movilizacion||0)>0 ? `<tr><td>Asig. Movilización</td><td style="text-align:right">$${fmt(d.movilizacion)}</td><td></td><td></td></tr>` : "";
     const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
-    const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
+    const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
+    const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtraLegales||d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
     const gratifRow = (d.gratif||0)>0 ? `<tr><td>Gratificación Legal</td><td style="text-align:right">$${fmt(d.gratif)}</td><td></td><td></td></tr>` : "";
 
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -2248,9 +2327,11 @@ export default function App() {
     </div>
     <table>
       <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>Sueldo Base Proporcional</td><td style="text-align:right">$${fmt(d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
+      <tr><td>${sueldoLabel}</td><td style="text-align:right">$${fmt(d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
       ${heRow}
       ${gratifRow}
+      ${viaticRow}
+      ${viaticOperRow}
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalImponible)}</td><td style="color:#c0392b">Comisión AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.comisionAFPmonto)}</td></tr>
       ${colacionRow}
       ${movilRow}
@@ -2797,6 +2878,8 @@ export default function App() {
         sueldoPactado:      d.sueldoPactado,
         gratificacion:      !!d.gratificacion,
         esCoordinador:      !!d.esCoordinador,
+        tipoContrato:       d.tipoContrato || "indefinido",
+        vencimientoContrato: d.vencimientoContrato || "",
         colacion:           Number(d.colacion) || 0,
         movilizacion:       Number(d.movilizacion) || 0,
         fechaIngreso:       d.fechaIngreso,
@@ -4564,8 +4647,22 @@ export default function App() {
                                 {h?(()=>{ const he=(r.horasExtraAprobadas!==undefined&&r.estado==="aprobado")?r.horasExtraAprobadas:h.extra; return `${he}h${r.estado!=="aprobado"&&he>0?" ⏳":""}`; })() : "—"}
                               </td>
                               <td style={S.td}>
-                                <span style={S.bdg(r.estado==="aprobado"?"#27ae60":r.estado==="rechazado"?"#c0392b":r.entradaAnticipada?"#e67e22":"#e67e22")}>
-                                  {r.entradaAnticipada?"⏰ Ant.":r.estado==="aprobado"?"✓ Apr":r.estado==="rechazado"?"✗ Rec":"● Pend"}
+                                <span style={S.bdg(
+                                  r.estado==="aprobado" && r.estadoEntrada!=="pendiente" && r.estadoSalida!=="pendiente" ? "#27ae60" :
+                                  r.estado==="rechazado" ? "#c0392b" :
+                                  (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "#2ecc71" :
+                                  (r.entradaAnticipada&&r.estadoEntrada==="pendiente") ? "#e67e22" :
+                                  r.estadoSalida==="pendiente" ? "#e67e22" : "#e67e22")}>
+                                  {(()=>{
+                                    if (r.estadoEntrada==="aprobado" && r.estadoSalida==="aprobado") return "✓ Apr";
+                                    if (r.estadoEntrada==="aprobado") return "✓ HE Ent";
+                                    if (r.estadoSalida==="aprobado") return "✓ HE Sal";
+                                    if (r.estado==="aprobado") return "✓ Apr";
+                                    if (r.estado==="rechazado") return "✗ Rec";
+                                    if (r.entradaAnticipada && r.estadoEntrada==="pendiente") return "⏰ Ant.";
+                                    if (r.estadoSalida==="pendiente") return "⏱ HE";
+                                    return "● Pend";
+                                  })()}
                                 </span>
                                 {r.motivoRechazo&&<div style={{color:"#ffaaaa",fontSize:11,marginTop:2}}>{r.motivoRechazo}</div>}
                               </td>
@@ -4699,6 +4796,27 @@ export default function App() {
                     </label>
                   </div>
                 </div>
+                <div style={{marginTop:8}}>
+                  <button onClick={()=>{
+                    if(!regManTrabId){ setRegManMsg({tipo:"err",txt:"Selecciona un trabajador."}); return; }
+                    if(!regManFecha){ setRegManMsg({tipo:"err",txt:"Ingresa la fecha."}); return; }
+                    const yaExiste = registros.find(r=>r.tId===Number(regManTrabId)&&r.fecha===regManFecha&&r.esAusencia);
+                    if(yaExiste){ setRegManMsg({tipo:"err",txt:"Ya existe una ausencia registrada en esa fecha."}); return; }
+                    const nuevo = {
+                      id:nowId(), tId:Number(regManTrabId), fecha:regManFecha,
+                      entrada:null, salida:null, esAusencia:true,
+                      estado:"ausencia", estadoEntrada:null, estadoSalida:null,
+                      motivoRechazo:"", motivoRechazoEntrada:"", motivoRechazoSalida:"",
+                      manual:true, _updatedAt:Date.now()
+                    };
+                    setRegistros(p=>[...p,nuevo]);
+                    setRegManMsg({tipo:"ok",txt:`✅ Ausencia registrada para ${fmtFecha(regManFecha)}.`});
+                    setRegManTrabId(""); setRegManFecha(hoy());
+                  }} style={{...S.btnD,padding:"8px 16px",fontSize:12}}>
+                    🚫 Registrar Ausencia No Justificada
+                  </button>
+                </div>
+
                 {regManTrabId&&regManFecha&&regManEntrada&&regManSalida&&(
                   <div style={{background:"rgba(15,13,8,0.7)",borderRadius:8,padding:"12px 16px",marginTop:14,fontSize:12}}>
                     <div style={{color:"#9A8A6A",fontWeight:"bold",marginBottom:6}}>Preview:</div>
@@ -5942,181 +6060,100 @@ export default function App() {
 
               {[
                 {
-                  icon:"🔑", titulo:"1. Acceso al Panel de Administración",
+                  icon:"🔑", titulo:"1. Acceso al Sistema",
                   items:[
-                    "Desde la portada, selecciona el botón Administrador.",
-                    "Ingresa la contraseña de administrador: Negra2026.",
-                    "Al ingresar tendrás acceso a 8 módulos principales en la barra de tabs.",
-                    "La barra superior muestra la fecha actual, el botón Limpiar pantalla y el botón Limpiar datos de prueba.",
-                    "Para salir usa el botón Cerrar sesión en la parte superior derecha.",
+                    "Portada → botón Administrador → contraseña Negra2026.",
+                    "Trabajadores ingresan con Código (ej: PV01) + RUT sin puntos con guión.",
+                    "Supervisores ingresan con su código + RUT desde el botón Supervisor.",
+                    "El coordinador (PV01) puede ver a todo el personal como supervisor si tiene el flag activado en su ficha.",
                   ]
                 },
                 {
-                  icon:"🔔", titulo:"2. Módulo: Bandeja de Pendientes",
+                  icon:"🔔", titulo:"2. Bandeja de Pendientes",
                   items:[
-                    "Punto de control central. El contador en el tab muestra el total de ítems pendientes de revisión.",
-                    "Agrupa en una sola pantalla: horas extraordinarias, permisos/vacaciones y anticipos de remuneración.",
-                    "HE en días hábiles: la tabla muestra dos columnas independientes — 'HE Entrada' (tiempo antes de las 08:00 para entradas antes de las 07:00) y 'HE Salida' (tiempo después del horario normal). Cada una tiene sus propios botones ✓ Aprobar / ✗ Rechazar.",
-                    "HE en días especiales (sáb/dom/feriado): flujo clásico con un solo botón de aprobación por registro.",
-                    "Puedes aprobar la HE de entrada y rechazar la de salida del mismo día, o viceversa — son decisiones completamente independientes.",
-                    "Al rechazar siempre deberás ingresar un motivo obligatorio que el trabajador verá en sus notificaciones.",
+                    "Muestra todas las HE pendientes de aprobación: entradas anticipadas, sobretiempos y días especiales.",
+                    "Días especiales (sáb/dom/feriado): tienes 3 opciones ANTES de aprobar → ⚠️ Contingencia, 🖥 Administrativo, o aprobar normal (mín 8h).",
+                    "Contingencia: paga viático $50.000 + HE solo por las horas sobre 10h del día.",
+                    "Administrativo: paga las horas reales trabajadas sin el mínimo de 8h.",
+                    "Botón ↩ en Ver Registros para revertir una aprobación errónea.",
+                    "Las HE sobre 48h mensuales se pagan como Viático Operacional (no imponible) en la liquidación.",
                   ]
                 },
                 {
-                  icon:"📋", titulo:"3. Módulo: Asistencia",
+                  icon:"📋", titulo:"3. Asistencia — Ver Registros",
                   items:[
-                    "Tiene tres subtabs: Ver Registros, Ingresar / Editar, y Hoja Mensual PDF.",
-                    "Ver Registros: muestra el historial filtrable por trabajador, mes y año, con opción de ordenar por fecha (más reciente o más antiguo primero). Las horas extra pendientes de aprobación aparecen con ⏳. Cada fila tiene botón ✏️ para editar y botón 🗑️ para eliminar el registro (pide confirmación antes de borrar).",
-                    "Ingresar / Editar: permite crear registros cuando el trabajador olvidó marcar. Los registros manuales quedan con etiqueta azul 'Manual'.",
-                    "Hoja Mensual PDF: genera una hoja de asistencia con logo, por trabajador o para todos. Incluye vista previa en pantalla antes de imprimir.",
+                    "Filtra por trabajador, día específico, mes, año y orden de fecha.",
+                    "Columna Estado muestra: ✓ Apr (aprobado), ✓ HE Ent (solo entrada aprobada), ⏰ Ant. (anticipada pendiente), ⏱ HE (sobretiempo pendiente), 🚫 Ausencia.",
+                    "Botón ↩ en la columna Acciones para revertir cualquier HE aprobada.",
+                    "Botón ✏️ para editar fecha, entrada o salida de cualquier registro.",
+                    "Botón 🗑 para eliminar un registro.",
                   ]
                 },
                 {
-                  icon:"👥", titulo:"4. Módulo: Nómina",
+                  icon:"✏️", titulo:"4. Asistencia — Ingresar / Editar Manual",
                   items:[
-                    "Tiene dos subtabs: Lista y Alta, y Fichas de Personal. Ambas están conectadas — la ficha alimenta la lista automáticamente.",
-                    "Lista y Alta: tabla completa de todos los trabajadores con código, nombre, RUT, cargo, AFP, previsión, fecha de ingreso y estado. Botón 'Ver Ficha' lleva directamente a la ficha del trabajador.",
-                    "Fichas de Personal: es donde se crean y editan los registros. Tiene tres modos: Ver (solo lectura), Editar y Nueva Ficha.",
-                    "Para crear un trabajador: presiona '➕ Nueva Ficha' (disponible en ambos subtabs y en la lista lateral). Se abre el formulario en blanco. Completa los datos y presiona '💾 Grabar' para registrar al trabajador en el sistema.",
-                    "Para editar: selecciona un trabajador de la lista lateral y presiona '✏️ Editar'. Modifica los campos necesarios y presiona '💾 Grabar'. Presiona '✗ Cancelar' para descartar cambios.",
-                    "El código se genera automáticamente al grabar, siguiendo el formato P + inicial apellido + número correlativo (Ej: PP01).",
-                    "En modo Ver, todos los campos aparecen en gris (solo lectura). Solo se pueden editar en modo Editar.",
-                    "La ficha incluye: nombres, apellido paterno, apellido materno, RUT, cargo, dirección, teléfono, correo, contacto de emergencia, previsión de salud, AFP, sueldo pactado, colación, movilización, gratificación legal, fecha de ingreso, fecha de salida, motivo de salida, antigüedad calculada automáticamente y observaciones.",
-                    "Al crear un trabajador con sueldo pactado, se genera automáticamente el primer registro del Historial de Remuneraciones.",
-                    "Para registrar un aumento o ajuste de renta: ve a la ficha del trabajador (modo Ver), baja hasta la sección 💰 Historial de Remuneraciones, completa la fecha de vigencia, nuevo sueldo, colación, movilización, motivo y presiona 'Registrar Cambio de Remuneración'. El registro antiguo queda en el historial y no se elimina.",
-                    "El registro marcado como VIGENTE es el que se usa automáticamente para calcular la liquidación del mes correspondiente. Si una liquidación es de enero y el aumento es de marzo, la liquidación de enero usa el sueldo anterior.",
-                    "Los motivos disponibles son: Sueldo inicial, Ajuste anual, Incremento por mérito, Promoción, Cambio de cargo, Negociación colectiva, Corrección, Otro.",
-                  ]
-                },
-
-                {
-                  icon:"💰", titulo:"5. Módulo: Liquidaciones de Sueldo",
-                  items:[
-                    "Genera las liquidaciones mensuales de cada trabajador tomando datos automáticamente de la ficha: sueldo, AFP, previsión, colación, movilización y gratificación.",
-                    "También considera los días trabajados, horas extra aprobadas y anticipos aprobados del mes.",
-                    "El resultado muestra la vista previa completa antes de enviar. Puedes ver el PDF antes de enviarlo.",
-                    "Al presionar Enviar al Trabajador, la liquidación llega al perfil del trabajador con notificación.",
-                    "La liquidación queda firmada por el empleador con fecha y hora de envío automáticas.",
-                    "El historial muestra el estado de cada liquidación: Enviada o Firmada (por el trabajador).",
+                    "Selecciona trabajador, fecha, hora entrada y hora salida con los selectores de hora/minuto.",
+                    "✅ Checkbox 🌙 Continuación de turno nocturno: úsalo cuando el registro es la continuación de una jornada del día anterior (ej: 00:00 → 02:38). Activa este checkbox y la entrada se pone automáticamente en 00:00. Todas las horas se registran como HE.",
+                    "🚫 Botón Registrar Ausencia No Justificada: registra la inasistencia de un trabajador en una fecha específica, aparece en rojo en Ver Registros.",
+                    "Para turno continuo que cruza medianoche: ingresa Fecha = día de inicio, Entrada = hora real, Salida = hora de término (ej: 02:38). El sistema detecta automáticamente el cruce de medianoche.",
+                    "Para dos turnos en un mismo día: el sistema permite múltiples registros por día. Solo bloquea si hay una entrada sin salida.",
                   ]
                 },
                 {
-                  icon:"⏰", titulo:"3b. Módulo: Entradas Anticipadas",
+                  icon:"🕐", titulo:"5. Marcas de Asistencia (trabajador)",
                   items:[
-                    "Si un trabajador marca su entrada antes de las 08:00, el registro queda automáticamente en estado 'Pendiente de validación' y aparece en este módulo.",
-                    "El contador en el tab muestra cuántas entradas anticipadas están pendientes de revisión.",
-                    "Al hacer clic en 'Revisar', se abre un panel con la hora marcada por el trabajador.",
-                    "Opción 1 — Aprobar: se mantiene la hora original marcada por el trabajador.",
-                    "Opción 2 — Corregir: ingresa la hora correcta (por defecto 08:00) y el sistema registrará esa hora. El trabajador recibe notificación de la corrección.",
+                    "El trabajador ve dos botones: Entrada y Salida. El sistema detecta automáticamente si hay jornada sin cerrar.",
+                    "Si la entrada fue el día anterior y ya es pasada medianoche, la salida se registra en la fecha correcta de la entrada (no del día actual).",
+                    "Si ya tiene jornada completa, al intentar entrar aparece el modal de Segundo Turno.",
+                    "Si la salida supera el horario normal, aparece el modal de Sobretiempo pidiendo motivo obligatorio.",
+                    "El motivo del sobretiempo queda visible para el admin en la bandeja de pendientes.",
                   ]
                 },
                 {
-                  icon:"✏️", titulo:"3c. Módulo: Asistencia Manual",
+                  icon:"👥", titulo:"6. Nómina y Fichas",
                   items:[
-                    "Permite ingresar registros de asistencia cuando un trabajador olvidó marcar su entrada o salida.",
-                    "Selecciona el trabajador, la fecha, la hora de entrada y salida. El sistema calcula automáticamente horas normales y extra.",
-                    "Los registros ingresados manualmente quedan identificados con la etiqueta azul 'Manual'.",
-                    "También puedes editar registros existentes directamente desde la tabla, haciendo clic en el botón ✏️ Editar de cada fila, o eliminarlos con el botón 🗑️ (con confirmación previa).",
-                    "Al editar, los campos fecha, entrada y salida se vuelven editables. Usa ✓ para guardar y ✗ para cancelar.",
+                    "Cada trabajador tiene una ficha con datos personales, previsionales y contractuales.",
+                    "Tipo de contrato: Indefinido, Plazo Fijo, Honorarios, Por Obra. Si es Plazo Fijo, ingresa la fecha de vencimiento.",
+                    "El sistema muestra cuántos días faltan para el vencimiento del contrato y permite renovarlo o convertirlo a indefinido.",
+                    "Fecha de Ingreso: se usa para calcular el sueldo proporcional en la liquidación del primer mes.",
+                    "El flag Coordinador (en la ficha) permite que el supervisor vea a todo el personal.",
+                    "Historial de remuneraciones: registra todos los cambios de sueldo con fecha y motivo.",
                   ]
                 },
                 {
-                  icon:"📝", titulo:"4. Módulo: Solicitudes (Permisos y Vacaciones)",
+                  icon:"💰", titulo:"7. Liquidaciones de Sueldo",
                   items:[
-                    "Aquí aparecen todas las solicitudes de permiso y vacaciones enviadas por los trabajadores.",
-                    "El número en el tab indica cuántas solicitudes están pendientes de revisión.",
-                    "Para Aprobar: haz clic en ✓ Aprobar. El trabajador recibirá notificación inmediata.",
-                    "Para Rechazar: haz clic en ✗ Rechazar e ingresa el motivo en el formulario que se abre. Es obligatorio.",
-                    "Las vacaciones solo pueden solicitarse con inicio en día hábil; el sistema ya lo valida en el perfil del trabajador.",
-                    "El historial de solicitudes ya resueltas se muestra en la parte inferior del módulo.",
+                    "Selecciona mes, año y trabajador → Calcular → revisa la vista previa → Enviar al Trabajador.",
+                    "HE legales (hasta 48h): se pagan con recargo del 50% como haber imponible.",
+                    "HE sobre tope legal (sobre 48h): aparecen como Viático Operacional en haberes no imponibles, sin mostrar el cálculo.",
+                    "Viático Contingencia ($50.000 por día): aparece automáticamente si el día fue marcado como contingencia.",
+                    "Sueldo proporcional: si el trabajador ingresó dentro del período, el sistema calcula automáticamente los días y aplica el proporcional.",
+                    "El trabajador firma electrónicamente desde su perfil. El botón PDF genera el documento con ambas firmas.",
                   ]
                 },
                 {
-                  icon:"👥", titulo:"5. Módulo: Trabajadores",
+                  icon:"⚠️", titulo:"8. Contingencias",
                   items:[
-                    "Permite agregar nuevos trabajadores ingresando Nombre, Apellido Paterno y RUT.",
-                    "El sistema valida que el RUT no esté ya registrado por otro trabajador antes de crear el perfil.",
-                    "El sistema genera automáticamente un código único con el formato: P + inicial del apellido + número correlativo (Ej: PP01, PR02). El código nunca se repite, incluso si un trabajador anterior con esa inicial fue eliminado definitivamente.",
-                    "Antes de confirmar, se muestra una vista previa del código que se asignará.",
-                    "Puedes Desactivar un trabajador (sin eliminarlo) para que no pueda iniciar sesión, o Activarlo nuevamente.",
-                    "El botón 🗑 elimina al trabajador definitivamente de la nómina. Su código queda reservado para siempre y no se reasignará a otro trabajador.",
-                    "El Perfil de Prueba (Administrador / RUT: Pruebas) no debe eliminarse, sirve para testear el sistema.",
+                    "Define períodos de contingencia con fecha inicio, término y descripción.",
+                    "Cuando un trabajador marca asistencia en un día de contingencia, el registro queda automáticamente marcado con el flag.",
+                    "En la bandeja, el admin aprueba con el botón ⚠️ Contingencia → activa viático $50.000 + HE diferencial sobre 10h.",
                   ]
                 },
                 {
-                  icon:"📅", titulo:"6. Módulo: Compensatorios",
+                  icon:"👥", titulo:"9. Cuadrillas",
                   items:[
-                    "Se generan automáticamente cuando un trabajador registra asistencia en domingo o feriado.",
-                    "Cada compensatorio puede estar en estado: Pendiente, Tomado (con fecha en que se tomó) o Pagado.",
-                    "Al marcar como Tomado, debes ingresar la fecha en que el trabajador usó su día libre; esto lo descuenta del total pendiente.",
-                    "El resumen al pie del módulo muestra el total de compensatorios por trabajador, separados por estado.",
+                    "Crea cuadrillas, asigna un supervisor y agrega miembros.",
+                    "El supervisor ve la asistencia de su cuadrilla (incluyendo él mismo) en su perfil.",
+                    "El coordinador ve a todo el personal independiente de la cuadrilla.",
                   ]
                 },
                 {
-                  icon:"📊", titulo:"7. Módulo: Dashboard",
+                  icon:"📊", titulo:"10. Dashboard y Reportes",
                   items:[
-                    "Panel de control mensual. Usa los selectores de Mes y Año para filtrar el período.",
-                    "Las tarjetas superiores muestran KPIs globales: trabajadores activos, días trabajados, horas extra aprobadas, días especiales y compensatorios pendientes.",
-                    "La tabla detalla por cada trabajador: días hábiles del mes, días trabajados, barra de asistencia (% en color), ausencias, horas extra y compensatorios.",
-                    "La fila de Totales al pie suma todas las columnas del período seleccionado.",
-                    "Verde ≥ 90% asistencia, Amarillo ≥ 70%, Rojo < 70%.",
-                  ]
-                },
-                {
-                  icon:"🗓", titulo:"8. Módulo: Calendario",
-                  items:[
-                    "Vista mensual que muestra visualmente quién tiene vacaciones o permisos aprobados en cada día del mes.",
-                    "Navega entre meses con las flechas ‹ › o vuelve al mes actual con el botón 'Hoy'.",
-                    "Cada trabajador tiene un color único asignado automáticamente. Los días con ausencias muestran el código del trabajador en su color.",
-                    "El día de hoy aparece resaltado en dorado. Los feriados en rojo y los fines de semana en gris oscuro.",
-                    "La leyenda superior muestra el color y nombre de cada trabajador para identificarlos fácilmente.",
-                    "Al pie del calendario aparece un resumen con los trabajadores que tienen días aprobados en el mes y cuántos días.",
-                    "Solo muestra vacaciones y permisos en estado Aprobado — las solicitudes pendientes no aparecen en el calendario.",
-                  ]
-                },
-                {
-                  icon:"📄", titulo:"9. Módulo: Hoja de Asistencia Mensual",
-                  items:[
-                    "Genera un documento PDF con el registro diario de asistencia de uno o todos los trabajadores activos.",
-                    "Selecciona trabajador (opcional), mes y año, luego haz clic en 'Generar PDF'.",
-                    "Si no seleccionas trabajador, el PDF incluirá una sección por cada trabajador activo.",
-                    "El documento incluye: logo de la empresa, nombre del trabajador, RUT, código, y una tabla con todos los días del mes.",
-                    "Cada fila muestra: día, día de la semana, hora de entrada, hora de salida, horas normales, horas extra y observaciones.",
-                    "Los domingos y feriados aparecen en amarillo. Los sábados en gris claro.",
-                    "Al pie del documento aparecen líneas de firma del trabajador y de administración.",
-                    "La vista previa en pantalla permite revisar la información antes de generar el PDF.",
-                  ]
-                },
-                {
-                  icon:"💾", titulo:"10. Módulo: Exportar / Importar",
-                  items:[
-                    "Exportar: descarga un archivo JSON con todos los datos del sistema (trabajadores, registros, compensatorios, solicitudes y notificaciones). Guárdalo en un lugar seguro.",
-                    "El nombre del archivo incluye la fecha del día: pazvial-rrhh-backup-AAAA-MM-DD.json.",
-                    "Importar: permite restaurar todos los datos desde un backup previo. Esta acción reemplaza todos los datos actuales.",
-                    "Solo se aceptan archivos .json exportados desde este mismo sistema.",
-                    "Se recomienda exportar un backup al menos una vez por semana o antes de cualquier cambio importante en la nómina.",
-                  ]
-                },
-                {
-                  icon:"⏱", titulo:"10b. Cálculo de Horas Extraordinarias",
-                  items:[
-                    "Entrada anticipada (antes de las 07:00): el tiempo entre la hora real de entrada y las 08:00 genera HE de entrada, con estado pendiente independiente. Puedes aprobarla o rechazarla sin afectar la HE de salida del mismo día.",
-                    "Salida posterior (después de las 18:00 de lunes a jueves, o 14:00 los viernes): el excedente genera HE de salida, también con estado pendiente independiente.",
-                    "Ambas aprobaciones son independientes y aparecen en columnas separadas en la bandeja de Pendientes. Puedes aprobar una y rechazar la otra para el mismo registro.",
-                    "Sábado, domingo o feriado: toda la jornada se calcula como hora extraordinaria, con un mínimo garantizado de 8 horas. Si el trabajador labora más de 8h, se registran las horas reales. Esta HE usa el flujo de aprobación clásico (un solo estado).",
-                    "Día Compensatorio: solo se genera automáticamente al trabajar domingo o feriado. El sábado NO genera compensatorio, solo HE.",
-                    "El calendario de feriados considera solo los feriados de carácter general de Chile (aplican a todas las personas a nivel nacional), según la ley vigente.",
-                    "Las horas extra rechazadas no se contabilizan en ningún reporte: ni en el Dashboard, ni en la Hoja Mensual, ni en las Liquidaciones.",
-                  ]
-                },
-                {
-                  icon:"💡", titulo:"11. Buenas Prácticas de Administración",
-                  items:[
-                    "Revisa diariamente las horas extraordinarias y solicitudes pendientes para dar respuesta oportuna a los trabajadores.",
-                    "Siempre indica un motivo claro y constructivo al rechazar una solicitud o horas extra, ya que el trabajador lo leerá.",
-                    "Mantén la nómina actualizada: desactiva a trabajadores que salieron de la empresa en lugar de eliminarlos, para conservar el historial.",
-                    "Realiza backups frecuentes usando el módulo Exportar / Importar.",
-                    "El perfil de prueba (Administrador / Pruebas) permite simular el flujo completo sin afectar datos reales de trabajadores.",
+                    "Dashboard muestra resumen mensual: asistencia, HE y compensatorios de todos los trabajadores.",
+                    "Botón Reporte HE PDF: genera un PDF agrupado por trabajador con logo, membrete y detalle de todas las HE del período.",
+                    "Hoja Mensual PDF (tab Asistencia): genera la hoja de asistencia individual con registro diario.",
+                    "PDF de liquidación: incluye todos los haberes, descuentos, firmas y es listo para imprimir.",
                   ]
                 },
               ].map(sec => (
