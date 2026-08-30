@@ -423,8 +423,21 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
         if (r.esContingencia) totalViaticosContingencia += 50000;
       }
     } else {
-      const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
-      totalMinExtra += h.extra * 60;
+      // Solo sumar HE cuando están aprobadas (entrada o salida)
+      const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+      // Si hay horasExtraAprobadas (override manual), usar ese valor
+      if (r.horasExtraAprobadas !== undefined) {
+        totalMinExtra += r.horasExtraAprobadas * 60;
+      } else {
+        // HE entrada: solo si está aprobada
+        if (r.estadoEntrada === 'aprobado') totalMinExtra += (hBruto.extraEntrada||0) * 60;
+        // HE salida: solo si está aprobada
+        if (r.estadoSalida === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
+        // Para registros de segundo turno o nocturnos: si el estado general es aprobado
+        if (r.segundoTurno || r.esNocturno) {
+          if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
+        }
+      }
     }
   });
   const horasExtra = +(totalMinExtra/60).toFixed(2);
@@ -2098,7 +2111,7 @@ export default function App() {
   // ── Admin: aprobar/rechazar extra ─────────────────────
   // ── HE clásica (días especiales: sáb/dom/feriado) ──
   function aprobarExtra(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado"} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado", _updatedAt:Date.now()} : r));
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.");
   }
@@ -2115,17 +2128,17 @@ export default function App() {
 
   // ── HE entrada anticipada (antes de 07:00) ──
   function revertirHEEntrada(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"pendiente"} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"pendiente", _updatedAt:Date.now()} : r));
   }
   function revertirHESalida(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estadoSalida:"pendiente"} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoSalida:"pendiente", _updatedAt:Date.now()} : r));
   }
   function revertirExtra(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"pendiente"} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"pendiente", _updatedAt:Date.now()} : r));
   }
 
   function aprobarHEEntrada(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado"} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado", _updatedAt:Date.now()} : r));
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida||"08:00", r.fecha, "aprobado", r.estadoSalida||null);
@@ -2144,7 +2157,7 @@ export default function App() {
       if (r.id!==id) return r;
       // Si no tiene HE entrada pendiente, también marcamos estado general como aprobado
       const estadoGeneral = (!r.estadoEntrada || r.estadoEntrada!=="pendiente") ? "aprobado" : r.estado;
-      return {...r, estadoSalida:"aprobado", estado:estadoGeneral};
+      return {...r, estadoSalida:"aprobado", estado:estadoGeneral, _updatedAt:Date.now()};
     }));
     const r = registros.find(x => x.id===id);
     if (r) {
@@ -2562,12 +2575,25 @@ export default function App() {
         const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida,!!r.esAdministrativo);
         const esp = esEspecial(r.fecha);
         const he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
-          : (esp ? (r.estado==="aprobado"?(h.extra||0):0) : (h.extra||0));
-        if (he <= 0) return;
-        const est = r.estado==="aprobado" ? "Aprobada" : "Pendiente";
+          : esp ? (r.estado==="aprobado"?(h.extra||0):0)
+          : (()=>{
+              // Días normales: sumar solo HE aprobadas
+              let heTotal = 0;
+              if (r.estadoEntrada==="aprobado") heTotal += (h.extraEntrada||0);
+              if (r.estadoSalida==="aprobado") heTotal += (h.extraSalida||0);
+              if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
+              return heTotal;
+            })();
+        // Mostrar si tiene HE (aprobadas o pendientes)
+      const tieneHEPendiente = r.estadoEntrada==="pendiente" || r.estadoSalida==="pendiente" || (esp && r.estado==="pendiente");
+      if (he <= 0 && !tieneHEPendiente) return;
+      const heDisplay = he > 0 ? he : ((h.extraEntrada||0) + (h.extraSalida||0) + (esp?(h.extra||0):0));
+      if (heDisplay <= 0) return;
+        const heParaFila = he > 0 ? he : heDisplay;
+      const est = !tieneHEPendiente ? "Aprobada" : "Pendiente";
         const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : esp ? "Día especial" : "Normal";
         const bgColor = r.estado==="aprobado" ? "#f0fff4" : "#fffbf0";
-        filasT.push("<tr style='background:"+bgColor+"'><td>"+fmtD(r.fecha)+"</td><td>"+r.entrada+"</td><td>"+r.salida+"</td><td style='color:#e67e22;font-weight:bold'>"+he+"h</td><td>"+tipo+"</td><td style='color:"+(r.estado==="aprobado"?"#27ae60":"#e67e22")+"'>"+est+"</td></tr>");
+        filasT.push("<tr style='background:"+bgColor+"'><td>"+fmtD(r.fecha)+"</td><td>"+r.entrada+"</td><td>"+r.salida+"</td><td style='color:"+(est==="Pendiente"?"#e67e22":"#27ae60")+";font-weight:bold'>"+heParaFila+"h</td><td>"+tipo+"</td><td style='color:"+(est==="Aprobada"?"#27ae60":"#e67e22")+"'>"+est+"</td></tr>");
         totalHE += he;
       });
       if (filasT.length > 0) trabsConHE.push({t, filasT, totalHE});
