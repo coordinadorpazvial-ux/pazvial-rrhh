@@ -297,7 +297,7 @@ const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PL
 
 const PARAMS_DEFAULT = {
   jornadaSemanal: 42, diasBaseMensual: 30, recargHE: 1.5,
-  IMM: 510000, topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
+  IMM: 553553, // IMM vigente 2026 topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
   tasaAFP: 0.10, tasaSalud: 0.07, tasaAFCindefinido: 0.006, tasaAFCplazoFijo: 0.0,
   valorUF: 39700, valorUTM: 71506,
   afps: [
@@ -402,11 +402,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const valorDia = diasTrabProporcional > 0 ? Math.round(sueldoProporcional / diasTrabProporcional) : 0;
   const descuentoAusencias = ausencias * valorDia;
 
-  // ── Valor hora base ───────────────────────────────────────────────────────
-  const diasMes = new Date(anio, mes+1, 0).getDate();
-  const horasJornadaDia = 45/5; // 9h/día promedio (jornada 45h)
-  const valorHoraBase = sueldoBase > 0 ? sueldoBase / (diasMes * horasJornadaDia) : 0;
-  const valorHE = Math.round(valorHoraBase * 1.5); // valor de 1 HE
+  // ── Valor hora extra — Fórmula oficial Dirección del Trabajo ────────────
+  // Jornada 42h semanales: sueldo × 28 / (30 × 168) = valor hora ordinaria
+  // 30 días base legal, 28 días = 4 semanas, 168h = 42h × 4 semanas
+  // Factor directo: sueldo × 0.0083333
+  const valorHoraOrdinaria = sueldoBase > 0 ? sueldoBase * 28 / (30 * 168) : 0;
+  const valorHE = Math.round(valorHoraOrdinaria * 1.5); // recargo legal 50%
 
   // ── Acumular HE del período ───────────────────────────────────────────────
   let totalMinExtra = 0;
@@ -436,10 +437,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // HE sobre el tope → Viático Operacional (no imponible, sin mostrar cálculo)
   const viaticOper = Math.round(horasExtraExceso * valorHE);
 
-  // ── Gratificación legal (sobre sueldo proporcional) ───────────────────────
-  const IMM = (paramsExtra && paramsExtra.IMM) || 510000;
+  // ── Gratificación legal — Art. 50 Código del Trabajo ────────────────────
+  // Gratificación mensual = 25% del sueldo imponible mensual
+  // Tope mensual = 4.75 × IMM / 12
+  const IMM = (paramsExtra && paramsExtra.IMM) || 553553; // IMM vigente 2026
   const gratif = remVigente.gratificacion
-    ? Math.min(Math.round(sueldoProporcional*0.25/12), Math.round(IMM*4.75/12))
+    ? Math.min(Math.round(sueldoProporcional * 0.25), Math.round(IMM * 4.75 / 12))
     : 0;
 
   // ── Otras Asignaciones del período ──────────────────────────────────────
