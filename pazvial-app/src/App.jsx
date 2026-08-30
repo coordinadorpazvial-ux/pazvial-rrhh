@@ -398,7 +398,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const regs = regsAll.filter(r => r.salida);
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
   // Ausencias injustificadas → descuento proporcional por día
-  const ausencias = regsAll.filter(r => r.esAusencia).length;
+  // Ausencias: registros marcados como esAusencia O registros sin entrada ni salida (manuales vacíos)
+  const ausencias = regsAll.filter(r => r.esAusencia || (!r.entrada && !r.salida)).length;
   const valorDia = diasTrabProporcional > 0 ? Math.round(sueldoProporcional / diasTrabProporcional) : 0;
   const descuentoAusencias = ausencias * valorDia;
 
@@ -451,7 +452,9 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
 
   // ── Haberes ───────────────────────────────────────────────────────────────
-  const totalImponible    = sueldoProporcional + valorHHExtra + gratif + otrasImponibles;
+  // Sueldo efectivo = proporcional menos descuento por ausencias injustificadas
+  const sueldoEfectivo    = Math.max(0, sueldoProporcional - descuentoAusencias);
+  const totalImponible    = sueldoEfectivo + valorHHExtra + gratif + otrasImponibles;
   const viaticosContingencia = totalViaticosContingencia;
   const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper + otrasNoImponibles;
   const totalHaberes      = totalImponible + totalNoImponible;
@@ -479,7 +482,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     tipoContrato: ficha.tipoContrato||"",
     diasTrab, diasTrabProporcional, horasExtra, horasExtraLegales, horasExtraExceso, mes, anio,
     fechaIngreso,
-    sueldoBase, sueldoProporcional, valorHHExtra, gratif, viaticOper,
+    sueldoBase, sueldoProporcional, sueldoEfectivo, valorHHExtra, gratif, viaticOper,
     totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
@@ -2347,13 +2350,15 @@ export default function App() {
     <div class="row"><span>RUT:</span><span>${str(d.rut)}</span><span>Código:</span><span>${str(d.codigo||d.cc)}</span><span>Cargo:</span><span>${str(d.cargo)}</span></div>
     <div class="row"><span>AFP:</span><span>${str(d.afp)} (${d.pctAFP||"10"}%)</span><span>Salud:</span><span>${str(d.sistSalud||d.prevision)}</span><span>Contrato:</span><span>${str(d.tipoContrato)}</span></div>
     <div class="row">
-      <span>Días trabajados: <strong>${d.diasTrab||d.diasTrabFinal||0}</strong></span>
-      <span>HH Extras: <strong>${d.horasExtra||0}h</strong></span>
+      <span>Días base: <strong>${d.diasTrabProporcional||30}</strong></span>
+      <span>Días asistidos: <strong>${d.diasTrab||0}</strong></span>
+      ${(d.ausencias||0)>0 ? "<span style='color:#c0392b;font-weight:bold'>🚫 Ausencias injustificadas: <strong>"+d.ausencias+"</strong> día(s) (-$"+fmt(d.descuentoAusencias)+")</span>" : ""}
+      <span>HH Extras: <strong>${(d.horasExtraLegales||d.horasExtra||0)}h</strong></span>
       <span>Imponible: <strong>$${fmt(d.totalImponible)}</strong></span>
     </div>
     <table>
       <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
-      <tr><td>${sueldoLabel}</td><td style="text-align:right">$${fmt(d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
+      <tr><td>${sueldoLabel}</td><td style="text-align:right">$${fmt(d.sueldoEfectivo||d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
       ${heRow}
       ${gratifRow}
       ${viaticRow}
@@ -4645,8 +4650,8 @@ export default function App() {
                           return true;
                         })
                         .sort((a,b)=> regOrden==="asc"
-                          ? a.fecha.localeCompare(b.fecha) || a.entrada.localeCompare(b.entrada)
-                          : b.fecha.localeCompare(a.fecha) || b.entrada.localeCompare(a.entrada)
+                          ? a.fecha.localeCompare(b.fecha) || (a.entrada||"").localeCompare(b.entrada||"")
+                          : b.fecha.localeCompare(a.fecha) || (b.entrada||"").localeCompare(a.entrada||"")
                         )
                         .map(r=>{
                           const t=trabajadores.find(x=>x.id===r.tId);
@@ -4665,7 +4670,7 @@ export default function App() {
                               <td style={S.td}>
                                 {editando
                                   ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditEnt} onChange={e=>setRegEditEnt(e.target.value)}/>
-                                  : <span style={{color:r.entradaAnticipada?"#e67e22":"inherit"}}>{r.entrada}</span>}
+                                  : (r.esAusencia||(!r.entrada&&!r.salida)) ? <span style={{color:"#e74c3c",fontStyle:"italic",fontWeight:"bold"}}>🚫 Ausencia</span> : <span style={{color:r.entradaAnticipada?"#e67e22":"inherit"}}>{r.entrada}</span>}
                               </td>
                               <td style={S.td}>
                                 {editando
@@ -4677,6 +4682,7 @@ export default function App() {
                               </td>
                               <td style={S.td}>
                                 <span style={S.bdg(
+                                  (r.esAusencia||(!r.entrada&&!r.salida)) ? "#c0392b" :
                                   r.estado==="aprobado" && r.estadoEntrada!=="pendiente" && r.estadoSalida!=="pendiente" ? "#27ae60" :
                                   r.estado==="rechazado" ? "#c0392b" :
                                   (r.estadoEntrada==="aprobado"||r.estadoSalida==="aprobado") ? "#2ecc71" :
@@ -4690,6 +4696,7 @@ export default function App() {
                                     if (r.estado==="rechazado") return "✗ Rec";
                                     if (r.entradaAnticipada && r.estadoEntrada==="pendiente") return "⏰ Ant.";
                                     if (r.estadoSalida==="pendiente") return "⏱ HE";
+                                    if (r.esAusencia||(!r.entrada&&!r.salida)) return "🚫 Aus.";
                                     return "● Pend";
                                   })()}
                                 </span>
