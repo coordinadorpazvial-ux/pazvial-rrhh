@@ -432,17 +432,13 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
       // Solo sumar HE cuando están aprobadas (entrada o salida)
       const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
       // Si hay horasExtraAprobadas (override manual), usar ese valor
-      if (r.horasExtraAprobadas !== undefined) {
+      if (r.horasExtraAprobadas !== undefined && r.estado === 'aprobado') {
         totalMinExtra += r.horasExtraAprobadas * 60;
+      } else if (r.segundoTurno || r.esNocturno) {
+        if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
-        // HE entrada: solo si está aprobada
         if (r.estadoEntrada === 'aprobado') totalMinExtra += (hBruto.extraEntrada||0) * 60;
-        // HE salida: solo si está aprobada
-        if (r.estadoSalida === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
-        // Para registros de segundo turno o nocturnos: si el estado general es aprobado
-        if (r.segundoTurno || r.esNocturno) {
-          if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
-        }
+        if (r.estadoSalida  === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
     }
   });
