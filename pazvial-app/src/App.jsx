@@ -373,21 +373,27 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const movilizacion = remVigente.movilizacion;
 
   // ── Días proporcionales según fecha de ingreso ────────────────────────────
+  // Regla: si ingresó antes del mes de pago → 30 días base completos
+  // Si ingresó durante el mes de pago → 30 - (día ingreso - 1)
   const { desde: pDesde, hasta: pHasta } = periodoLiquidacion(mes, anio);
   const fechaIngreso = ficha.fechaIngreso || "";
-  const msPerDia = 1000 * 60 * 60 * 24;
-  // Solo aplicar proporcional si el trabajador ingresó DENTRO del período actual
-  const ingresoEnEstePeriodo = fechaIngreso && fechaIngreso >= pDesde && fechaIngreso <= pHasta;
-  const inicioEfectivo = ingresoEnEstePeriodo ? fechaIngreso : pDesde;
+  // El "mes de pago" es el mes/año seleccionado (no el período 26→25)
+  const mesPagoInicio = `${anio}-${String(mes+1).padStart(2,"0")}-01`;
+  const mesPagoFin    = `${anio}-${String(mes+1).padStart(2,"0")}-${String(new Date(anio,mes+1,0).getDate()).padStart(2,"0")}`;
+  // ¿Ingresó dentro del mes de pago?
+  const ingresoEnMesPago = fechaIngreso && fechaIngreso >= mesPagoInicio && fechaIngreso <= mesPagoFin;
   const diasPeriodoCompleto = 30; // base legal chilena
-  const diasEfectivos = ingresoEnEstePeriodo
-    ? Math.round((new Date(pHasta+"T12:00:00") - new Date(fechaIngreso+"T12:00:00")) / msPerDia) + 1
-    : diasPeriodoCompleto;
-  const diasTrabProporcional = Math.min(diasEfectivos, diasPeriodoCompleto);
+  let diasTrabProporcional = diasPeriodoCompleto;
+  let inicioEfectivo = pDesde;
+  if (ingresoEnMesPago) {
+    // Fórmula: 30 - (día de ingreso - 1)
+    const diaIngreso = parseInt(fechaIngreso.split("-")[2], 10);
+    diasTrabProporcional = Math.max(1, 30 - (diaIngreso - 1));
+    inicioEfectivo = fechaIngreso;
+  }
   const factorProporcional = diasTrabProporcional / diasPeriodoCompleto;
-
-  // Sueldo proporcional (solo si ingresó en este período)
-  const sueldoProporcional = ingresoEnEstePeriodo
+  // Sueldo proporcional
+  const sueldoProporcional = ingresoEnMesPago
     ? Math.round(sueldoBase * factorProporcional)
     : sueldoBase;
 
@@ -2363,9 +2369,8 @@ export default function App() {
     <div class="row"><span>RUT:</span><span>${str(d.rut)}</span><span>Código:</span><span>${str(d.codigo||d.cc)}</span><span>Cargo:</span><span>${str(d.cargo)}</span></div>
     <div class="row"><span>AFP:</span><span>${str(d.afp)} (${d.pctAFP||"10"}%)</span><span>Salud:</span><span>${str(d.sistSalud||d.prevision)}</span><span>Contrato:</span><span>${str(d.tipoContrato)}</span></div>
     <div class="row">
-      <span>Días base: <strong>${d.diasTrabProporcional||30}</strong></span>
-      <span>Días asistidos: <strong>${d.diasTrab||0}</strong></span>
-      ${(d.ausencias||0)>0 ? "<span style='color:#c0392b;font-weight:bold'>🚫 Ausencias injustificadas: <strong>"+d.ausencias+"</strong> día(s) (-$"+fmt(d.descuentoAusencias)+")</span>" : ""}
+      <span>Días: <strong>${d.diasTrabProporcional||30}</strong>${(d.diasTrabProporcional>0&&d.diasTrabProporcional<30)?" <small>(proporcional)</small>":""}</span>
+      ${(d.ausencias||0)>0 ? "<span style='color:#c0392b;font-weight:bold'>🚫 Ausencias: "+d.ausencias+" día(s) (-$"+fmt(d.descuentoAusencias)+")</span>" : ""}
       <span>HH Extras: <strong>${(d.horasExtraLegales||d.horasExtra||0)}h</strong></span>
       <span>Imponible: <strong>$${fmt(d.totalImponible)}</strong></span>
     </div>
@@ -5386,7 +5391,7 @@ export default function App() {
                         Vista Previa — {liqPreview.nombre}
                       </div>
                       <div style={{ color:"#9A8A6A", fontSize:12 }}>
-                        {mesNombre(liqPreview.mes)} {liqPreview.anio} · {liqPreview.diasTrab} días trabajados · {liqPreview.horasExtra}h extra
+                        {mesNombre(liqPreview.mes)} {liqPreview.anio} · {liqPreview.diasTrabProporcional||30} días base{liqPreview.diasTrabProporcional<30?" (proporcional)":""} · {(liqPreview.horasExtraLegales||liqPreview.horasExtra||0)}h HE
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
