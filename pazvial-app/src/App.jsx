@@ -49,7 +49,8 @@ async function guardarEnFirebase(datos) {
       // Merge de anticipos
       const idsAntLocal = new Set((datos.anticipos || []).map(a => a.id));
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
-      datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
+      datos = { ...datos, anticipos: [...datos.anticipos,
+          otrasAsignaciones, ...anticiposRemotos] };
 
       // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
       const codigosLocal = new Set(datos.codigosUsados || []);
@@ -362,7 +363,7 @@ function getRemuneracionVigente(ficha, mes, anio) {
   };
 }
 
-function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra) {
+function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra, otrasAsgn) {
   const ficha = trab.ficha || {};
   const remVigente = getRemuneracionVigente(ficha, mes, anio);
   const sueldoBase = remVigente.sueldoPactado;
@@ -442,9 +443,9 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
     : 0;
 
   // ── Haberes ───────────────────────────────────────────────────────────────
-  const totalImponible    = sueldoProporcional + valorHHExtra + gratif;
+  const totalImponible    = sueldoProporcional + valorHHExtra + gratif + otrasImponibles;
   const viaticosContingencia = totalViaticosContingencia;
-  const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper;
+  const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper + otrasNoImponibles;
   const totalHaberes      = totalImponible + totalNoImponible;
 
   // ── Descuentos ────────────────────────────────────────────────────────────
@@ -457,6 +458,11 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
   const anticMes = anticipos.filter(a =>
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
   ).reduce((s,a)=>s+Number(a.monto),0);
+
+  // ── Otras Asignaciones del período ──────────────────────────────────
+  const otrasDelMes = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
+  const otrasImponibles    = otrasDelMes.filter(a => a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasNoImponibles  = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
 
   const totalOtrosDesc  = anticMes + descuentoAusencias;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
@@ -475,6 +481,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra)
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
+    otrasImponibles, otrasNoImponibles, otrasDelMes,
     cc:"001",
   };
 }
@@ -1551,6 +1558,11 @@ export default function App() {
 
   // ── Anticipos ──────────────────────────────────────────
   const [anticipos, setAnticipos] = useState([]);
+  const [otrasAsignaciones, setOtrasAsignaciones] = useState([]);
+  const [solicFiltroTrab, setSolicFiltroTrab] = useState("");
+  const [solicFiltroMes, setSolicFiltroMes] = useState("");
+  const [solicEditId, setSolicEditId] = useState(null);
+  const [solicEditVal, setSolicEditVal] = useState({});
   // {id, tId, monto, motivo, estado:"pendiente"|"aprobado"|"rechazado",
   //  motivoRechazo:"", mes, anio, creado}
 
@@ -1682,6 +1694,7 @@ export default function App() {
         setNotifs(data.notificaciones || []);
         setLiquidaciones(data.liquidaciones || []);
         setAnticipos(data.anticipos || []);
+        setOtrasAsignaciones(data.otrasAsignaciones || []);
         setContingencias(data.contingencias || []);
         setCuadrillas(data.cuadrillas || []);
         if (data.params) setParams(p => ({...PARAMS_DEFAULT, ...data.params}));
@@ -1744,7 +1757,7 @@ export default function App() {
       }
     }, 2000);
     return () => clearTimeout(timeout);
-  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, codigosUsados, cuadrillas, contingencias, params]);
+  }, [trabajadores, registros, compensatorios, solicitudes, notificaciones, liquidaciones, anticipos, otrasAsignaciones, codigosUsados, cuadrillas, contingencias, params]);
 
   // ── Compensatorios: auto-generar y limpiar huérfanos ──────────────────
   useEffect(() => {
@@ -2192,7 +2205,7 @@ export default function App() {
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio);
+    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, null, otrasAsignaciones);
     setLiqPreview(datos);
   }
 
@@ -2288,6 +2301,8 @@ export default function App() {
     const movilRow = (d.movilizacion||0)>0 ? `<tr><td>Asig. Movilización</td><td style="text-align:right">$${fmt(d.movilizacion)}</td><td></td><td></td></tr>` : "";
     const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
     const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
+    const otrasImpRow = (d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "";
+    const otrasNoImpRow = (d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "";
     const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtraLegales||d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
     const gratifRow = (d.gratif||0)>0 ? `<tr><td>Gratificación Legal</td><td style="text-align:right">$${fmt(d.gratif)}</td><td></td><td></td></tr>` : "";
 
@@ -2339,6 +2354,8 @@ export default function App() {
       ${gratifRow}
       ${viaticRow}
       ${viaticOperRow}
+      ${otrasImpRow}
+      ${otrasNoImpRow}
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalImponible)}</td><td style="color:#c0392b">Comisión AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.comisionAFPmonto)}</td></tr>
       ${colacionRow}
       ${movilRow}
@@ -4134,6 +4151,7 @@ export default function App() {
     { k:"nomina",       l:"👥 Nómina" },
     { k:"liquidaciones",l:"💰 Liquidaciones" },
     { k:"compensat",    l:"📅 Compensatorios" },
+    { k:"solicitudes",  l:"📋 Solicitudes" },
     { k:"calendario",   l:"🗓 Calendario" },
     { k:"cuadrillas",   l:"👥 Cuadrillas" },
     { k:"contingencias",l:"⚠️ Contingencias" },
@@ -5363,6 +5381,8 @@ export default function App() {
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
+                        ...(liqPreview.otrasImponibles>0?[["Otras asignaciones (imponible)", liqPreview.otrasImponibles]]:[]),
+                        ...(liqPreview.otrasNoImponibles>0?[["Otras asignaciones (no imponible)", liqPreview.otrasNoImponibles]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
@@ -5434,6 +5454,238 @@ export default function App() {
         )}
 
         {/* ── TAB: COMPENSATORIOS ────────────────────────── */}
+        {/* ── TAB: SOLICITUDES ─────────────────────────── */}
+        {tabAdmin==="solicitudes" && (
+          <div style={{marginTop:4}}>
+
+            {/* ── ANTICIPOS ── */}
+            <div style={S.card}>
+              <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap",alignItems:"flex-end"}}>
+                <h3 style={{color:"#C9A84C",margin:0}}>💰 Anticipos de Remuneración</h3>
+                <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <select style={{...S.sel,minWidth:160}} value={solicFiltroTrab}
+                    onChange={e=>setSolicFiltroTrab(e.target.value)}>
+                    <option value="">— Todos los trabajadores —</option>
+                    {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>(
+                      <option key={t.id} value={t.id}>{nombreCompleto(t)}</option>
+                    ))}
+                  </select>
+                  <select style={{...S.sel}} value={solicFiltroMes} onChange={e=>setSolicFiltroMes(e.target.value)}>
+                    <option value="">— Todos los meses —</option>
+                    {Array.from({length:12},(_,i)=><option key={i} value={i}>{mesNombre(i)}</option>)}
+                  </select>
+                  {(solicFiltroTrab||solicFiltroMes)&&<button onClick={()=>{setSolicFiltroTrab("");setSolicFiltroMes("");}} style={{...S.btn,fontSize:12,padding:"6px 10px"}}>✕ Limpiar</button>}
+                </div>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={S.tbl}>
+                  <thead><tr>{["Trabajador","Mes","Monto","Estado","Motivo","Acciones"].map(h=>(
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {[...anticipos].filter(a=>{
+                      if(solicFiltroTrab && a.tId!==Number(solicFiltroTrab)) return false;
+                      if(solicFiltroMes!=='' && a.mes!==Number(solicFiltroMes)) return false;
+                      return true;
+                    }).reverse().map(a=>{
+                      const t = trabajadores.find(x=>x.id===a.tId);
+                      const editando = solicEditId===a.id;
+                      return (
+                        <tr key={a.id} style={{background:editando?"rgba(201,168,76,0.08)":"transparent"}}>
+                          <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
+                          <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
+                          <td style={S.td}>
+                            {editando
+                              ? <input type="number" style={{...S.input,width:120,padding:"3px 8px"}}
+                                  value={solicEditVal.monto??a.monto}
+                                  onChange={e=>setSolicEditVal(p=>({...p,monto:e.target.value}))}/>
+                              : "$"+(a.monto||0).toLocaleString("es-CL")}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <select style={{...S.sel}} value={solicEditVal.estado??a.estado}
+                                  onChange={e=>setSolicEditVal(p=>({...p,estado:e.target.value}))}>
+                                  <option value="pendiente">Pendiente</option>
+                                  <option value="aprobado">Aprobado</option>
+                                  <option value="rechazado">Rechazado</option>
+                                </select>
+                              : <span style={S.bdg(a.estado==="aprobado"?"#27ae60":a.estado==="rechazado"?"#c0392b":"#e67e22")}>
+                                  {a.estado==="aprobado"?"✓ Aprobado":a.estado==="rechazado"?"✗ Rechazado":"● Pendiente"}
+                                </span>}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <input style={{...S.input,padding:"3px 8px"}} value={solicEditVal.motivo??a.motivo??""}
+                                  onChange={e=>setSolicEditVal(p=>({...p,motivo:e.target.value}))}/>
+                              : (a.motivo||"—")}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <div style={{display:"flex",gap:4}}>
+                                  <button onClick={()=>{
+                                    setAnticipos(p=>p.map(x=>x.id===a.id?{...x,...solicEditVal}:x));
+                                    setSolicEditId(null); setSolicEditVal({});
+                                  }} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓</button>
+                                  <button onClick={()=>{setSolicEditId(null);setSolicEditVal({});}}
+                                    style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗</button>
+                                </div>
+                              : <div style={{display:"flex",gap:4}}>
+                                  <button onClick={()=>{setSolicEditId(a.id);setSolicEditVal({monto:a.monto,estado:a.estado,motivo:a.motivo});}}
+                                    style={{...S.btnS,fontSize:11,padding:"3px 8px"}}>✏️</button>
+                                  <button onClick={()=>{if(window.confirm("¿Eliminar este anticipo?"))setAnticipos(p=>p.filter(x=>x.id!==a.id));}}
+                                    style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>🗑</button>
+                                </div>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {/* Agregar nuevo anticipo */}
+                    <tr style={{background:"rgba(201,168,76,0.04)"}}>
+                      <td style={S.td} colSpan={6}>
+                        <button onClick={()=>{
+                          const tId = Number(prompt("ID del trabajador (o usa el filtro de trabajador):")) || Number(solicFiltroTrab);
+                          if(!tId){alert("Selecciona un trabajador en el filtro primero.");return;}
+                          const monto = Number(prompt("Monto del anticipo ($):"));
+                          if(!monto||monto<=0){alert("Monto inválido.");return;}
+                          const mes = solicFiltroMes!==''?Number(solicFiltroMes):new Date().getMonth();
+                          const anio = new Date().getFullYear();
+                          const motivo = prompt("Motivo (opcional):")||"";
+                          setAnticipos(p=>[...p,{id:nowId(),tId,monto,mes,anio,motivo,estado:"aprobado",creado:hoy()}]);
+                        }} style={{...S.btnG,fontSize:12,padding:"6px 14px"}}>+ Agregar Anticipo Manual</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ── OTRAS ASIGNACIONES ── */}
+            <div style={{...S.card,marginTop:12}}>
+              <h3 style={{color:"#3498db",marginTop:0}}>📎 Otras Asignaciones</h3>
+              <div style={{color:"#9A8A6A",fontSize:12,marginBottom:12}}>
+                Asignaciones especiales que no son anticipos: HE de períodos anteriores, bonos, compensaciones, etc.
+                Aparecerán en la liquidación del mes indicado.
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={S.tbl}>
+                  <thead><tr>{["Trabajador","Mes","Concepto","Monto","Imponible","Acciones"].map(h=>(
+                    <th key={h} style={S.th}>{h}</th>
+                  ))}</tr></thead>
+                  <tbody>
+                    {[...otrasAsignaciones].filter(a=>{
+                      if(solicFiltroTrab && a.tId!==Number(solicFiltroTrab)) return false;
+                      if(solicFiltroMes!=='' && a.mes!==Number(solicFiltroMes)) return false;
+                      return true;
+                    }).reverse().map(a=>{
+                      const t = trabajadores.find(x=>x.id===a.tId);
+                      const editando = solicEditId===("oa-"+a.id);
+                      return (
+                        <tr key={a.id} style={{background:editando?"rgba(52,152,219,0.08)":"transparent"}}>
+                          <td style={S.td}>{t?nombreCompleto(t):"—"}</td>
+                          <td style={S.td}>{mesNombre(a.mes)} {a.anio}</td>
+                          <td style={S.td}>
+                            {editando
+                              ? <input style={{...S.input,padding:"3px 8px",width:180}} value={solicEditVal.concepto??a.concepto}
+                                  onChange={e=>setSolicEditVal(p=>({...p,concepto:e.target.value}))}/>
+                              : a.concepto}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <input type="number" style={{...S.input,width:120,padding:"3px 8px"}} value={solicEditVal.monto??a.monto}
+                                  onChange={e=>setSolicEditVal(p=>({...p,monto:e.target.value}))}/>
+                              : "$"+(a.monto||0).toLocaleString("es-CL")}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <select style={{...S.sel}} value={solicEditVal.imponible??a.imponible}
+                                  onChange={e=>setSolicEditVal(p=>({...p,imponible:e.target.value==="true"}))}>
+                                  <option value="true">Sí (imponible)</option>
+                                  <option value="false">No (no imponible)</option>
+                                </select>
+                              : <span style={{color:a.imponible?"#27ae60":"#9A8A6A"}}>{a.imponible?"Sí":"No"}</span>}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <div style={{display:"flex",gap:4}}>
+                                  <button onClick={()=>{
+                                    setOtrasAsignaciones(p=>p.map(x=>x.id===a.id?{...x,...solicEditVal,monto:Number(solicEditVal.monto??a.monto)}:x));
+                                    setSolicEditId(null); setSolicEditVal({});
+                                  }} style={{...S.btnG,fontSize:11,padding:"3px 8px"}}>✓</button>
+                                  <button onClick={()=>{setSolicEditId(null);setSolicEditVal({});}}
+                                    style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>✗</button>
+                                </div>
+                              : <div style={{display:"flex",gap:4}}>
+                                  <button onClick={()=>{setSolicEditId("oa-"+a.id);setSolicEditVal({concepto:a.concepto,monto:a.monto,imponible:a.imponible});}}
+                                    style={{...S.btnS,fontSize:11,padding:"3px 8px"}}>✏️</button>
+                                  <button onClick={()=>{if(window.confirm("¿Eliminar esta asignación?"))setOtrasAsignaciones(p=>p.filter(x=>x.id!==a.id));}}
+                                    style={{...S.btnD,fontSize:11,padding:"3px 8px"}}>🗑</button>
+                                </div>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Formulario nueva asignación */}
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto auto",gap:8,marginTop:12,alignItems:"end",flexWrap:"wrap"}}>
+                <div>
+                  <label style={S.lbl}>Trabajador</label>
+                  <select style={S.sel} id="oa-trab">
+                    <option value="">— Seleccionar —</option>
+                    {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>(
+                      <option key={t.id} value={t.id}>{nombreCompleto(t)} ({t.codigo})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.lbl}>Mes</label>
+                  <select style={S.sel} id="oa-mes">
+                    {Array.from({length:12},(_,i)=><option key={i} value={i}>{mesNombre(i)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.lbl}>Año</label>
+                  <select style={S.sel} id="oa-anio">
+                    {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={S.lbl}>Concepto</label>
+                  <input style={{...S.input,width:"100%"}} id="oa-concepto" placeholder="Ej: HE período julio, Bono especial..."/>
+                </div>
+                <div>
+                  <label style={S.lbl}>Monto ($)</label>
+                  <input type="number" style={S.input} id="oa-monto" placeholder="0"/>
+                </div>
+                <div>
+                  <label style={S.lbl}>¿Imponible?</label>
+                  <select style={S.sel} id="oa-imponible">
+                    <option value="true">Sí (imponible)</option>
+                    <option value="false">No (no imponible)</option>
+                  </select>
+                </div>
+                <div style={{alignSelf:"flex-end"}}>
+                  <button onClick={()=>{
+                    const tId = Number(document.getElementById("oa-trab")?.value);
+                    const mes = Number(document.getElementById("oa-mes")?.value);
+                    const anio = Number(document.getElementById("oa-anio")?.value);
+                    const concepto = document.getElementById("oa-concepto")?.value?.trim();
+                    const monto = Number(document.getElementById("oa-monto")?.value);
+                    const imponible = document.getElementById("oa-imponible")?.value==="true";
+                    if(!tId){alert("Selecciona un trabajador.");return;}
+                    if(!concepto){alert("Ingresa el concepto.");return;}
+                    if(!monto||monto<=0){alert("Ingresa un monto válido.");return;}
+                    setOtrasAsignaciones(p=>[...p,{id:nowId(),tId,mes,anio,concepto,monto,imponible,creado:hoy()}]);
+                    document.getElementById("oa-concepto").value="";
+                    document.getElementById("oa-monto").value="";
+                  }} style={{...S.btnG,padding:"8px 16px",whiteSpace:"nowrap"}}>+ Agregar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tabAdmin==="compensat" && (
           <div>
             <div style={S.card}>
