@@ -406,7 +406,15 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // Ausencias injustificadas → descuento proporcional por día
   // Ausencias: registros marcados como esAusencia O registros sin entrada ni salida (manuales vacíos)
   const ausencias = regsAll.filter(r => r.esAusencia || (!r.entrada && !r.salida)).length;
-  const valorDia = diasTrabProporcional > 0 ? Math.round(sueldoProporcional / diasTrabProporcional) : 0;
+  // Valor día = (sueldo proporcional + gratificación) / días base
+  // Calculamos gratificación provisional para el valor día
+  const IMM_tmp = 553553;
+  const gratifProvisional = remVigente.gratificacion
+    ? Math.min(Math.round(sueldoProporcional * 0.25), Math.round(IMM_tmp * 4.75 / 12))
+    : 0;
+  const valorDia = diasTrabProporcional > 0
+    ? Math.round((sueldoProporcional + gratifProvisional) / diasTrabProporcional)
+    : 0;
   const descuentoAusencias = ausencias * valorDia;
 
   // ── Valor hora extra — Fórmula oficial Dirección del Trabajo ────────────
@@ -467,8 +475,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
 
   // ── Haberes ───────────────────────────────────────────────────────────────
-  // Sueldo efectivo = proporcional menos descuento por ausencias injustificadas
-  const sueldoEfectivo    = Math.max(0, sueldoProporcional - descuentoAusencias);
+  // Sueldo se mantiene completo en haberes — ausencias van a descuentos
+  const sueldoEfectivo    = sueldoProporcional; // sin restar ausencias (van a descuentos)
   const totalImponible    = sueldoEfectivo + valorHHExtra + gratif + otrasImponibles;
   const viaticosContingencia = totalViaticosContingencia;
   const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper + otrasNoImponibles;
@@ -2366,7 +2374,7 @@ export default function App() {
     <div class="row"><span>AFP:</span><span>${str(d.afp)} (${d.pctAFP||"10"}%)</span><span>Salud:</span><span>${str(d.sistSalud||d.prevision)}</span><span>Contrato:</span><span>${str(d.tipoContrato)}</span></div>
     <div class="row">
       <span>Días: <strong>${d.diasTrabProporcional||30}</strong>${(d.diasTrabProporcional>0&&d.diasTrabProporcional<30)?" <small>(proporcional)</small>":""}</span>
-      ${(d.ausencias||0)>0 ? "<span style='color:#c0392b;font-weight:bold'>🚫 Ausencias: "+d.ausencias+" día(s) (-$"+fmt(d.descuentoAusencias)+")</span>" : ""}
+      ${(d.ausencias||0)>0 ? "<span style='color:#c0392b'>🚫 "+d.ausencias+" ausencia(s) injustificada(s)</span>" : ""}
       <span>HH Extras: <strong>${(d.horasExtraLegales||d.horasExtra||0)}h</strong></span>
       <span>Imponible: <strong>$${fmt(d.totalImponible)}</strong></span>
     </div>
@@ -2386,6 +2394,7 @@ export default function App() {
       <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalNoImponible)}</td><td style="color:#c0392b">Salud (${d.sistSalud||"FONASA"} 7%)</td><td style="text-align:right;color:#c0392b">$${fmt(d.salud_monto)}</td></tr>
       ${(d.segCesantia||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Seg. Cesantía</td><td style="text-align:right;color:#c0392b">$${fmt(d.segCesantia)}</td></tr>`:""}
       ${(d.impuesto||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Imp. Único</td><td style="text-align:right;color:#c0392b">$${fmt(d.impuesto)}</td></tr>`:""}
+      ${(d.descuentoAusencias||0)>0?`<tr><td></td><td></td><td style="color:#c0392b;font-weight:bold">Ausencia Injustificada (${d.ausencias} día(s))</td><td style="text-align:right;color:#c0392b">-$${fmt(d.descuentoAusencias)}</td></tr>`:""}
       ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo Remuneración</td><td style="text-align:right;color:#c0392b">$${fmt(d.anticipo)}</td></tr>`:""}
     </table>
     <div class="totbar">
@@ -5436,6 +5445,7 @@ export default function App() {
                         ["Salud (7%)", liqPreview.salud_monto],
                         ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
+                        ...(liqPreview.descuentoAusencias>0?[["Ausencia Injustificada ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#c0392b"]]:[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
                         ...(liqPreview.descuentoAusencias>0?[["Desc. ausencias ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#e74c3c"]]:[]),
                         ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
