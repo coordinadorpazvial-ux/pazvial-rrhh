@@ -399,7 +399,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
   // Ausencias injustificadas → descuento proporcional por día
   const ausencias = regsAll.filter(r => r.esAusencia).length;
-  const valorDia = Math.round(sueldoProporcional / diasTrabProporcional);
+  const valorDia = diasTrabProporcional > 0 ? Math.round(sueldoProporcional / diasTrabProporcional) : 0;
   const descuentoAusencias = ausencias * valorDia;
 
   // ── Valor hora base ───────────────────────────────────────────────────────
@@ -442,6 +442,11 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     ? Math.min(Math.round(sueldoProporcional*0.25/12), Math.round(IMM*4.75/12))
     : 0;
 
+  // ── Otras Asignaciones del período ──────────────────────────────────────
+  const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
+  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+
   // ── Haberes ───────────────────────────────────────────────────────────────
   const totalImponible    = sueldoProporcional + valorHHExtra + gratif + otrasImponibles;
   const viaticosContingencia = totalViaticosContingencia;
@@ -458,11 +463,6 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const anticMes = anticipos.filter(a =>
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
   ).reduce((s,a)=>s+Number(a.monto),0);
-
-  // ── Otras Asignaciones del período ──────────────────────────────────
-  const otrasDelMes = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
-  const otrasImponibles    = otrasDelMes.filter(a => a.imponible).reduce((s,a)=>s+Number(a.monto),0);
-  const otrasNoImponibles  = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
 
   const totalOtrosDesc  = anticMes + descuentoAusencias;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
@@ -481,7 +481,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
-    otrasImponibles, otrasNoImponibles, otrasDelMes,
+    otrasImponibles, otrasNoImponibles,
     cc:"001",
   };
 }
@@ -1559,6 +1559,7 @@ export default function App() {
   // ── Anticipos ──────────────────────────────────────────
   const [anticipos, setAnticipos] = useState([]);
   const [otrasAsignaciones, setOtrasAsignaciones] = useState([]);
+  const [oaNuevo, setOaNuevo] = useState({});
   const [solicFiltroTrab, setSolicFiltroTrab] = useState("");
   const [solicFiltroMes, setSolicFiltroMes] = useState("");
   const [solicEditId, setSolicEditId] = useState(null);
@@ -5399,6 +5400,7 @@ export default function App() {
                         ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
+                        ...(liqPreview.descuentoAusencias>0?[["Desc. ausencias ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#e74c3c"]]:[]),
                         ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
                       ].map(([l,v,b,c])=>(
@@ -5627,11 +5629,14 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-              {/* Formulario nueva asignación */}
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto auto",gap:8,marginTop:12,alignItems:"end",flexWrap:"wrap"}}>
+              {/* Formulario nueva asignación - usando oaNuevo state */}
+              {(()=>{
+                return null; // El formulario se maneja con el estado oaNuevo definido arriba
+              })()}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginTop:12,alignItems:"end"}}>
                 <div>
                   <label style={S.lbl}>Trabajador</label>
-                  <select style={S.sel} id="oa-trab">
+                  <select style={S.sel} value={oaNuevo.tId||""} onChange={e=>setOaNuevo(p=>({...p,tId:e.target.value}))}>
                     <option value="">— Seleccionar —</option>
                     {trabajadores.filter(t=>t.activo&&t.id!==999).map(t=>(
                       <option key={t.id} value={t.id}>{nombreCompleto(t)} ({t.codigo})</option>
@@ -5640,45 +5645,43 @@ export default function App() {
                 </div>
                 <div>
                   <label style={S.lbl}>Mes</label>
-                  <select style={S.sel} id="oa-mes">
+                  <select style={S.sel} value={oaNuevo.mes??new Date().getMonth()} onChange={e=>setOaNuevo(p=>({...p,mes:Number(e.target.value)}))}>
                     {Array.from({length:12},(_,i)=><option key={i} value={i}>{mesNombre(i)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label style={S.lbl}>Año</label>
-                  <select style={S.sel} id="oa-anio">
+                  <select style={S.sel} value={oaNuevo.anio||new Date().getFullYear()} onChange={e=>setOaNuevo(p=>({...p,anio:Number(e.target.value)}))}>
                     {[2024,2025,2026,2027].map(y=><option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
-                <div style={{gridColumn:"1/-1"}}>
+                <div style={{gridColumn:"span 2"}}>
                   <label style={S.lbl}>Concepto</label>
-                  <input style={{...S.input,width:"100%"}} id="oa-concepto" placeholder="Ej: HE período julio, Bono especial..."/>
+                  <input style={{...S.input,width:"100%"}} value={oaNuevo.concepto||""} placeholder="Ej: HE período julio, Bono especial..."
+                    onChange={e=>setOaNuevo(p=>({...p,concepto:e.target.value}))}/>
                 </div>
                 <div>
                   <label style={S.lbl}>Monto ($)</label>
-                  <input type="number" style={S.input} id="oa-monto" placeholder="0"/>
+                  <input type="number" style={S.input} value={oaNuevo.monto||""} placeholder="0"
+                    onChange={e=>setOaNuevo(p=>({...p,monto:e.target.value}))}/>
                 </div>
                 <div>
                   <label style={S.lbl}>¿Imponible?</label>
-                  <select style={S.sel} id="oa-imponible">
+                  <select style={S.sel} value={oaNuevo.imponible===false?"false":"true"} onChange={e=>setOaNuevo(p=>({...p,imponible:e.target.value==="true"}))}>
                     <option value="true">Sí (imponible)</option>
                     <option value="false">No (no imponible)</option>
                   </select>
                 </div>
                 <div style={{alignSelf:"flex-end"}}>
                   <button onClick={()=>{
-                    const tId = Number(document.getElementById("oa-trab")?.value);
-                    const mes = Number(document.getElementById("oa-mes")?.value);
-                    const anio = Number(document.getElementById("oa-anio")?.value);
-                    const concepto = document.getElementById("oa-concepto")?.value?.trim();
-                    const monto = Number(document.getElementById("oa-monto")?.value);
-                    const imponible = document.getElementById("oa-imponible")?.value==="true";
-                    if(!tId){alert("Selecciona un trabajador.");return;}
-                    if(!concepto){alert("Ingresa el concepto.");return;}
-                    if(!monto||monto<=0){alert("Ingresa un monto válido.");return;}
-                    setOtrasAsignaciones(p=>[...p,{id:nowId(),tId,mes,anio,concepto,monto,imponible,creado:hoy()}]);
-                    document.getElementById("oa-concepto").value="";
-                    document.getElementById("oa-monto").value="";
+                    if(!oaNuevo.tId){alert("Selecciona un trabajador.");return;}
+                    if(!oaNuevo.concepto?.trim()){alert("Ingresa el concepto.");return;}
+                    if(!oaNuevo.monto||Number(oaNuevo.monto)<=0){alert("Ingresa un monto válido.");return;}
+                    setOtrasAsignaciones(p=>[...p,{id:nowId(),tId:Number(oaNuevo.tId),
+                      mes:oaNuevo.mes??new Date().getMonth(),anio:oaNuevo.anio||new Date().getFullYear(),
+                      concepto:oaNuevo.concepto.trim(),monto:Number(oaNuevo.monto),
+                      imponible:oaNuevo.imponible!==false,creado:hoy()}]);
+                    setOaNuevo({});
                   }} style={{...S.btnG,padding:"8px 16px",whiteSpace:"nowrap"}}>+ Agregar</button>
                 </div>
               </div>
