@@ -3214,7 +3214,29 @@ export default function App() {
           return [...prev, ...nuevos];
         });
 
-        setImportMsg({ tipo:"ok", txt:"✅ Datos importados y fusionados correctamente. No se duplicó ningún registro." });
+        // Guardar inmediatamente en Firebase con los datos del JSON
+        // para evitar que onSnapshot sobreescriba los datos importados
+        const datosFirebase = {
+          trabajadores: data.trabajadores || [],
+          registros: data.registros || [],
+          compensatorios: data.compensatorios || [],
+          solicitudes: data.solicitudes || [],
+          notificaciones: data.notificaciones || [],
+          liquidaciones: data.liquidaciones || [],
+          anticipos: data.anticipos || [],
+          otrasAsignaciones: data.otrasAsignaciones || [],
+          codigosUsados: data.codigosUsados || [],
+          cuadrillas: data.cuadrillas || [],
+          contingencias: data.contingencias || [],
+          params: data.params || {},
+          ultimaActualizacion: new Date().toISOString(),
+        };
+        escribiendoEnFirebase.current = true;
+        guardarEnFirebase(datosFirebase)
+          .then(() => { setSyncEstado("ok"); })
+          .catch(e => { console.error("Error guardando import:", e); setSyncEstado("error"); })
+          .finally(() => { escribiendoEnFirebase.current = false; });
+        setImportMsg({ tipo:"ok", txt:"✅ Datos importados y guardados en Firebase correctamente." });
       } catch {
         setImportMsg({ tipo:"err", txt:"❌ Archivo inválido. Verifica que sea un backup de Gestión de Personas Paz Vial SpA." });
       }
