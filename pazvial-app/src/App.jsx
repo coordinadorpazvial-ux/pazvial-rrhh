@@ -403,9 +403,15 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   );
   const regs = regsAll.filter(r => r.salida);
   const diasTrab = regs.filter(r=>!esEspecial(r.fecha)).length;
-  // Ausencias injustificadas → descuento proporcional por día
-  // Ausencias: registros marcados como esAusencia O registros sin entrada ni salida (manuales vacíos)
-  const ausencias = regsAll.filter(r => r.esAusencia || (!r.entrada && !r.salida)).length;
+  // Ausencias: buscar en el mes calendario de pago (no solo en el período contable)
+  // porque días como 27-28 del mes caen fuera del período 26→25
+  const mesCal1 = `${anio}-${String(mes+1).padStart(2,"0")}-01`;
+  const mesCal2 = `${anio}-${String(mes+1).padStart(2,"0")}-${String(new Date(anio,mes+1,0).getDate()).padStart(2,"0")}`;
+  const inicioAusencias = ingresoEnMesPago ? mesPagoInicio : mesCal1;
+  const regsAusencias = registros.filter(r =>
+    r.tId===trab.id && r.fecha>=inicioAusencias && r.fecha<=mesCal2
+  );
+  const ausencias = regsAusencias.filter(r => r.esAusencia || (!r.entrada && !r.salida)).length;
   // Valor día = (sueldo proporcional + gratificación) / días base
   // Calculamos gratificación provisional para el valor día
   const IMM_tmp = 553553;
