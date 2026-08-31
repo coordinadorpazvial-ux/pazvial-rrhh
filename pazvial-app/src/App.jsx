@@ -1797,16 +1797,26 @@ export default function App() {
           : m);
       } catch(e) {
         console.error("Error en auto-guardado:", e);
-        setSyncEstado("error");
-        // Reintentar automáticamente en 10 segundos
+        // Estimar tamaño del documento
+        const jsonSize = JSON.stringify(datosAGuardar).length;
+        const sizeMB = (jsonSize / 1024 / 1024).toFixed(2);
+        console.warn(`Tamaño documento: ${sizeMB} MB (límite Firestore: 1MB)`);
+        if (jsonSize > 900000) {
+          setSyncEstado("error");
+          alert(`⚠️ El documento supera el límite de Firestore (${sizeMB}MB). Contacta al administrador del sistema.`);
+        } else {
+          setSyncEstado("error");
+        }
+        // Reintentar en 15 segundos (datosAGuardar accesible por closure)
+        const _datosReintento = datosAGuardar;
         setTimeout(async () => {
           try {
-            await guardarEnFirebase(datosAGuardar);
+            await guardarEnFirebase(_datosReintento);
             setSyncEstado("ok");
           } catch(e2) {
-            console.error("Reintento fallido:", e2);
+            console.error("Reintento fallido:", e2.code, e2.message);
           }
-        }, 10000);
+        }, 15000);
       }
     }, 2000);
     return () => clearTimeout(timeout);
