@@ -471,19 +471,19 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // HE sobre el tope → Viático Operacional (no imponible, sin mostrar cálculo)
   const viaticOper = Math.round(horasExtraExceso * valorHE);
 
+  // ── Otras Asignaciones del período ──────────────────────────────────────
+  const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
+  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+
   // ── Gratificación legal — Art. 50 Código del Trabajo ────────────────────
-  // Base = sueldo proporcional + HH Extra (toda la remuneración imponible sin gratif)
+  // Base = sueldo proporcional + HH Extra + otras imponibles
   // Gratificación = 25% de la base, con tope = 4.75 × IMM / 12
   const IMM = (paramsExtra && paramsExtra.IMM) || 553553; // IMM vigente 2026
   const baseGratif = sueldoProporcional + valorHHExtra + otrasImponibles;
   const gratif = remVigente.gratificacion
     ? Math.min(Math.round(baseGratif * 0.25), Math.round(IMM * 4.75 / 12))
     : 0;
-
-  // ── Otras Asignaciones del período ──────────────────────────────────────
-  const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
-  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
-  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
 
   // ── Haberes ───────────────────────────────────────────────────────────────
   // Sueldo se mantiene completo en haberes — ausencias van a descuentos
@@ -2249,8 +2249,13 @@ export default function App() {
     const t = trabajadores.find(x=>x.id===Number(liqTrabId));
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
-    const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, null, otrasAsignaciones);
-    setLiqPreview(datos);
+    try {
+      const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, null, otrasAsignaciones);
+      setLiqPreview(datos);
+    } catch(err) {
+      console.error("Error calcularLiquidacion:", err);
+      setLiqMsg({tipo:"err",txt:"Error al calcular la liquidación: "+err.message});
+    }
   }
 
   function enviarLiquidacion() {
@@ -2314,6 +2319,7 @@ export default function App() {
   // ── IMPRIMIR / PDF liquidación ────────────────────────
   function imprimirLiquidacion(liq) {
     if (!liq) return;
+    try {
     // Normalizar estructura — puede venir de distintas versiones
     const d = liq.datos || {};
     const fmt = v => (v||0).toLocaleString("es-CL");
@@ -2433,6 +2439,10 @@ export default function App() {
       _ifr.src = _url;
       _ifr.onload = () => { _ifr.contentWindow.focus(); _ifr.contentWindow.print(); setTimeout(() => { _ifr.remove(); URL.revokeObjectURL(_url); }, 3000); };
       document.body.appendChild(_ifr);
+    }
+    } catch(err) {
+      console.error("Error imprimirLiquidacion:", err);
+      alert("Error al generar el PDF: " + err.message);
     }
   }
 
