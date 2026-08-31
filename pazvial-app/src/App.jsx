@@ -1710,7 +1710,8 @@ export default function App() {
 
       const data = snap.data();
       const tFirebase = data.trabajadores || [];
-      const tieneReales = tFirebase.some(t => !t.esDePrueba || t.id === 999);
+      // Cargar siempre que haya datos en Firebase
+      const tieneReales = tFirebase.length > 0;
 
       if (tieneReales) {
         cargandoDesdeFirebase.current = true;
