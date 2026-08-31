@@ -446,15 +446,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
       // Solo sumar HE cuando están aprobadas (entrada o salida)
       const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
       // Si hay horasExtraAprobadas (override manual), usar ese valor
-      if (r.horasExtraAprobadas !== undefined && r.estado === 'aprobado') {
-        // Override manual aprobado — usar el valor asignado
-        totalMinExtra += r.horasExtraAprobadas * 60;
-      } else if (r.segundoTurno || r.esNocturno) {
+      if (r.segundoTurno || r.esNocturno) {
         // Segundo turno / nocturno: todas las horas son HE
         if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
-        // Día normal: sumar solo HE aprobadas por estadoEntrada/estadoSalida
-        // (ignorar horasExtraAprobadas si el estado general no es aprobado)
+        // Día normal: SIEMPRE usar estadoEntrada/estadoSalida
+        // horasExtraAprobadas se ignora aquí — solo aplica para días especiales
         if (r.estadoEntrada === 'aprobado') totalMinExtra += (hBruto.extraEntrada||0) * 60;
         if (r.estadoSalida  === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
@@ -2396,14 +2393,13 @@ export default function App() {
       <tr><td>${sueldoLabel}</td><td style="text-align:right">$${fmt(d.sueldoEfectivo||d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
       ${heRow}
       ${gratifRow}
-      ${viaticRow}
-      ${viaticOperRow}
       ${otrasImpRow}
-      ${otrasNoImpRow}
       <tr class="tot"><td>TOTAL IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalImponible)}</td><td style="color:#c0392b">Comisión AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.comisionAFPmonto)}</td></tr>
       ${colacionRow}
       ${movilRow}
       ${viaticRow}
+      ${viaticOperRow}
+      ${otrasNoImpRow}
       <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalNoImponible)}</td><td style="color:#c0392b">Salud (${d.sistSalud||"FONASA"} 7%)</td><td style="text-align:right;color:#c0392b">$${fmt(d.salud_monto)}</td></tr>
       ${(d.segCesantia||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Seg. Cesantía</td><td style="text-align:right;color:#c0392b">$${fmt(d.segCesantia)}</td></tr>`:""}
       ${(d.impuesto||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Imp. Único</td><td style="text-align:right;color:#c0392b">$${fmt(d.impuesto)}</td></tr>`:""}
