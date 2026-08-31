@@ -1778,7 +1778,7 @@ export default function App() {
         const datosAGuardar = {
           trabajadores, registros,
           compensatorios, solicitudes,
-          notificaciones, liquidaciones, anticipos,
+          notificaciones, liquidaciones, anticipos, otrasAsignaciones,
           contingencias,
           cuadrillas,
           params,
