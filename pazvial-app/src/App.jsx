@@ -446,12 +446,15 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
       // Solo sumar HE cuando están aprobadas (entrada o salida)
       const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
       // Si hay horasExtraAprobadas (override manual), usar ese valor
-      if (r.segundoTurno || r.esNocturno) {
+      if (r.horasExtraAprobadas !== undefined && r.estado === 'aprobado') {
+        // Override manual aprobado — usar el valor asignado
+        totalMinExtra += r.horasExtraAprobadas * 60;
+      } else if (r.segundoTurno || r.esNocturno) {
         // Segundo turno / nocturno: todas las horas son HE
         if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
-        // Día normal: SIEMPRE usar estadoEntrada/estadoSalida
-        // horasExtraAprobadas se ignora aquí — solo aplica para días especiales
+        // Día normal: sumar solo HE aprobadas por estadoEntrada/estadoSalida
+        // (ignorar horasExtraAprobadas si el estado general no es aprobado)
         if (r.estadoEntrada === 'aprobado') totalMinExtra += (hBruto.extraEntrada||0) * 60;
         if (r.estadoSalida  === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
@@ -469,11 +472,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const viaticOper = Math.round(horasExtraExceso * valorHE);
 
   // ── Gratificación legal — Art. 50 Código del Trabajo ────────────────────
-  // Gratificación mensual = 25% del sueldo imponible mensual
-  // Tope mensual = 4.75 × IMM / 12
+  // Base = sueldo proporcional + HH Extra (toda la remuneración imponible sin gratif)
+  // Gratificación = 25% de la base, con tope = 4.75 × IMM / 12
   const IMM = (paramsExtra && paramsExtra.IMM) || 553553; // IMM vigente 2026
+  const baseGratif = sueldoProporcional + valorHHExtra + otrasImponibles;
   const gratif = remVigente.gratificacion
-    ? Math.min(Math.round(sueldoProporcional * 0.25), Math.round(IMM * 4.75 / 12))
+    ? Math.min(Math.round(baseGratif * 0.25), Math.round(IMM * 4.75 / 12))
     : 0;
 
   // ── Otras Asignaciones del período ──────────────────────────────────────
@@ -5423,6 +5427,47 @@ export default function App() {
                           alcanceLiquido: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0) + (p.totalNoImponible||0) - (p.totalDescuentos||0),
                         }));
                       }} style={{...S.btn, fontSize:11, padding:"6px 10px"}}>✏️ Ajustar días</button>
+                      <button onClick={()=>{
+                        const campos = [
+                          {k:"viaticOper",    label:"Viático Operacional",     val:liqPreview.viaticOper||0},
+                          {k:"valorHHExtra",  label:"HH Extra 50%",            val:liqPreview.valorHHExtra||0},
+                          {k:"gratif",        label:"Gratificación Legal",      val:liqPreview.gratif||0},
+                          {k:"colacion",      label:"Asig. Colación",          val:liqPreview.colacion||0},
+                          {k:"movilizacion",  label:"Asig. Movilización",      val:liqPreview.movilizacion||0},
+                          {k:"anticipo",      label:"Anticipo",                val:liqPreview.anticipo||0},
+                        ];
+                        const campo = campos.find(c=>c.k===prompt(
+                          "¿Qué valor deseas ajustar?\n"+campos.map((c,i)=>`${i+1}. ${c.label}: $${c.val.toLocaleString("es-CL")}`).join("\n")+"\n\nEscribe el número:",
+                          "1"
+                        )-1+"" || campos[0].k);
+                        if(!campo) return;
+                        const nuevo = Number(prompt(`Nuevo valor para ${campo.label}:`, campo.val));
+                        if(isNaN(nuevo)||nuevo<0) return;
+                        const diff = nuevo - (liqPreview[campo.k]||0);
+                        const esImponible = ["valorHHExtra","gratif"].includes(campo.k);
+                        const esNoImponible = ["viaticOper","colacion","movilizacion"].includes(campo.k);
+                        const esDescuento = ["anticipo"].includes(campo.k);
+                        setLiqPreview(p=>{
+                          const np = {...p, [campo.k]: nuevo};
+                          if(esImponible){
+                            np.totalImponible = (p.totalImponible||0) + diff;
+                            np.totalHaberes   = (p.totalHaberes||0)   + diff;
+                            np.prevision_monto= Math.round(np.totalImponible * (parseFloat(p.pctAFP)||10.46)/100);
+                            np.salud_monto    = Math.round(np.totalImponible * 0.07);
+                            np.segCesantia    = p.tipoContrato==="indefinido" ? Math.round(np.totalImponible*0.006) : 0;
+                            np.totalDescLegales = np.prevision_monto + np.salud_monto + np.segCesantia;
+                            np.totalDescuentos  = np.totalDescLegales + (p.totalOtrosDesc||0);
+                          } else if(esNoImponible){
+                            np.totalNoImponible = (p.totalNoImponible||0) + diff;
+                            np.totalHaberes     = (p.totalHaberes||0)     + diff;
+                          } else if(esDescuento){
+                            np.totalOtrosDesc  = (p.totalOtrosDesc||0)  + diff;
+                            np.totalDescuentos = (p.totalDescuentos||0) + diff;
+                          }
+                          np.alcanceLiquido = (np.totalHaberes||0) - (np.totalDescuentos||0);
+                          return np;
+                        });
+                      }} style={{...S.btn, fontSize:11, padding:"6px 10px", background:"#8e44ad"}}>🔧 Ajuste manual</button>
                     </div>
                   </div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, fontSize:12 }}>
@@ -5499,7 +5544,32 @@ export default function App() {
                                 </span>
                                 {liq.estado==="firmada"&&<div style={{fontSize:10,color:"#aaffcc",marginTop:2}}>{liq.firmadaPor}<br/>{fmtFecha(liq.firmadaFecha)} {liq.firmadaHora}</div>}
                               </td>
-                              <td style={S.td}><button onClick={()=>imprimirLiquidacion(liq)} style={S.btnB}>🖨 PDF</button></td>
+                              <td style={S.td}>
+                                <div style={{display:"flex",gap:4}}>
+                                  <button onClick={()=>imprimirLiquidacion(liq)} style={S.btnB}>🖨 PDF</button>
+                                  <button title="Recalcular con fórmulas actualizadas" style={{...S.btn,fontSize:11,padding:"4px 8px"}}
+                                    onClick={()=>{
+                                      if(!window.confirm(`¿Recalcular la liquidación de ${t?nombreCompleto(t):""} (${mesNombre(liq.mes)} ${liq.anio})?
+
+Se actualizará con las fórmulas corregidas (gratificación, HE, seguro cesantía).
+La firma existente se conservará.`)) return;
+                                      const nuevaDatos = calcularLiquidacion(t, registros, anticipos, liq.mes, liq.anio, null, otrasAsignaciones);
+                                      setLiquidaciones(p=>p.map(x=>x.id===liq.id ? {
+                                        ...x,
+                                        datos: nuevaDatos,
+                                        recalculada: true,
+                                        recalculadaFecha: hoy(),
+                                      } : x));
+                                      alert(`✅ Liquidación recalculada correctamente.
+Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL")}`);
+                                    }}>🔄 Recalcular</button>
+                                  <button title="Eliminar liquidación" style={{...S.btnD,fontSize:11,padding:"4px 8px"}}
+                                    onClick={()=>{
+                                      if(!window.confirm("¿Eliminar esta liquidación? Esta acción no se puede deshacer.")) return;
+                                      setLiquidaciones(p=>p.filter(x=>x.id!==liq.id));
+                                    }}>🗑</button>
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
