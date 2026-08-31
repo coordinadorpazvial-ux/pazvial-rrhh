@@ -49,8 +49,12 @@ async function guardarEnFirebase(datos) {
       // Merge de anticipos
       const idsAntLocal = new Set((datos.anticipos || []).map(a => a.id));
       const anticiposRemotos = (remoto.anticipos || []).filter(a => !idsAntLocal.has(a.id));
-      datos = { ...datos, anticipos: [...datos.anticipos,
-          otrasAsignaciones, ...anticiposRemotos] };
+      datos = { ...datos, anticipos: [...datos.anticipos, ...anticiposRemotos] };
+
+      // Merge de otras asignaciones
+      const idsOtrasLocal = new Set((datos.otrasAsignaciones || []).map(a => String(a.id)));
+      const otrasRemotas = (remoto.otrasAsignaciones || []).filter(a => !idsOtrasLocal.has(String(a.id)));
+      datos = { ...datos, otrasAsignaciones: [...(datos.otrasAsignaciones||[]), ...otrasRemotas] };
 
       // Merge de códigos usados (historial): unión sin duplicados, nunca se pierde un código
       const codigosLocal = new Set(datos.codigosUsados || []);
