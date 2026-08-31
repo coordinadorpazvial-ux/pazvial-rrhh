@@ -1798,6 +1798,15 @@ export default function App() {
       } catch(e) {
         console.error("Error en auto-guardado:", e);
         setSyncEstado("error");
+        // Reintentar automáticamente en 10 segundos
+        setTimeout(async () => {
+          try {
+            await guardarEnFirebase(datosAGuardar);
+            setSyncEstado("ok");
+          } catch(e2) {
+            console.error("Reintento fallido:", e2);
+          }
+        }, 10000);
       }
     }, 2000);
     return () => clearTimeout(timeout);
@@ -3705,8 +3714,13 @@ export default function App() {
                     background: syncEstado==="ok"?"#27ae60":syncEstado==="guardando"?"#FFD700":"#e74c3c",
                     animation: syncEstado==="guardando"?"pulse 1s infinite":"none" }}/>
                   {syncEstado==="ok"?"✓ Sincronizado con la nube":
-                   syncEstado==="guardando"?"Guardando...":
-                   "⚠ Error de conexión — reintentando"}
+                   syncEstado==="guardando"?"⏳ Guardando...":
+                   <span>⚠ Error de conexión —{" "}
+                     <span style={{textDecoration:"underline",cursor:"pointer"}}
+                       onClick={()=>{setSyncEstado("guardando"); guardarEnFirebase({trabajadores,registros,compensatorios,solicitudes,notificaciones,liquidaciones,anticipos,otrasAsignaciones,codigosUsados,cuadrillas,contingencias,params}).then(()=>setSyncEstado("ok")).catch(()=>setSyncEstado("error"));}}>
+                       Reintentar
+                     </span>
+                   </span>}
                 </div>
               </div>
 
