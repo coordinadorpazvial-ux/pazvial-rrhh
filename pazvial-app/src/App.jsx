@@ -528,7 +528,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
-    otrasImponibles, otrasNoImponibles,
+    otrasImponibles, otrasNoImponibles, otrasDelMes,
     cc:"001",
   };
 }
@@ -2375,8 +2375,13 @@ export default function App() {
     const movilRow = (d.movilizacion||0)>0 ? `<tr><td>Asig. Movilización</td><td style="text-align:right">$${fmt(d.movilizacion)}</td><td></td><td></td></tr>` : "";
     const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
     const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
-    const otrasImpRow = (d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "";
-    const otrasNoImpRow = (d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "";
+    // Filas individuales por concepto de otras asignaciones
+    const otrasImpRow = (d.otrasDelMes||[]).filter(a=>a.imponible).map(a=>
+      `<tr><td style="color:#8e44ad">📎 ${a.concepto||"Otra asignación"}</td><td style="text-align:right;color:#8e44ad">$${fmt(Number(a.monto)||0)}</td><td></td><td></td></tr>`
+    ).join("") || ((d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "");
+    const otrasNoImpRow = (d.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>
+      `<tr><td style="color:#8e44ad">📎 ${a.concepto||"Otra asignación"}</td><td style="text-align:right;color:#8e44ad">$${fmt(Number(a.monto)||0)}</td><td></td><td></td></tr>`
+    ).join("") || ((d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "");
     const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtraLegales||d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
     const gratifRow = (d.gratif||0)>0 ? `<tr><td>Gratificación Legal</td><td style="text-align:right">$${fmt(d.gratif)}</td><td></td><td></td></tr>` : "";
 
@@ -5543,8 +5548,12 @@ export default function App() {
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
-                        ...(liqPreview.otrasImponibles>0?[["Otras asignaciones (imponible)", liqPreview.otrasImponibles]]:[]),
-                        ...(liqPreview.otrasNoImponibles>0?[["Otras asignaciones (no imponible)", liqPreview.otrasNoImponibles]]:[]),
+                        ...(liqPreview.otrasDelMes||[]).filter(a=>a.imponible).map(a=>
+                          [a.concepto||"Otra asignación", Number(a.monto)||0]),
+                        ...((liqPreview.otrasDelMes||[]).length===0&&(liqPreview.otrasImponibles||0)>0?[["Otras asign. (imponible)", liqPreview.otrasImponibles]]:[]),
+                        ...(liqPreview.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>
+                          [a.concepto||"Otra asignación", Number(a.monto)||0]),
+                        ...((liqPreview.otrasDelMes||[]).length===0&&(liqPreview.otrasNoImponibles||0)>0?[["Otras asign. (no imponible)", liqPreview.otrasNoImponibles]]:[]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
