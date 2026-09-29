@@ -490,8 +490,11 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
 
   // ── Otras Asignaciones del período ──────────────────────────────────────
   const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
-  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
-  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible && !a.yaPagado).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible && !a.yaPagado).reduce((s,a)=>s+Number(a.monto),0);
+  // Asignaciones ya pagadas → aparecen como descuento
+  const otrasYaPagadas    = otrasDelMes.filter(a =>  a.yaPagado);
+  const descuentoYaPagado = otrasYaPagadas.reduce((s,a)=>s+Number(a.monto),0);
 
   // ── Gratificación legal — Art. 50 Código del Trabajo ────────────────────
   // Base = sueldo proporcional + HH Extra + otras imponibles
@@ -524,7 +527,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     a.tId===trab.id && a.estado==="aprobado" && a.mes===mes && a.anio===anio
   ).reduce((s,a)=>s+Number(a.monto),0);
 
-  const totalOtrosDesc  = anticMes + descuentoAusencias;
+  const totalOtrosDesc  = anticMes + descuentoAusencias + descuentoYaPagado;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
   const alcanceLiquido  = totalHaberes - totalDescuentos;
   const tributable      = totalImponible - prevision - salud;
@@ -542,7 +545,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
-    otrasImponibles, otrasNoImponibles,
+    otrasImponibles, otrasNoImponibles, otrasYaPagadas, descuentoYaPagado,
     cc:"001",
   };
 }
@@ -2467,6 +2470,7 @@ export default function App() {
       ${(d.segCesantia||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Seg. Cesantía</td><td style="text-align:right;color:#c0392b">$${fmt(d.segCesantia)}</td></tr>`:""}
       ${(d.impuesto||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Imp. Único</td><td style="text-align:right;color:#c0392b">$${fmt(d.impuesto)}</td></tr>`:""}
       ${(d.descuentoAusencias||0)>0?`<tr><td></td><td></td><td style="color:#c0392b;font-weight:bold">Ausencia Injustificada (${d.ausencias} día(s))</td><td style="text-align:right;color:#c0392b">-$${fmt(d.descuentoAusencias)}</td></tr>`:""}
+      ${(d.otrasYaPagadas||[]).map(a=>`<tr><td></td><td></td><td style="color:#c0392b;font-weight:bold">${a.concepto||"Asignación ya pagada"}</td><td style="text-align:right;color:#c0392b">-$${fmt(Number(a.monto)||0)}</td></tr>`).join("")}
       ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo Remuneración</td><td style="text-align:right;color:#c0392b">$${fmt(d.anticipo)}</td></tr>`:""}
     </table>
     <div class="totbar">
@@ -5611,6 +5615,7 @@ export default function App() {
                         ["Seguro Cesantía", liqPreview.segCesantia],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
                         ...(liqPreview.descuentoAusencias>0?[["Ausencia Injustificada ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#c0392b"]]:[]),
+                        ...(liqPreview.descuentoYaPagado>0?(liqPreview.otrasYaPagadas||[]).map(a=>[a.concepto||"Asignación ya pagada", Number(a.monto), false, "#e74c3c"]):[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
                         ...(liqPreview.descuentoAusencias>0?[["Desc. ausencias ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#e74c3c"]]:[]),
                         ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
@@ -5807,7 +5812,7 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
               </div>
               <div style={{overflowX:"auto"}}>
                 <table style={S.tbl}>
-                  <thead><tr>{["Trabajador","Mes","Concepto","Monto","Imponible","Acciones"].map(h=>(
+                  <thead><tr>{["Trabajador","Mes","Concepto","Monto","Imponible","Ya pagado","Acciones"].map(h=>(
                     <th key={h} style={S.th}>{h}</th>
                   ))}</tr></thead>
                   <tbody>
@@ -5842,6 +5847,19 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
                                   <option value="false">No (no imponible)</option>
                                 </select>
                               : <span style={{color:a.imponible?"#27ae60":"#9A8A6A"}}>{a.imponible?"Sí":"No"}</span>}
+                          </td>
+                          <td style={S.td}>
+                            {editando
+                              ? <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer"}}>
+                                  <input type="checkbox"
+                                    checked={!!(solicEditVal.yaPagado??a.yaPagado)}
+                                    onChange={e=>setSolicEditVal(p=>({...p,yaPagado:e.target.checked}))}
+                                    style={{accentColor:"#e74c3c"}}/>
+                                  <span style={{fontSize:11,color:"#e74c3c"}}>Sí</span>
+                                </label>
+                              : a.yaPagado
+                                ? <span style={{color:"#e74c3c",fontSize:11}}>✓ Sí</span>
+                                : <span style={{color:"#9A8A6A",fontSize:11}}>No</span>}
                           </td>
                           <td style={S.td}>
                             {editando
@@ -5909,6 +5927,15 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
                     <option value="false">No (no imponible)</option>
                   </select>
                 </div>
+                <div>
+                  <label style={S.lbl}>¿Ya pagado?</label>
+                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",marginTop:6}}>
+                    <input type="checkbox" checked={!!oaNuevo.yaPagado}
+                      onChange={e=>setOaNuevo(p=>({...p,yaPagado:e.target.checked}))}
+                      style={{width:14,height:14,accentColor:"#e74c3c"}}/>
+                    <span style={{fontSize:12,color:"#e74c3c"}}>Aparece como descuento</span>
+                  </label>
+                </div>
                 <div style={{alignSelf:"flex-end"}}>
                   <button onClick={()=>{
                     if(!oaNuevo.tId){alert("Selecciona un trabajador.");return;}
@@ -5917,7 +5944,9 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
                     setOtrasAsignaciones(p=>[...p,{id:nowId(),tId:Number(oaNuevo.tId),
                       mes:oaNuevo.mes??new Date().getMonth(),anio:oaNuevo.anio||new Date().getFullYear(),
                       concepto:oaNuevo.concepto.trim(),monto:Number(oaNuevo.monto),
-                      imponible:oaNuevo.imponible!==false,creado:hoy()}]);
+                      imponible:oaNuevo.imponible!==false,
+                      yaPagado:!!oaNuevo.yaPagado,
+                      creado:hoy()}]);
                     setOaNuevo({});
                   }} style={{...S.btnG,padding:"8px 16px",whiteSpace:"nowrap"}}>+ Agregar</button>
                 </div>
