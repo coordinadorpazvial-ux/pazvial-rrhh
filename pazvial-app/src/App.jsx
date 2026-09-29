@@ -297,7 +297,7 @@ function fmtFecha(f, conDia=false) {
 }
 
 // Tasas AFP 2026
-const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
+const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.1058};
 
 // Valores por día inhábil según cargo
 const VALOR_DIA_INABIL = { supervisor: 75000, auxiliar: 62500 };
@@ -472,10 +472,13 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
         // Segundo turno / nocturno: todas las horas son HE
         if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
-        // Día normal: sumar solo HE aprobadas por estadoEntrada/estadoSalida
-        // (ignorar horasExtraAprobadas si el estado general no es aprobado)
-        if (r.estadoEntrada === 'aprobado') totalMinExtra += (hBruto.extraEntrada||0) * 60;
-        if (r.estadoSalida  === 'aprobado') totalMinExtra += (hBruto.extraSalida||0) * 60;
+        // Día normal: sumar HE aprobadas
+        // estadoSalida puede ser null si fue aprobado globalmente (estado='aprobado')
+        const entAprobada = r.estadoEntrada === 'aprobado';
+        const salAprobada = r.estadoSalida === 'aprobado' ||
+          (!r.estadoSalida && !r.estadoEntrada && r.estado === 'aprobado');
+        if (entAprobada) totalMinExtra += (hBruto.extraEntrada||0) * 60;
+        if (salAprobada) totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
     }
   });
