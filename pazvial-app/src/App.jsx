@@ -5624,7 +5624,6 @@ export default function App() {
                         ["Total Imponible", liqPreview.totalImponible, true],
                         ...(liqPreview.viaticOper>0?[["🚗 Viático Operacional", liqPreview.viaticOper]]:[]),
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
-                        ...(liqPreview.otrasYaPagadas||[]).map(a=>[a.concepto||"Asignación ya pagada", Number(a.monto)]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
                         ...(liqPreview.otrasDelMes||[]).filter(a=>a.imponible&&!a.yaPagado).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
