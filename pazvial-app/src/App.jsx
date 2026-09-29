@@ -553,7 +553,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
-    otrasImponibles, otrasNoImponibles, otrasYaPagadas, descuentoYaPagado,
+    otrasImponibles, otrasNoImponibles, otrasDelMes, otrasYaPagadas, descuentoYaPagado,
     cc:"001",
   };
 }
