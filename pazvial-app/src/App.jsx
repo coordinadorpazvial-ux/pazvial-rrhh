@@ -4577,14 +4577,31 @@ export default function App() {
                                 <button onClick={()=>{
                                   const cargo = t?.ficha?.cargo || "";
                                   const valor = valorDiaInabil(cargo);
-                                  setRegistros(p=>p.map(x=>x.id===r.id?{...x,esDiaInabil:true,esContingencia:false,esAdministrativo:false,valorDiaInabil:valor,horasExtraAprobadas:Math.max(0,+(((()=>{const toM=t2=>{const [h,m]=t2.split(":").map(Number);return h*60+m;};return r.entrada&&r.salida?(toM(r.salida)-toM(r.entrada))/60:0;})())-10).toFixed(2)),_updatedAt:Date.now()}:x));
+                                  const toM = t2=>{const [h,m]=t2.split(":").map(Number);return h*60+m;};
+                                  const realesH = r.entrada&&r.salida?(toM(r.salida)-toM(r.entrada))/60:0;
+                                  const heExtra = Math.max(0,+(realesH-10).toFixed(2));
+                                  const updated = {...r,esDiaInabil:true,esContingencia:false,esAdministrativo:false,valorDiaInabil:valor,horasExtraAprobadas:heExtra,_updatedAt:Date.now()};
+                                  const nuevosRegistros = registros.map(x=>x.id===r.id?updated:x);
+                                  setRegistros(nuevosRegistros);
+                                  // Guardar inmediatamente en Firebase
+                                  escribiendoEnFirebase.current=true;
+                                  guardarEnFirebase({trabajadores,registros:nuevosRegistros,compensatorios,solicitudes,notificaciones,liquidaciones,anticipos,otrasAsignaciones,codigosUsados,cuadrillas,contingencias,params})
+                                    .then(()=>{setSyncEstado("ok");escribiendoEnFirebase.current=false;})
+                                    .catch(e=>{console.error("Error guardando inhábil:",e);escribiendoEnFirebase.current=false;setSyncEstado("error");});
                                 }}
                                   style={{...S.btn,fontSize:9,padding:"1px 6px",background:"rgba(52,152,219,0.2)",color:"#3498db"}}>
                                   📅 Inhábil
                                 </button>
                               )}
                               {r.esDiaInabil && (
-                                <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esDiaInabil:false,valorDiaInabil:undefined,horasExtraAprobadas:undefined,_updatedAt:Date.now()}:x))}
+                                <button onClick={()=>{
+                                  const nuevosReg = registros.map(x=>x.id===r.id?{...x,esDiaInabil:false,valorDiaInabil:undefined,horasExtraAprobadas:undefined,_updatedAt:Date.now()}:x);
+                                  setRegistros(nuevosReg);
+                                  escribiendoEnFirebase.current=true;
+                                  guardarEnFirebase({trabajadores,registros:nuevosReg,compensatorios,solicitudes,notificaciones,liquidaciones,anticipos,otrasAsignaciones,codigosUsados,cuadrillas,contingencias,params})
+                                    .then(()=>{setSyncEstado("ok");escribiendoEnFirebase.current=false;})
+                                    .catch(e=>{console.error(e);escribiendoEnFirebase.current=false;setSyncEstado("error");});
+                                }}
                                   style={{...S.btn,fontSize:9,padding:"1px 6px",background:"rgba(150,150,150,0.2)",color:"#aaa"}}>
                                   ✕ Inhábil
                                 </button>
