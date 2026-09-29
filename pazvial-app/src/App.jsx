@@ -437,14 +437,21 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // ── Acumular HE del período ───────────────────────────────────────────────
   let totalMinExtra = 0;
   let totalViaticosContingencia = 0;
+  let diasInhabilesCount = 0;
   regs.forEach(r => {
     if (esEspecial(r.fecha)) {
-      if (r.estado==="aprobado") {
-        const hBruto = r.horasExtraAprobadas !== undefined
-          ? r.horasExtraAprobadas
-          : calcularHoras(r.entrada,r.salida,r.fecha).extra;
-        totalMinExtra += hBruto * 60;
-        if (r.esContingencia) totalViaticosContingencia += 50000;
+      if (r.estado === "aprobado") {
+        if (r.esDiaInabil) {
+          diasInhabilesCount++;
+          const heExtra = r.horasExtraAprobadas || 0;
+          totalMinExtra += heExtra * 60;
+        } else {
+          const hBruto = r.horasExtraAprobadas !== undefined
+            ? r.horasExtraAprobadas
+            : calcularHoras(r.entrada,r.salida,r.fecha).extra;
+          totalMinExtra += hBruto * 60;
+          if (r.esContingencia) totalViaticosContingencia += 50000;
+        }
       }
     } else {
       // Solo sumar HE cuando están aprobadas (entrada o salida)
@@ -475,6 +482,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // HE sobre el tope → Viático Operacional (no imponible, sin mostrar cálculo)
   const viaticOper = Math.round(horasExtraExceso * valorHE);
 
+  // ── Días Inhábiles ───────────────────────────────────────────────────────
+  const cargoTrab = (ficha.cargo || "").toLowerCase();
+  const valorDiaInhabilTrab = cargoTrab.includes("supervisor") || cargoTrab.includes("coordinador")
+    ? 75000 : 62500;
+  const montoDiasInhabiles = diasInhabilesCount * valorDiaInhabilTrab;
+
   // ── Otras Asignaciones del período ──────────────────────────────────────
   const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
   const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
@@ -492,7 +505,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // ── Haberes ───────────────────────────────────────────────────────────────
   // Sueldo se mantiene completo en haberes — ausencias van a descuentos
   const sueldoEfectivo    = sueldoProporcional; // sin restar ausencias (van a descuentos)
-  const totalImponible    = sueldoEfectivo + valorHHExtra + gratif + otrasImponibles;
+  const totalImponible    = sueldoEfectivo + valorHHExtra + gratif + otrasImponibles + montoDiasInhabiles;
   const viaticosContingencia = totalViaticosContingencia;
   const totalNoImponible  = colacion + movilizacion + viaticosContingencia + viaticOper + otrasNoImponibles;
   const totalHaberes      = totalImponible + totalNoImponible;
@@ -524,6 +537,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     diasTrab, diasTrabProporcional, horasExtra, horasExtraLegales, horasExtraExceso, mes, anio,
     fechaIngreso,
     sueldoBase, sueldoProporcional, sueldoEfectivo, valorHHExtra, gratif, viaticOper,
+    diasInhabilesCount, montoDiasInhabiles,
     totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
     prevision_monto:prevision, totalDescLegales,
@@ -2159,7 +2173,18 @@ export default function App() {
   // ── Admin: aprobar/rechazar extra ─────────────────────
   // ── HE clásica (días especiales: sáb/dom/feriado) ──
   function aprobarExtra(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estado:"aprobado", _updatedAt:Date.now()} : r));
+    setRegistros(p => p.map(r => {
+      if (r.id !== id) return r;
+      if (r.esDiaInabil) {
+        // Día inhábil: calcular HE diferencial sobre 10h
+        const toMin = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+        const realesMin = r.entrada&&r.salida ? toMin(r.salida)-toMin(r.entrada) : 0;
+        const realesH = +(realesMin/60).toFixed(2);
+        const heExtra = Math.max(0, realesH - 10);
+        return {...r, estado:"aprobado", horasExtraAprobadas: heExtra, _updatedAt:Date.now()};
+      }
+      return {...r, estado:"aprobado", _updatedAt:Date.now()};
+    }));
     const r = registros.find(x => x.id===id);
     if (r) pushNotif(r.tId, "✅ Tus horas extraordinarias del " + r.fecha + " fueron aprobadas.");
   }
@@ -2377,6 +2402,9 @@ export default function App() {
     const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
     const otrasImpRow = (d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "";
     const otrasNoImpRow = (d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "";
+    const diasInhabilRow = (d.diasInhabilesCount||0)>0
+      ? `<tr><td>📅 Trabajo días inhábiles (${d.diasInhabilesCount} día(s))</td><td style="text-align:right">$${fmt(d.montoDiasInhabiles)}</td><td></td><td></td></tr>`
+      : "";
     const heRow = (d.valorHHExtra||0)>0 ? `<tr><td>HH Extra 50% (${d.horasExtraLegales||d.horasExtra||0}h)</td><td style="text-align:right">$${fmt(d.valorHHExtra)}</td><td></td><td></td></tr>` : "";
     const gratifRow = (d.gratif||0)>0 ? `<tr><td>Gratificación Legal</td><td style="text-align:right">$${fmt(d.gratif)}</td><td></td><td></td></tr>` : "";
 
@@ -2425,6 +2453,7 @@ export default function App() {
     <table>
       <tr><th>HABERES</th><th style="text-align:right">MONTO</th><th>DESCUENTOS</th><th style="text-align:right">MONTO</th></tr>
       <tr><td>${sueldoLabel}</td><td style="text-align:right">$${fmt(d.sueldoEfectivo||d.sueldoProporcional||d.sueldoBase)}</td><td style="color:#c0392b">Cotización AFP</td><td style="text-align:right;color:#c0392b">$${fmt(d.afpOblig)}</td></tr>
+      ${diasInhabilRow}
       ${heRow}
       ${gratifRow}
       ${otrasImpRow}
@@ -4477,7 +4506,17 @@ export default function App() {
                                       const reales = r.entrada && r.salida ? +((toMin(r.salida)-toMin(r.entrada))/60).toFixed(1) : hBruto.extra;
                                       return reales + "h administrativo (horas reales)";
                                     })()
-                                  : `${hBruto.extra}h día especial (mín. 8h)`}
+                                  : r.esDiaInabil
+                                    ? (()=>{
+                                        const toMin2 = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+                                        const realesMin = r.entrada&&r.salida ? toMin2(r.salida)-toMin2(r.entrada) : 0;
+                                        const realesH = +(realesMin/60).toFixed(2);
+                                        const heExtra = Math.max(0, realesH - 10);
+                                        const cargo = t?.ficha?.cargo||"";
+                                        const val = valorDiaInabil(cargo);
+                                        return `📅 Día inhábil $${val.toLocaleString("es-CL")}${heExtra>0?` + ${heExtra}h HE`:""}`;
+                                      })()
+                                    : `${hBruto.extra}h día especial (mín. 8h)`}
                             </div>
                             {r.estado==="pendiente" && (
                               <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
@@ -4493,8 +4532,18 @@ export default function App() {
                                     🖥 Administrativo
                                   </button>
                                 )}
-                                {(r.esContingencia||r.esAdministrativo) && (
-                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:false,esAdministrativo:false}:x))}
+                                {!r.esContingencia && !r.esAdministrativo && !r.esDiaInabil && (
+                                  <button onClick={()=>{
+                                    const cargo = t?.ficha?.cargo || "";
+                                    const valor = valorDiaInabil(cargo);
+                                    setRegistros(p=>p.map(x=>x.id===r.id?{...x,esDiaInabil:true,esContingencia:false,esAdministrativo:false,valorDiaInabil:valor,_updatedAt:Date.now()}:x));
+                                  }}
+                                    style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(52,152,219,0.2)",color:"#3498db"}}>
+                                    📅 Día Inhábil
+                                  </button>
+                                )}
+                                {(r.esContingencia||r.esAdministrativo||r.esDiaInabil) && (
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:false,esAdministrativo:false,esDiaInabil:false,valorDiaInabil:undefined,_updatedAt:Date.now()}:x))}
                                     style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(150,150,150,0.2)",color:"#aaa"}}>
                                     ✕ Quitar
                                   </button>
@@ -5536,6 +5585,7 @@ export default function App() {
                       <div style={{ color:"#9A8A6A", fontWeight:"bold", marginBottom:8 }}>HABERES</div>
                       {[
                         [(liqPreview.diasTrabProporcional>0&&liqPreview.diasTrabProporcional<30)?"Sueldo Proporcional ("+liqPreview.diasTrabProporcional+"/30 días)":"Sueldo Base", liqPreview.sueldoProporcional||liqPreview.sueldoBase],
+                        ...(liqPreview.diasInhabilesCount>0?[["📅 Trabajo días inhábiles ("+liqPreview.diasInhabilesCount+" día(s))", liqPreview.montoDiasInhabiles]]:[]),
                         ...(liqPreview.valorHHExtra>0?[["Horas Extra 50% ("+(liqPreview.horasExtraLegales||liqPreview.horasExtra)+"h)", liqPreview.valorHHExtra]]:[]),
                         ...(liqPreview.gratif>0?[["Gratificación Legal", liqPreview.gratif]]:[]),
                         ["Total Imponible", liqPreview.totalImponible, true],
