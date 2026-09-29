@@ -2404,10 +2404,10 @@ export default function App() {
     const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
     const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
     const otrasImpRow = (d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "";
-    // Filas no imponibles por concepto (incluye ya pagados)
+    // Filas no imponibles por concepto individual (sin fallback genérico para evitar duplicados)
     const otrasNoImpRow = (d.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>
       `<tr><td style="color:#8e44ad">📎 ${a.concepto||"Otra asignación"}</td><td style="text-align:right;color:#8e44ad">$${fmt(Number(a.monto)||0)}</td><td></td><td></td></tr>`
-    ).join("") || ((d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "");
+    ).join("");
     const diasInhabilRow = (d.diasInhabilesCount||0)>0
       ? `<tr><td>📅 Trabajo días inhábiles (${d.diasInhabilesCount} día(s))</td><td style="text-align:right">$${fmt(d.montoDiasInhabiles)}</td><td></td><td></td></tr>`
       : "";
@@ -4561,10 +4561,26 @@ export default function App() {
                                 <button onClick={()=>setMotivoModal({tipo:"extra",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"2px 6px"}}>✗</button>
                               </div>
                             )}
-                            {r.estado==="aprobado" && <div style={{display:"flex",alignItems:"center",gap:4}}>
+                            {r.estado==="aprobado" && <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
                               <span style={{color:"#27ae60",fontSize:11}}>✓ Aprobado</span>
                               <button onClick={()=>revertirExtra(r.id)} title="Revertir"
                                 style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
+                              {!r.esDiaInabil && (
+                                <button onClick={()=>{
+                                  const cargo = t?.ficha?.cargo || "";
+                                  const valor = valorDiaInabil(cargo);
+                                  setRegistros(p=>p.map(x=>x.id===r.id?{...x,esDiaInabil:true,esContingencia:false,esAdministrativo:false,valorDiaInabil:valor,horasExtraAprobadas:Math.max(0,+(((()=>{const toM=t2=>{const [h,m]=t2.split(":").map(Number);return h*60+m;};return r.entrada&&r.salida?(toM(r.salida)-toM(r.entrada))/60:0;})())-10).toFixed(2)),_updatedAt:Date.now()}:x));
+                                }}
+                                  style={{...S.btn,fontSize:9,padding:"1px 6px",background:"rgba(52,152,219,0.2)",color:"#3498db"}}>
+                                  📅 Inhábil
+                                </button>
+                              )}
+                              {r.esDiaInabil && (
+                                <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esDiaInabil:false,valorDiaInabil:undefined,horasExtraAprobadas:undefined,_updatedAt:Date.now()}:x))}
+                                  style={{...S.btn,fontSize:9,padding:"1px 6px",background:"rgba(150,150,150,0.2)",color:"#aaa"}}>
+                                  ✕ Inhábil
+                                </button>
+                              )}
                             </div>}
                             {r.estado==="rechazado" && <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazado</span>}
                           </div>
