@@ -299,6 +299,14 @@ function fmtFecha(f, conDia=false) {
 // Tasas AFP 2026
 const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PLANVITAL:0.1116,UNO:0.1046,MODELO:0.0058};
 
+// Valores por día inhábil según cargo
+const VALOR_DIA_INABIL = { supervisor: 75000, auxiliar: 62500 };
+function valorDiaInabil(cargo) {
+  const c = (cargo||"").toLowerCase();
+  if (c.includes("supervisor") || c.includes("coordinador")) return VALOR_DIA_INABIL.supervisor;
+  return VALOR_DIA_INABIL.auxiliar;
+}
+
 const PARAMS_DEFAULT = {
   jornadaSemanal: 42, diasBaseMensual: 30, recargHE: 1.5,
   IMM: 553553, // IMM vigente 2026 topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
@@ -5619,8 +5627,9 @@ export default function App() {
                         ...(liqPreview.otrasYaPagadas||[]).map(a=>[a.concepto||"Asignación ya pagada", Number(a.monto)]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
-                        ...(liqPreview.otrasImponibles>0?[["Otras asignaciones (imponible)", liqPreview.otrasImponibles]]:[]),
-                        ...(liqPreview.otrasNoImponibles>0?[["Otras asignaciones (no imponible)", liqPreview.otrasNoImponibles]]:[]),
+                        ...(liqPreview.otrasDelMes||[]).filter(a=>a.imponible&&!a.yaPagado).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
+                        ...((liqPreview.otrasDelMes||[]).length===0&&(liqPreview.otrasImponibles||0)>0?[["Otras asign. (imponible)", liqPreview.otrasImponibles]]:[]),
+                        ...(liqPreview.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
                         ["TOTAL HABERES", liqPreview.totalHaberes, true, "#FFD700"],
                       ].map(([l,v,b,c])=>(
