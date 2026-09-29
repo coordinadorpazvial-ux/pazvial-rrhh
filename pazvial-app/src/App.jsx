@@ -491,7 +491,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // ── Otras Asignaciones del período ──────────────────────────────────────
   const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
   const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible && !a.yaPagado).reduce((s,a)=>s+Number(a.monto),0);
-  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible && !a.yaPagado).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0); // incluye ya pagados (aparecen también como descuento)
   // Asignaciones ya pagadas → aparecen como descuento
   const otrasYaPagadas    = otrasDelMes.filter(a =>  a.yaPagado);
   const descuentoYaPagado = otrasYaPagadas.reduce((s,a)=>s+Number(a.monto),0);
@@ -2404,7 +2404,10 @@ export default function App() {
     const viaticRow = (d.viaticosContingencia||0)>0 ? `<tr><td style="color:#e67e22">⚠️ Viático Contingencia</td><td style="text-align:right;color:#e67e22">$${fmt(d.viaticosContingencia)}</td><td></td><td></td></tr>` : "";
     const viaticOperRow = (d.viaticOper||0)>0 ? `<tr><td style="color:#3498db">🚗 Viático Operacional</td><td style="text-align:right;color:#3498db">$${fmt(d.viaticOper)}</td><td></td><td></td></tr>` : "";
     const otrasImpRow = (d.otrasImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasImponibles)}</td><td></td><td></td></tr>` : "";
-    const otrasNoImpRow = (d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "";
+    // Filas no imponibles por concepto (incluye ya pagados)
+    const otrasNoImpRow = (d.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>
+      `<tr><td style="color:#8e44ad">📎 ${a.concepto||"Otra asignación"}</td><td style="text-align:right;color:#8e44ad">$${fmt(Number(a.monto)||0)}</td><td></td><td></td></tr>`
+    ).join("") || ((d.otrasNoImponibles||0)>0 ? `<tr><td style="color:#8e44ad">📎 Otras asign. (no imponible)</td><td style="text-align:right;color:#8e44ad">$${fmt(d.otrasNoImponibles)}</td><td></td><td></td></tr>` : "");
     const diasInhabilRow = (d.diasInhabilesCount||0)>0
       ? `<tr><td>📅 Trabajo días inhábiles (${d.diasInhabilesCount} día(s))</td><td style="text-align:right">$${fmt(d.montoDiasInhabiles)}</td><td></td><td></td></tr>`
       : "";
@@ -2676,12 +2679,14 @@ export default function App() {
             })();
         // Mostrar si tiene HE (aprobadas o pendientes)
       const tieneHEPendiente = r.estadoEntrada==="pendiente" || r.estadoSalida==="pendiente" || (esp && r.estado==="pendiente");
+      // Días inhábiles sin diferencial HE no aparecen en el reporte
+      if (r.esDiaInabil && (r.horasExtraAprobadas||0) <= 0) return;
       if (he <= 0 && !tieneHEPendiente) return;
       const heDisplay = he > 0 ? he : ((h.extraEntrada||0) + (h.extraSalida||0) + (esp?(h.extra||0):0));
       if (heDisplay <= 0) return;
         const heParaFila = he > 0 ? he : heDisplay;
       const est = !tieneHEPendiente ? "Aprobada" : "Pendiente";
-        const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : esp ? "Día especial" : "Normal";
+        const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : r.esDiaInabil ? "Día inhábil" : esp ? "Día especial" : "Normal";
         const bgColor = r.estado==="aprobado" ? "#f0fff4" : "#fffbf0";
         filasT.push("<tr style='background:"+bgColor+"'><td>"+fmtD(r.fecha)+"</td><td>"+r.entrada+"</td><td>"+r.salida+"</td><td style='color:"+(est==="Pendiente"?"#e67e22":"#27ae60")+";font-weight:bold'>"+heParaFila+"h</td><td>"+tipo+"</td><td style='color:"+(est==="Aprobada"?"#27ae60":"#e67e22")+"'>"+est+"</td></tr>");
         totalHE += he;
@@ -5595,6 +5600,7 @@ export default function App() {
                         ["Total Imponible", liqPreview.totalImponible, true],
                         ...(liqPreview.viaticOper>0?[["🚗 Viático Operacional", liqPreview.viaticOper]]:[]),
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
+                        ...(liqPreview.otrasYaPagadas||[]).map(a=>[a.concepto||"Asignación ya pagada", Number(a.monto)]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
                         ...(liqPreview.otrasImponibles>0?[["Otras asignaciones (imponible)", liqPreview.otrasImponibles]]:[]),
