@@ -467,25 +467,19 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     } else {
       // Solo sumar HE cuando están aprobadas (entrada o salida)
       const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
-      if (r.segundoTurno || r.esNocturno) {
-        // Segundo turno / nocturno: todas las horas son HE
-        if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
-      } else {
-        // Día normal: SIEMPRE calcular desde entrada/salida (ignorar horasExtraAprobadas)
-        // estadoEntrada/estadoSalida null + estado='aprobado' = aprobado globalmente
-        const entAprobada = r.estadoEntrada === 'aprobado' ||
-          (r.estadoEntrada === null && r.estado === 'aprobado');
-        const salAprobada = r.estadoSalida === 'aprobado' ||
-          (r.estadoSalida === null && r.estado === 'aprobado');
-        const addEnt = entAprobada ? (hBruto.extraEntrada||0) : 0;
-        const addSal = salAprobada ? (hBruto.extraSalida||0) : 0;
-        if (addEnt + addSal > 0) console.log('[DEBUG LIQ]', r.fecha, r.entrada+'→'+r.salida, 'ent:'+addEnt.toFixed(2)+'h sal:'+addSal.toFixed(2)+'h total:'+(addEnt+addSal).toFixed(2)+'h estEnt:'+r.estadoEntrada+' estSal:'+r.estadoSalida+' estado:'+r.estado);
-        totalMinExtra += (addEnt + addSal) * 60;
+      // Lógica idéntica al reporte de HE
+      {
+        const entAp = r.estadoEntrada === 'aprobado' || (r.estadoEntrada === null && r.estado === 'aprobado');
+        const salAp = r.estadoSalida === 'aprobado' || (r.estadoSalida === null && r.estado === 'aprobado');
+        let heReg = 0;
+        if (entAp) heReg += (hBruto.extraEntrada||0);
+        if (salAp) heReg += (hBruto.extraSalida||0);
+        if ((r.segundoTurno||r.esNocturno) && r.estado === 'aprobado') heReg += (hBruto.extra||0);
+        totalMinExtra += heReg * 60;
       }
     }
   });
   const horasExtra = +(totalMinExtra/60).toFixed(2);
-  console.log('[DEBUG TOTAL HE]', horasExtra, 'h de totalMinExtra='+totalMinExtra);
 
   // ── Tope legal: 48 HE por período ────────────────────────────────────────
   const TOPE_HE_LEGAL = 48;
