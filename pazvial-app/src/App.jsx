@@ -179,7 +179,7 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
   // ── Bloque HE entrada anticipada (antes de 07:00) ──
   // Tiempo entre la entrada real y las 08:00
   let extraEntrada = 0;
-  if (minEntrada < UMBRAL_ANTICIP) {
+  if (minEntrada <= UMBRAL_ANTICIP) { // 07:30 o antes genera HE anticipada
     const bloqueAntic = INICIO - minEntrada; // minutos desde entrada hasta 08:00
     if (estadoEntrada === undefined || estadoEntrada === null) {
       // Sin estado independiente: sumar siempre (compatibilidad)
