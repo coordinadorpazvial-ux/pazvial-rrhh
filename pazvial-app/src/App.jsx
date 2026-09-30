@@ -476,10 +476,11 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
         if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
         // Día normal: sumar HE aprobadas
-        // estadoSalida puede ser null si fue aprobado globalmente (estado='aprobado')
-        const entAprobada = r.estadoEntrada === 'aprobado';
+        // estadoEntrada/estadoSalida null + estado='aprobado' = aprobado globalmente
+        const entAprobada = r.estadoEntrada === 'aprobado' ||
+          (r.estadoEntrada === null && r.estado === 'aprobado');
         const salAprobada = r.estadoSalida === 'aprobado' ||
-          (!r.estadoSalida && !r.estadoEntrada && r.estado === 'aprobado');
+          (r.estadoSalida === null && r.estado === 'aprobado');
         if (entAprobada) totalMinExtra += (hBruto.extraEntrada||0) * 60;
         if (salAprobada) totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
@@ -2686,13 +2687,12 @@ export default function App() {
           : esp ? (r.estado==="aprobado"?(h.extra||0):0)
           : (()=>{
               // Días normales: sumar HE entrada + HE salida según sus estados
+              // null + estado='aprobado' = aprobado globalmente
               let heTotal = 0;
-              // HE entrada: aprobada explícitamente
-              if (r.estadoEntrada==="aprobado") heTotal += (h.extraEntrada||0);
-              // HE salida: aprobada explícitamente, o estado general aprobado sin estadoSalida
-              const salAprobada = r.estadoSalida==="aprobado" ||
-                (!r.estadoSalida && !r.estadoEntrada && r.estado==="aprobado");
-              if (salAprobada) heTotal += (h.extraSalida||0);
+              const entAp = r.estadoEntrada==="aprobado" || (r.estadoEntrada===null && r.estado==="aprobado");
+              const salAp = r.estadoSalida==="aprobado" || (r.estadoSalida===null && r.estado==="aprobado");
+              if (entAp) heTotal += (h.extraEntrada||0);
+              if (salAp) heTotal += (h.extraSalida||0);
               if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
               return heTotal;
             })();
