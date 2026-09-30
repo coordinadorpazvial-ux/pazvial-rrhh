@@ -477,6 +477,13 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
           (r.estadoEntrada === null && r.estado === 'aprobado');
         const salAprobada = r.estadoSalida === 'aprobado' ||
           (r.estadoSalida === null && r.estado === 'aprobado');
+        if (r.entrada <= '08:00' && r.entrada >= '07:00') {
+          console.log('[DEBUG HE]', r.fecha, r.entrada, '→', r.salida,
+            'estEnt:', r.estadoEntrada, 'estSal:', r.estadoSalida, 'estado:', r.estado,
+            'entAp:', entAprobada, 'salAp:', salAprobada,
+            'heBruto.extraEntrada:', hBruto.extraEntrada, 'heBruto.extraSalida:', hBruto.extraSalida,
+            'horasExtraAprobadas:', r.horasExtraAprobadas);
+        }
         if (entAprobada) totalMinExtra += (hBruto.extraEntrada||0) * 60;
         if (salAprobada) totalMinExtra += (hBruto.extraSalida||0) * 60;
       }
