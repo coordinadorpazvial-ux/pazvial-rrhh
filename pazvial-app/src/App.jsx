@@ -2682,10 +2682,14 @@ export default function App() {
         const he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
           : esp ? (r.estado==="aprobado"?(h.extra||0):0)
           : (()=>{
-              // Días normales: sumar solo HE aprobadas
+              // Días normales: sumar HE entrada + HE salida según sus estados
               let heTotal = 0;
+              // HE entrada: aprobada explícitamente
               if (r.estadoEntrada==="aprobado") heTotal += (h.extraEntrada||0);
-              if (r.estadoSalida==="aprobado") heTotal += (h.extraSalida||0);
+              // HE salida: aprobada explícitamente, o estado general aprobado sin estadoSalida
+              const salAprobada = r.estadoSalida==="aprobado" ||
+                (!r.estadoSalida && !r.estadoEntrada && r.estado==="aprobado");
+              if (salAprobada) heTotal += (h.extraSalida||0);
               if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
               return heTotal;
             })();
