@@ -1083,8 +1083,9 @@ function FichaForm({
                           <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{fmtFecha(h.registradoEn)}</td>
                           <td style={{padding:"7px 9px"}}>
                             <div style={{display:"flex",gap:4}}>
-                              <button title="Editar" style={{...S.btn,fontSize:10,padding:"2px 7px"}}
-                                onClick={()=>setHistEditando({...h,_trabId:trabReal.id})}>✏️</button>
+                              <button title="Editar"
+                                style={{background:"rgba(52,152,219,0.2)",color:"#3498db",border:"1px solid rgba(52,152,219,0.4)",borderRadius:4,fontSize:11,padding:"3px 8px",cursor:"pointer"}}
+                                onClick={()=>{ const reg={...h,_trabId:trabReal.id}; setHistEditando(reg); }}>✏️ Editar</button>
                               <button title="Eliminar" style={{...S.btnD,fontSize:10,padding:"2px 7px"}}
                                 onClick={()=>{
                                   if(!window.confirm(`¿Eliminar registro desde ${fmtFecha(h.desde)}?`)) return;
