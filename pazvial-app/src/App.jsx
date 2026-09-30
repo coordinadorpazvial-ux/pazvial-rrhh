@@ -181,8 +181,8 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
   let extraEntrada = 0;
   if (minEntrada < UMBRAL_ANTICIP) {
     const bloqueAntic = INICIO - minEntrada; // minutos desde entrada hasta 08:00
-    if (estadoEntrada === undefined) {
-      // Compatibilidad: sin estados independientes, se suma siempre
+    if (estadoEntrada === undefined || estadoEntrada === null) {
+      // Sin estado independiente: sumar siempre (compatibilidad)
       extraEntrada = +(bloqueAntic/60).toFixed(2);
     } else if (estadoEntrada === "aprobado") {
       extraEntrada = +(bloqueAntic/60).toFixed(2);
@@ -197,8 +197,8 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
   let extraSalida = 0;
   if (minSalida > fin) {
     const bloqueSalida = minSalida - fin;
-    if (estadoSalida === undefined) {
-      // Compatibilidad: sin estados independientes, se suma siempre
+    if (estadoSalida === undefined || estadoSalida === null) {
+      // Sin estado independiente: sumar siempre (compatibilidad)
       extraSalida = +(bloqueSalida/60).toFixed(2);
     } else if (estadoSalida === "aprobado") {
       extraSalida = +(bloqueSalida/60).toFixed(2);
@@ -2226,7 +2226,7 @@ export default function App() {
   }
 
   function aprobarHEEntrada(id) {
-    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado", _updatedAt:Date.now()} : r));
+    setRegistros(p => p.map(r => r.id===id ? {...r, estadoEntrada:"aprobado", entradaAnticipada:true, _updatedAt:Date.now()} : r));
     const r = registros.find(x => x.id===id);
     if (r) {
       const h = calcularHoras(r.entrada, r.salida||"08:00", r.fecha, "aprobado", r.estadoSalida||null);
@@ -3307,14 +3307,26 @@ export default function App() {
   // ═══════════════════════════════════════════════════════
   // DATOS DERIVADOS
   // ═══════════════════════════════════════════════════════
+  const toMinBandeja = t => { try { const [h,m]=t.split(":").map(Number); return h*60+m; } catch(e){return 0;} };
   const regConExtraPendiente = registros.filter(r => {
     if (!r.salida) return false;
     // HE clásica (día especial): solo pendientes
     if (esEspecial(r.fecha) && r.estado==="pendiente") return true;
-    // HE entrada anticipada pendiente
+    // HE entrada anticipada pendiente (explícita)
     if (r.estadoEntrada==="pendiente") return true;
     // HE salida posterior pendiente
     if (r.estadoSalida==="pendiente") return true;
+    // Entrada antes de 07:30 sin estado de entrada definido → mostrar para aprobación
+    if (!esEspecial(r.fecha) && r.entrada && toMinBandeja(r.entrada) <= 450
+        && !r.estadoEntrada && r.estado!=="rechazado") {
+      return true;
+    }
+    // Salida después del horario sin estadoSalida definido pero con estado aprobado general
+    const finBandeja = esViernes(r.fecha) ? 840 : 1080;
+    if (!esEspecial(r.fecha) && r.salida && toMinBandeja(r.salida) > finBandeja
+        && !r.estadoSalida && !r.estadoEntrada && r.estado==="aprobado") {
+      return true;
+    }
     return false;
   });
 
@@ -4492,7 +4504,7 @@ export default function App() {
                       {/* ── Columna HE Entrada ── */}
                       <td style={S.td}>
                         {esDiaEsp ? <span style={{color:"#aaa"}}>—</span>
-                        : r.estadoEntrada==="pendiente" ? (
+                        : (r.estadoEntrada==="pendiente" || (!r.estadoEntrada && r.entrada && toMinBandeja(r.entrada) <= 450)) && r.estadoEntrada!=="aprobado" && r.estadoEntrada!=="rechazado" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extraEntrada}h anticipadas
