@@ -1081,6 +1081,23 @@ function FichaForm({
                           <td style={{padding:"7px 9px",textAlign:"center",color:h.gratificacion?"#27ae60":"#aaa"}}>{h.gratificacion?"✓":"—"}</td>
                           <td style={{padding:"7px 9px",color:"#d0e0ff"}}>{h.motivo}</td>
                           <td style={{padding:"7px 9px",color:"#7A6A4A",fontSize:10}}>{fmtFecha(h.registradoEn)}</td>
+                          <td style={{padding:"7px 9px"}}>
+                            <div style={{display:"flex",gap:4}}>
+                              <button title="Editar" style={{...S.btn,fontSize:10,padding:"2px 7px"}}
+                                onClick={()=>setHistEditando({...h,_trabId:trabReal.id})}>✏️</button>
+                              <button title="Eliminar" style={{...S.btnD,fontSize:10,padding:"2px 7px"}}
+                                onClick={()=>{
+                                  if(!window.confirm(`¿Eliminar registro desde ${fmtFecha(h.desde)}?`)) return;
+                                  setTrabajadores(p=>p.map(t=>{
+                                    if(t.id!==trabReal.id) return t;
+                                    const hist=(t.ficha?.historialRemuneraciones||[]).filter(x=>x.id!==h.id);
+                                    const vig=[...hist].sort((a,b)=>b.desde.localeCompare(a.desde))[0];
+                                    return {...t,ficha:{...t.ficha,historialRemuneraciones:hist,
+                                      ...(vig?{sueldoPactado:String(vig.sueldo),colacion:vig.colacion,movilizacion:vig.movilizacion,gratificacion:vig.gratificacion}:{})}};
+                                  }));
+                                }}>🗑</button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -1565,6 +1582,7 @@ export default function App() {
   // ── Historial de remuneraciones ──────────────────────
   const [histModalTrabId, setHistModalTrabId] = useState(null);
   const [histNuevo,       setHistNuevo]       = useState({desde:"",sueldo:"",colacion:"",movilizacion:"",gratificacion:false,motivo:""});
+  const [histEditando,    setHistEditando]    = useState(null); // registro en edición
   const [histMsg,         setHistMsg]         = useState({tipo:"",txt:""});
 
   // ── Nuevo trabajador (ficha borrador) ─────────────────
@@ -2907,6 +2925,22 @@ export default function App() {
   }
 
   // ── HISTORIAL REMUNERACIONES ────────────────────────
+  function guardarEdicionRemuneracion() {
+    if (!histEditando) return;
+    const {_trabId, id, desde, sueldo, colacion, movilizacion, gratificacion, motivo} = histEditando;
+    if (!desde || !sueldo || isNaN(Number(sueldo)) || Number(sueldo) <= 0) return;
+    setTrabajadores(p=>p.map(t=>{
+      if(t.id!==_trabId) return t;
+      const hist = (t.ficha?.historialRemuneraciones||[]).map(x=>x.id===id
+        ? {...x, desde, sueldo:Number(sueldo), colacion:Number(colacion)||0, movilizacion:Number(movilizacion)||0, gratificacion, motivo}
+        : x);
+      const vig = [...hist].sort((a,b)=>b.desde.localeCompare(a.desde))[0];
+      return {...t, ficha:{...t.ficha, historialRemuneraciones:hist,
+        sueldoPactado:String(vig.sueldo), colacion:vig.colacion, movilizacion:vig.movilizacion, gratificacion:vig.gratificacion}};
+    }));
+    setHistEditando(null);
+  }
+
   function grabarNuevaRemuneracion(trabId) {
     setHistMsg({tipo:"",txt:""});
     const {desde,sueldo,colacion,movilizacion,gratificacion,motivo} = histNuevo;
@@ -6800,6 +6834,48 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
           </div>
         )}
 
+
+
+        {/* MODAL EDICIÓN REMUNERACIÓN */}
+        {histEditando && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}
+            onClick={e=>e.target===e.currentTarget&&setHistEditando(null)}>
+            <div style={{background:"#1a1a1a",border:"1px solid rgba(255,215,0,0.3)",borderRadius:12,padding:24,minWidth:340,maxWidth:460,width:"90%"}}>
+              <h3 style={{color:"#FFD700",marginTop:0}}>✏️ Editar Remuneración</h3>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={S.lbl}>Desde</label>
+                  <input type="date" style={S.inp} value={histEditando.desde}
+                    onChange={e=>setHistEditando(p=>({...p,desde:e.target.value}))}/>
+                </div>
+                <div><label style={S.lbl}>Sueldo</label>
+                  <input type="number" style={S.inp} value={histEditando.sueldo}
+                    onChange={e=>setHistEditando(p=>({...p,sueldo:e.target.value}))}/>
+                </div>
+                <div><label style={S.lbl}>Colación</label>
+                  <input type="number" style={S.inp} value={histEditando.colacion||0}
+                    onChange={e=>setHistEditando(p=>({...p,colacion:e.target.value}))}/>
+                </div>
+                <div><label style={S.lbl}>Movilización</label>
+                  <input type="number" style={S.inp} value={histEditando.movilizacion||0}
+                    onChange={e=>setHistEditando(p=>({...p,movilizacion:e.target.value}))}/>
+                </div>
+                <div style={{gridColumn:"1/-1"}}><label style={S.lbl}>Motivo</label>
+                  <input type="text" style={S.inp} value={histEditando.motivo||""}
+                    onChange={e=>setHistEditando(p=>({...p,motivo:e.target.value}))}/>
+                </div>
+                <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8}}>
+                  <label style={S.lbl}>Gratificación legal</label>
+                  <input type="checkbox" checked={!!histEditando.gratificacion}
+                    onChange={e=>setHistEditando(p=>({...p,gratificacion:e.target.checked}))}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
+                <button style={{...S.btn,fontSize:12}} onClick={()=>setHistEditando(null)}>Cancelar</button>
+                <button style={{...S.btnB,fontSize:12}} onClick={guardarEdicionRemuneracion}>✅ Guardar</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
