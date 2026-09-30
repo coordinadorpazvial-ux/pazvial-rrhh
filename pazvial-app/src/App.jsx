@@ -1585,7 +1585,6 @@ export default function App() {
   const [histModalTrabId, setHistModalTrabId] = useState(null);
   const [histNuevo,       setHistNuevo]       = useState({desde:"",sueldo:"",colacion:"",movilizacion:"",gratificacion:false,motivo:""});
   const [histEditando,    setHistEditando]    = useState(null);
-  const [histEditando,    setHistEditando]    = useState(null); // registro en edición
   const [histMsg,         setHistMsg]         = useState({tipo:"",txt:""});
 
   // ── Nuevo trabajador (ficha borrador) ─────────────────
