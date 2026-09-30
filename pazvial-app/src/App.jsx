@@ -467,15 +467,11 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     } else {
       // Solo sumar HE cuando están aprobadas (entrada o salida)
       const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
-      // Si hay horasExtraAprobadas (override manual), usar ese valor
-      if (r.horasExtraAprobadas !== undefined && r.estado === 'aprobado') {
-        // Override manual aprobado — usar el valor asignado
-        totalMinExtra += r.horasExtraAprobadas * 60;
-      } else if (r.segundoTurno || r.esNocturno) {
+      if (r.segundoTurno || r.esNocturno) {
         // Segundo turno / nocturno: todas las horas son HE
         if (r.estado === 'aprobado') totalMinExtra += (hBruto.extra||0) * 60;
       } else {
-        // Día normal: sumar HE aprobadas
+        // Día normal: SIEMPRE calcular desde entrada/salida (ignorar horasExtraAprobadas)
         // estadoEntrada/estadoSalida null + estado='aprobado' = aprobado globalmente
         const entAprobada = r.estadoEntrada === 'aprobado' ||
           (r.estadoEntrada === null && r.estado === 'aprobado');
