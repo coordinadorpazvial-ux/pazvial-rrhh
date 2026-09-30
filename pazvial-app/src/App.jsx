@@ -511,7 +511,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // Base = sueldo proporcional + HH Extra + otras imponibles
   // Gratificación = 25% de la base, con tope = 4.75 × IMM / 12
   const IMM = (paramsExtra && paramsExtra.IMM) || 553553; // IMM vigente 2026
-  const baseGratif = sueldoProporcional + valorHHExtra + otrasImponibles;
+  // Días inhábiles son imponibles → se incluyen en la base de gratificación
+  const baseGratif = sueldoProporcional + valorHHExtra + otrasImponibles + montoDiasInhabiles;
   const gratif = remVigente.gratificacion
     ? Math.min(Math.round(baseGratif * 0.25), Math.round(IMM * 4.75 / 12))
     : 0;
