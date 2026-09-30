@@ -5570,9 +5570,12 @@ export default function App() {
                     setHistNuevo={setHistNuevo}
                     histMsg={histMsg}
                     setHistMsg={setHistMsg}
+                    histEditando={histEditando}
+                    setHistEditando={setHistEditando}
                     grabarNuevoTrabajador={grabarNuevoTrabajador}
                     grabarEdicionFicha={grabarEdicionFicha}
                     grabarNuevaRemuneracion={grabarNuevaRemuneracion}
+                    guardarEdicionRemuneracion={guardarEdicionRemuneracion}
                     generarCodigo={generarCodigo}
                     fmtRut={fmtRut}
                     nowId={nowId}
