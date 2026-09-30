@@ -163,7 +163,7 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
 
   const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00 en minutos
   const INICIO = 480; // 08:00 en minutos
-  const UMBRAL_ANTICIP = 450; // 07:30 — entradas antes de esta hora generan HE anticipada
+  const UMBRAL_ANTICIP = 450; // 07:30 o antes — entradas a esta hora o antes generan HE anticipada
 
   const minEntrada = toMin(entrada);
   const minSalida  = toMin(salida);
@@ -2093,7 +2093,7 @@ export default function App() {
         return;
       }
       const minEntrada = toMin(hora);
-      const tieneHEEntrada = !esEspecial(fecha) && minEntrada < 450; // antes de 07:30
+      const tieneHEEntrada = !esEspecial(fecha) && minEntrada <= 450; // 07:30 o antes
       const estadoEntradaHE = tieneHEEntrada ? "pendiente" : null;
       const esDiaConting = esDiaContingencia(fecha, contingencias);
       const nuevoReg = {
@@ -2144,7 +2144,7 @@ export default function App() {
 
     if (tipo === "entrada") {
       const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-      const tieneHEEntrada = !esEspecial(fecha) && toMin(hora) < 450; // antes de 07:30
+      const tieneHEEntrada = !esEspecial(fecha) && toMin(hora) <= 450; // 07:30 o antes
       setMarcaMsg({ tipo:"ok", txt: tieneHEEntrada
         ? `⚠️ Entrada registrada a las ${hora}. Las horas previas a las 08:00 quedan pendientes de aprobación.`
         : `✅ Entrada registrada a las ${hora}. Guardando...` });
@@ -2537,7 +2537,7 @@ export default function App() {
     const minEntradaMan = toMin(regManEntrada);
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     // Continuación nocturna: no es entrada anticipada aunque sea antes de 07:00
-    const tieneHEEntradaMan = !regManEsNocturno && !esDiaEspMan && minEntradaMan < 450; // antes de 07:30
+    const tieneHEEntradaMan = !regManEsNocturno && !esDiaEspMan && minEntradaMan <= 450; // 07:30 o antes
     // Si salida < entrada, es turno nocturno (cruza medianoche) — no genera HE de salida extra
     const salidaCruzaMedia = regManSalida && toMin(regManSalida) < toMin(regManEntrada);
     const tieneHESalidaMan  = !esDiaEspMan && regManSalida && !salidaCruzaMedia && toMin(regManSalida) > finMan;
@@ -2591,7 +2591,7 @@ export default function App() {
       const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
       const esDiaEspEdit = esEspecial(regEditFecha);
       const finEdit = esViernes(regEditFecha) ? 840 : 1080;
-      const tieneHEEnt = !esDiaEspEdit && toMin(regEditEnt) < 450; // antes de 07:30
+      const tieneHEEnt = !esDiaEspEdit && toMin(regEditEnt) <= 450; // 07:30 o antes
       const tieneHESal = !esDiaEspEdit && regEditSal && toMin(regEditSal) > finEdit;
       return {
         ...r,
@@ -3308,8 +3308,14 @@ export default function App() {
   // DATOS DERIVADOS
   // ═══════════════════════════════════════════════════════
   const toMinBandeja = t => { try { const [h,m]=t.split(":").map(Number); return h*60+m; } catch(e){return 0;} };
+  // Limitar bandeja a los últimos 60 días para no mostrar registros muy antiguos
+  const fechaLimiteBandeja = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 60);
+    return d.toISOString().slice(0,10);
+  })();
   const regConExtraPendiente = registros.filter(r => {
     if (!r.salida) return false;
+    if (r.fecha < fechaLimiteBandeja) return false; // no mostrar registros muy antiguos
     // HE clásica (día especial): solo pendientes
     if (esEspecial(r.fecha) && r.estado==="pendiente") return true;
     // HE entrada anticipada pendiente (explícita)
