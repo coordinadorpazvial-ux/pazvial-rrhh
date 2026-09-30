@@ -6899,53 +6899,6 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
 
       </div>
     </div>
-
-        {histEditando && (
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}
-            onClick={e=>e.target===e.currentTarget&&setHistEditando(null)}>
-            <div style={{background:"#1a1a1a",border:"1px solid rgba(255,215,0,0.3)",borderRadius:12,padding:24,width:"90%",maxWidth:440}}>
-              <h3 style={{color:"#FFD700",marginTop:0}}>✏️ Editar Remuneración</h3>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div><label style={{fontSize:11,color:"#9A8A6A",display:"block",marginBottom:3}}>Desde</label>
-                  <input type="date" value={histEditando.desde}
-                    onChange={e=>setHistEditando(p=>({...p,desde:e.target.value}))}
-                    style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:6,padding:"6px 8px",color:"#fff",fontSize:12}}/>
-                </div>
-                <div><label style={{fontSize:11,color:"#9A8A6A",display:"block",marginBottom:3}}>Sueldo</label>
-                  <input type="number" value={histEditando.sueldo}
-                    onChange={e=>setHistEditando(p=>({...p,sueldo:e.target.value}))}
-                    style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:6,padding:"6px 8px",color:"#fff",fontSize:12}}/>
-                </div>
-                <div><label style={{fontSize:11,color:"#9A8A6A",display:"block",marginBottom:3}}>Colación</label>
-                  <input type="number" value={histEditando.colacion||0}
-                    onChange={e=>setHistEditando(p=>({...p,colacion:e.target.value}))}
-                    style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:6,padding:"6px 8px",color:"#fff",fontSize:12}}/>
-                </div>
-                <div><label style={{fontSize:11,color:"#9A8A6A",display:"block",marginBottom:3}}>Movilización</label>
-                  <input type="number" value={histEditando.movilizacion||0}
-                    onChange={e=>setHistEditando(p=>({...p,movilizacion:e.target.value}))}
-                    style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:6,padding:"6px 8px",color:"#fff",fontSize:12}}/>
-                </div>
-                <div style={{gridColumn:"1/-1"}}><label style={{fontSize:11,color:"#9A8A6A",display:"block",marginBottom:3}}>Motivo</label>
-                  <input type="text" value={histEditando.motivo||""}
-                    onChange={e=>setHistEditando(p=>({...p,motivo:e.target.value}))}
-                    style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:6,padding:"6px 8px",color:"#fff",fontSize:12}}/>
-                </div>
-                <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8}}>
-                  <label style={{fontSize:11,color:"#9A8A6A"}}>Gratificación legal</label>
-                  <input type="checkbox" checked={!!histEditando.gratificacion}
-                    onChange={e=>setHistEditando(p=>({...p,gratificacion:e.target.checked}))}/>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:8,marginTop:16,justifyContent:"flex-end"}}>
-                <button onClick={()=>setHistEditando(null)}
-                  style={{background:"rgba(255,255,255,0.1)",color:"#fff",border:"none",borderRadius:6,padding:"7px 16px",cursor:"pointer",fontSize:12}}>Cancelar</button>
-                <button onClick={guardarEdicionRemuneracion}
-                  style={{background:"rgba(39,174,96,0.3)",color:"#27ae60",border:"1px solid rgba(39,174,96,0.4)",borderRadius:6,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:"bold"}}>✅ Guardar</button>
-              </div>
-            </div>
-          </div>
-        )}
   );
 }
 
