@@ -150,7 +150,10 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
 
   // ── Días especiales (sáb/dom/feriado): todo es HE con mínimo 8h ──
   // Turno nocturno de continuación: todas las horas son HE reales
-  if (esNocturno) {
+  // También detectar automáticamente: entrada entre 00:00 y 05:59 con duración < 8h
+  const minEntradaCheck = toMin(entrada);
+  const esNocturnoAuto = !esNocturno && minEntradaCheck >= 0 && minEntradaCheck < 360 && total <= 480;
+  if (esNocturno || esNocturnoAuto) {
     const heReales = +(total/60).toFixed(2);
     return { normales: 0, extra: heReales, extraEntrada: 0, extraSalida: heReales };
   }
