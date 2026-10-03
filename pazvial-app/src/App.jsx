@@ -4582,7 +4582,7 @@ export default function App() {
                           </div>
                         ) : r.estadoEntrada==="rechazado" ? (
                           <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
-                        ) : <span style={{color:"#aaa"}}>—</span>}
+                        ) : (<span style={{color:"#aaa"}}>—</span>)}
                       </td>
 
                       {/* ── Columna HE Salida ── */}
