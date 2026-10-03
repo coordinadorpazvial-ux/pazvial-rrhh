@@ -304,15 +304,25 @@ const TASAS_AFP = {CAPITAL:0.1144,PROVIDA:0.1145,HABITAT:0.1127,CUPRUM:0.1144,PL
 
 // Valores por día inhábil según cargo
 const VALOR_DIA_INABIL = { supervisor: 75000, auxiliar: 62500 };
-function valorDiaInabil(cargo) {
+function valorDiaInabil(cargo, params) {
   const c = (cargo||"").toLowerCase();
-  if (c.includes("supervisor") || c.includes("coordinador")) return VALOR_DIA_INABIL.supervisor;
-  return VALOR_DIA_INABIL.auxiliar;
+  const p = params || {};
+  if (c.includes("supervisor") || c.includes("coordinador"))
+    return p.bonoDiaInhabilSupervisor || VALOR_DIA_INABIL.supervisor;
+  return p.bonoDiaInhabilAuxiliar || VALOR_DIA_INABIL.auxiliar;
 }
 
 const PARAMS_DEFAULT = {
   jornadaSemanal: 42, diasBaseMensual: 30, recargHE: 1.5,
-  IMM: 553553, // IMM vigente 2026 topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
+  topeHEMensual: 48,
+  umbralEntradaAnticipada: 450,
+  topeHorasInhabil: 10,
+  bonoDiaInhabilSupervisor: 75000,
+  bonoDiaInhabilAuxiliar: 62500,
+  viaticoDiarioContingencia: 50000,
+  colacionBase: 87300,
+  movilizacionBase: 87300,
+  IMM: 553553, topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
   tasaAFP: 0.10, tasaSalud: 0.07, tasaAFCindefinido: 0.006, tasaAFCplazoFijo: 0.0,
   valorUF: 39700, valorUTM: 71506,
   afps: [
@@ -461,7 +471,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
             ? r.horasExtraAprobadas
             : calcularHoras(r.entrada,r.salida,r.fecha).extra;
           totalMinExtra += hBruto * 60;
-          if (r.esContingencia) totalViaticosContingencia += 50000;
+          if (r.esContingencia) totalViaticosContingencia += ((paramsExtra && paramsExtra.viaticoDiarioContingencia) || 50000);
         }
       }
     } else {
@@ -482,7 +492,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const horasExtra = +(totalMinExtra/60).toFixed(2);
 
   // ── Tope legal: 48 HE por período ────────────────────────────────────────
-  const TOPE_HE_LEGAL = 48;
+  const TOPE_HE_LEGAL = (paramsExtra && paramsExtra.topeHEMensual) || 48;
   const horasExtraLegales = Math.min(horasExtra, TOPE_HE_LEGAL);
   const horasExtraExceso  = Math.max(0, horasExtra - TOPE_HE_LEGAL);
   // HE dentro del tope → imponible (recargo 50%)
@@ -492,8 +502,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
 
   // ── Días Inhábiles ───────────────────────────────────────────────────────
   const cargoTrab = (ficha.cargo || "").toLowerCase();
-  const valorDiaInhabilTrab = cargoTrab.includes("supervisor") || cargoTrab.includes("coordinador")
-    ? 75000 : 62500;
+  const valorDiaInhabilTrab = valorDiaInabil(ficha.cargo, paramsExtra);
   const montoDiasInhabiles = diasInhabilesCount * valorDiaInhabilTrab;
 
   // ── Otras Asignaciones del período ──────────────────────────────────────
@@ -538,8 +547,20 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
 
   const totalOtrosDesc  = anticMes + descuentoAusencias + descuentoYaPagado;
   const totalDescuentos = totalDescLegales + totalOtrosDesc;
-  const alcanceLiquido  = totalHaberes - totalDescuentos;
-  const tributable      = totalImponible - prevision - salud;
+  // ── Impuesto Único Segunda Categoría ────────────────────────────────────
+  const tributable = totalImponible - prevision - salud - segCesantia;
+  const UTM = (paramsExtra && paramsExtra.valorUTM) || 71506;
+  const tablaImp = (paramsExtra && paramsExtra.tablaImpuesto) || [];
+  const baseUTM = tributable / UTM;
+  const tramoImp = tablaImp.find(t => baseUTM >= t.desde && baseUTM < t.hasta);
+  const impUnico = tramoImp && tramoImp.factor > 0
+    ? Math.max(0, Math.round(tributable * tramoImp.factor - tramoImp.rebaja * UTM))
+    : 0;
+
+  // Agregar impuesto único a descuentos legales
+  const totalDescLegalesConImp = totalDescLegales + impUnico;
+  const totalDescuentosConImp  = totalDescLegalesConImp + totalOtrosDesc;
+  const alcanceLiquidoConImp   = totalHaberes - totalDescuentosConImp;
 
   return {
     tId:trab.id, nombre:nombreCompleto(trab), rut:trab.rut, codigo:trab.codigo,
@@ -552,8 +573,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     diasInhabilesCount, montoDiasInhabiles,
     totalImponible, colacion, movilizacion, viaticosContingencia, totalNoImponible, totalHaberes,
     afpOblig: prevision, comisionAFPmonto: 0, salud_monto: salud, segCesantia,
-    prevision_monto:prevision, totalDescLegales,
-    anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos, alcanceLiquido, tributable,
+    prevision_monto:prevision, totalDescLegales:totalDescLegalesConImp,
+    anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos:totalDescuentosConImp, alcanceLiquido:alcanceLiquidoConImp, tributable, impUnico,
     otrasImponibles, otrasNoImponibles, otrasDelMes, otrasYaPagadas, descuentoYaPagado,
     cc:"001",
   };
@@ -2500,7 +2521,7 @@ export default function App() {
       ${otrasNoImpRow}
       <tr class="tot"><td>TOTAL NO IMPONIBLE</td><td style="text-align:right">$${fmt(d.totalNoImponible)}</td><td style="color:#c0392b">Salud (${d.sistSalud||"FONASA"} 7%)</td><td style="text-align:right;color:#c0392b">$${fmt(d.salud_monto)}</td></tr>
       ${(d.segCesantia||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Seg. Cesantía</td><td style="text-align:right;color:#c0392b">$${fmt(d.segCesantia)}</td></tr>`:""}
-      ${(d.impuesto||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Imp. Único</td><td style="text-align:right;color:#c0392b">$${fmt(d.impuesto)}</td></tr>`:""}
+      <tr><td></td><td></td><td style="color:#c0392b">Imp. Único 2ª Cat.</td><td style="text-align:right;color:#c0392b">$${fmt(d.impUnico||0)}</td></tr>
       ${(d.descuentoAusencias||0)>0?`<tr><td></td><td></td><td style="color:#c0392b;font-weight:bold">Ausencia Injustificada (${d.ausencias} día(s))</td><td style="text-align:right;color:#c0392b">-$${fmt(d.descuentoAusencias)}</td></tr>`:""}
       ${(d.otrasYaPagadas||[]).map(a=>`<tr><td></td><td></td><td style="color:#c0392b;font-weight:bold">${a.concepto||"Asignación ya pagada"}</td><td style="text-align:right;color:#c0392b">-$${fmt(Number(a.monto)||0)}</td></tr>`).join("")}
       ${(d.anticipo||0)>0?`<tr><td></td><td></td><td style="color:#c0392b">Anticipo Remuneración</td><td style="text-align:right;color:#c0392b">$${fmt(d.anticipo)}</td></tr>`:""}
@@ -2943,20 +2964,6 @@ export default function App() {
     setHistEditando(null);
   }
 
-  function guardarEdicionRemuneracion() {
-    if (!histEditando) return;
-    const {_trabId, id, desde, sueldo, colacion, movilizacion, gratificacion, motivo} = histEditando;
-    if (!desde || !sueldo || isNaN(Number(sueldo)) || Number(sueldo) <= 0) return;
-    setTrabajadores(p=>p.map(t=>{
-      if(t.id!==_trabId) return t;
-      const hist=(t.ficha?.historialRemuneraciones||[]).map(x=>x.id===id
-        ?{...x,desde,sueldo:Number(sueldo),colacion:Number(colacion)||0,movilizacion:Number(movilizacion)||0,gratificacion,motivo}:x);
-      const vig=[...hist].sort((a,b)=>b.desde.localeCompare(a.desde))[0];
-      return {...t,ficha:{...t.ficha,historialRemuneraciones:hist,
-        sueldoPactado:String(vig.sueldo),colacion:vig.colacion,movilizacion:vig.movilizacion,gratificacion:vig.gratificacion}};
-    }));
-    setHistEditando(null);
-  }
 
   function grabarNuevaRemuneracion(trabId) {
     setHistMsg({tipo:"",txt:""});
@@ -6523,6 +6530,28 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
                       onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
                   </div>
                 ))}
+              </div>
+              {/* ── Tabla Impuesto Único ── */}
+              <h4 style={{color:"#9A8A6A",margin:"14px 0 4px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Tabla Impuesto Único 2ª Categoría</h4>
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                  <thead>
+                    <tr>{["Desde (UTM)","Hasta (UTM)","Factor","Rebaja (UTM)"].map(h=>(
+                      <th key={h} style={{background:"rgba(5,4,2,0.6)",padding:"5px 8px",textAlign:"right",color:"#9A8A6A",fontWeight:"normal",borderBottom:"1px solid rgba(255,215,0,0.15)"}}>{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {(params?.tablaImpuesto||PARAMS_DEFAULT.tablaImpuesto).map((t,i)=>(
+                      <tr key={i} style={{background:i%2===0?"rgba(255,255,255,0.02)":"transparent"}}>
+                        <td style={{padding:"4px 8px",textAlign:"right",color:"#fff"}}>{t.desde}</td>
+                        <td style={{padding:"4px 8px",textAlign:"right",color:"#fff"}}>{t.hasta===999999?"sin límite":t.hasta}</td>
+                        <td style={{padding:"4px 8px",textAlign:"right",color:"#FFD700"}}>{(t.factor*100).toFixed(1)}%</td>
+                        <td style={{padding:"4px 8px",textAlign:"right",color:"#fff"}}>{t.rebaja}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p style={{fontSize:10,color:"#9A8A6A",margin:"4px 0 0"}}>Para modificar la tabla, contacta al administrador del sistema.</p>
               </div>
               <button onClick={()=>setParams({...PARAMS_DEFAULT})} style={{...S.btn,marginTop:14,fontSize:12}}>↩ Restaurar valores por defecto</button>
             </div>
