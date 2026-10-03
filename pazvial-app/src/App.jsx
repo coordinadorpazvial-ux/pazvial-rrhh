@@ -6515,21 +6515,60 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
           <div style={{ marginTop:4 }}>
             <div style={S.card}>
               <h3 style={{ color:"#C9A84C", marginTop:0 }}>⚙️ Parámetros del Sistema</h3>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+              {/* ── Valores Legales ── */}
+              <h4 style={{color:"#9A8A6A",margin:"4px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Valores Legales</h4>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {[
-                  ["IMM ($)", "IMM", params?.IMM||510000],
+                  ["IMM ($)", "IMM", params?.IMM||553553],
                   ["Jornada semanal (h)", "jornadaSemanal", params?.jornadaSemanal||42],
+                  ["Tope HE mensual (h)", "topeHEMensual", params?.topeHEMensual||48],
+                  ["Tope gratif. (× IMM)", "topeGratifIMM", params?.topeGratifIMM||4.75],
                   ["Valor UF ($)", "valorUF", params?.valorUF||39700],
                   ["Valor UTM ($)", "valorUTM", params?.valorUTM||71506],
-                  ["Tope AFP/Salud (UF)", "topeAFPSaludUF", params?.topeAFPSaludUF||90],
-                  ["Tope gratif. (× IMM)", "topeGratifIMM", params?.topeGratifIMM||4.75],
                 ].map(([label, key, val]) => (
                   <div key={key}>
                     <label style={S.lbl}>{label}</label>
-                    <input type="number" style={S.input} defaultValue={val}
+                    <input type="number" style={S.inp} defaultValue={val}
                       onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
                   </div>
                 ))}
+              </div>
+              {/* ── Días Inhábiles ── */}
+              <h4 style={{color:"#9A8A6A",margin:"14px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Días Inhábiles (Sáb/Dom/Festivo)</h4>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[
+                  ["Bono Supervisor/Coordinador ($)", "bonoDiaInhabilSupervisor", params?.bonoDiaInhabilSupervisor||75000],
+                  ["Bono Auxiliar de Tránsito ($)", "bonoDiaInhabilAuxiliar", params?.bonoDiaInhabilAuxiliar||62500],
+                  ["Tope horas del bono (h)", "topeHorasInhabil", params?.topeHorasInhabil||10],
+                  ["Viático contingencia/día ($)", "viaticoDiarioContingencia", params?.viaticoDiarioContingencia||50000],
+                ].map(([label, key, val]) => (
+                  <div key={key}>
+                    <label style={S.lbl}>{label}</label>
+                    <input type="number" style={S.inp} defaultValue={val}
+                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+                  </div>
+                ))}
+              </div>
+              {/* ── Jornada ── */}
+              <h4 style={{color:"#9A8A6A",margin:"14px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Jornada y Asignaciones</h4>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[
+                  ["Colación base ($)", "colacionBase", params?.colacionBase||87300],
+                  ["Movilización base ($)", "movilizacionBase", params?.movilizacionBase||87300],
+                ].map(([label, key, val]) => (
+                  <div key={key}>
+                    <label style={S.lbl}>{label}</label>
+                    <input type="number" style={S.inp} defaultValue={val}
+                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+                  </div>
+                ))}
+                <div>
+                  <label style={S.lbl}>Entrada anticipada hasta</label>
+                  <input type="time" style={S.inp}
+                    defaultValue={(()=>{const m=(params?.umbralEntradaAnticipada||450);return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;})()}
+                    onBlur={e=>{const [h,m]=e.target.value.split(':').map(Number);setParams(p=>({...(p||PARAMS_DEFAULT),umbralEntradaAnticipada:h*60+m}));}}/>
+                  <span style={{fontSize:10,color:"#9A8A6A",marginTop:2,display:"block"}}>Entradas a esta hora o antes generan HE anticipada</span>
+                </div>
               </div>
               {/* ── Tabla Impuesto Único ── */}
               <h4 style={{color:"#9A8A6A",margin:"14px 0 4px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Tabla Impuesto Único 2ª Categoría</h4>
