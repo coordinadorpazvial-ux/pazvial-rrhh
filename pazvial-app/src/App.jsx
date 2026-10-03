@@ -166,7 +166,7 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
 
   const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00 en minutos
   const INICIO = 480; // 08:00 en minutos
-  const UMBRAL_ANTICIP = 450; // 07:30 o antes — entradas a esta hora o antes generan HE anticipada
+  const UMBRAL_ANTICIP = umbral; // desde Parámetros del Sistema (default 450 = 07:30)
 
   const minEntrada = toMin(entrada);
   const minSalida  = toMin(salida);
@@ -476,7 +476,8 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
       }
     } else {
       // Solo sumar HE cuando están aprobadas (entrada o salida)
-      const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null);
+      const umbralParam = (paramsExtra && paramsExtra.umbralEntradaAnticipada) || 450;
+      const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null, false, false, umbralParam);
       // Lógica idéntica al reporte de HE
       {
         const entAp = r.estadoEntrada === 'aprobado' || (r.estadoEntrada === null && r.estado === 'aprobado');
@@ -550,7 +551,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   // ── Impuesto Único Segunda Categoría ────────────────────────────────────
   const tributable = totalImponible - prevision - salud - segCesantia;
   const UTM = (paramsExtra && paramsExtra.valorUTM) || 71506;
-  const tablaImp = (paramsExtra && paramsExtra.tablaImpuesto) || [];
+  const tablaImp = (paramsExtra && paramsExtra.tablaImpuesto) || PARAMS_DEFAULT.tablaImpuesto;
   const baseUTM = tributable / UTM;
   const tramoImp = tablaImp.find(t => baseUTM >= t.desde && baseUTM < t.hasta);
   const impUnico = tramoImp && tramoImp.factor > 0
@@ -2131,7 +2132,7 @@ export default function App() {
         return;
       }
       const minEntrada = toMin(hora);
-      const tieneHEEntrada = !esEspecial(fecha) && minEntrada <= 450; // 07:30 o antes
+      const tieneHEEntrada = !esEspecial(fecha) && minEntrada <= ((params?.umbralEntradaAnticipada)||450);
       const estadoEntradaHE = tieneHEEntrada ? "pendiente" : null;
       const esDiaConting = esDiaContingencia(fecha, contingencias);
       const nuevoReg = {
@@ -2182,7 +2183,7 @@ export default function App() {
 
     if (tipo === "entrada") {
       const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
-      const tieneHEEntrada = !esEspecial(fecha) && toMin(hora) <= 450; // 07:30 o antes
+      const tieneHEEntrada = !esEspecial(fecha) && toMin(hora) <= ((typeof params!=="undefined"&&params?.umbralEntradaAnticipada)||450);
       setMarcaMsg({ tipo:"ok", txt: tieneHEEntrada
         ? `⚠️ Entrada registrada a las ${hora}. Las horas previas a las 08:00 quedan pendientes de aprobación.`
         : `✅ Entrada registrada a las ${hora}. Guardando...` });
@@ -2575,7 +2576,7 @@ export default function App() {
     const minEntradaMan = toMin(regManEntrada);
     const finMan = esViernes(fechaMan) ? 840 : 1080;
     // Continuación nocturna: no es entrada anticipada aunque sea antes de 07:00
-    const tieneHEEntradaMan = !regManEsNocturno && !esDiaEspMan && minEntradaMan <= 450; // 07:30 o antes
+    const tieneHEEntradaMan = !regManEsNocturno && !esDiaEspMan && minEntradaMan <= ((params?.umbralEntradaAnticipada)||450);
     // Si salida < entrada, es turno nocturno (cruza medianoche) — no genera HE de salida extra
     const salidaCruzaMedia = regManSalida && toMin(regManSalida) < toMin(regManEntrada);
     const tieneHESalidaMan  = !esDiaEspMan && regManSalida && !salidaCruzaMedia && toMin(regManSalida) > finMan;
@@ -2629,7 +2630,7 @@ export default function App() {
       const toMin = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
       const esDiaEspEdit = esEspecial(regEditFecha);
       const finEdit = esViernes(regEditFecha) ? 840 : 1080;
-      const tieneHEEnt = !esDiaEspEdit && toMin(regEditEnt) <= 450; // 07:30 o antes
+      const tieneHEEnt = !esDiaEspEdit && toMin(regEditEnt) <= ((params?.umbralEntradaAnticipada)||450);
       const tieneHESal = !esDiaEspEdit && regEditSal && toMin(regEditSal) > finEdit;
       return {
         ...r,
@@ -3377,7 +3378,7 @@ export default function App() {
     // HE salida posterior pendiente
     if (r.estadoSalida==="pendiente") return true;
     // Entrada antes de 07:30 sin estado de entrada definido → mostrar para aprobación
-    if (!esEspecial(r.fecha) && r.entrada && toMinBandeja(r.entrada) <= 450
+    if (!esEspecial(r.fecha) && r.entrada && toMinBandeja(r.entrada) <= ((params?.umbralEntradaAnticipada)||450)
         && !r.estadoEntrada && r.estado!=="rechazado") {
       return true;
     }
@@ -4564,7 +4565,7 @@ export default function App() {
                       {/* ── Columna HE Entrada ── */}
                       <td style={S.td}>
                         {esDiaEsp ? <span style={{color:"#aaa"}}>—</span>
-                        : (r.estadoEntrada==="pendiente" || (!r.estadoEntrada && r.entrada && toMinBandeja(r.entrada) <= 450)) && r.estadoEntrada!=="aprobado" && r.estadoEntrada!=="rechazado" ? (
+                        : (r.estadoEntrada==="pendiente" || (!r.estadoEntrada && r.entrada && toMinBandeja(r.entrada) <= ((params?.umbralEntradaAnticipada)||450)) && r.estadoEntrada!=="aprobado" && r.estadoEntrada!=="rechazado" ? (
                           <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
                             <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
                               ⏱ {hBruto.extraEntrada}h anticipadas
@@ -6515,59 +6516,76 @@ Nuevo alcance líquido: $${(nuevaDatos.alcanceLiquido||0).toLocaleString("es-CL"
           <div style={{ marginTop:4 }}>
             <div style={S.card}>
               <h3 style={{ color:"#C9A84C", marginTop:0 }}>⚙️ Parámetros del Sistema</h3>
-              {/* ── Valores Legales ── */}
-              <h4 style={{color:"#9A8A6A",margin:"4px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Valores Legales</h4>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {[
-                  ["IMM ($)", "IMM", params?.IMM||553553],
-                  ["Jornada semanal (h)", "jornadaSemanal", params?.jornadaSemanal||42],
-                  ["Tope HE mensual (h)", "topeHEMensual", params?.topeHEMensual||48],
-                  ["Tope gratif. (× IMM)", "topeGratifIMM", params?.topeGratifIMM||4.75],
-                  ["Valor UF ($)", "valorUF", params?.valorUF||39700],
-                  ["Valor UTM ($)", "valorUTM", params?.valorUTM||71506],
-                ].map(([label, key, val]) => (
-                  <div key={key}>
-                    <label style={S.lbl}>{label}</label>
-                    <input type="number" style={S.inp} defaultValue={val}
-                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
-                  </div>
-                ))}
+              {/* ── Sección: Valores Legales ── */}
+              <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 10px"}}>
+                <span style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:"rgba(154,138,106,0.8)"}}>📋 Valores legales</span>
+                <div style={{flex:1,height:"0.5px",background:"rgba(255,215,0,0.15)"}}/>
               </div>
-              {/* ── Días Inhábiles ── */}
-              <h4 style={{color:"#9A8A6A",margin:"14px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Días Inhábiles (Sáb/Dom/Festivo)</h4>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {[
-                  ["Bono Supervisor/Coordinador ($)", "bonoDiaInhabilSupervisor", params?.bonoDiaInhabilSupervisor||75000],
-                  ["Bono Auxiliar de Tránsito ($)", "bonoDiaInhabilAuxiliar", params?.bonoDiaInhabilAuxiliar||62500],
-                  ["Tope horas del bono (h)", "topeHorasInhabil", params?.topeHorasInhabil||10],
-                  ["Viático contingencia/día ($)", "viaticoDiarioContingencia", params?.viaticoDiarioContingencia||50000],
-                ].map(([label, key, val]) => (
-                  <div key={key}>
-                    <label style={S.lbl}>{label}</label>
-                    <input type="number" style={S.inp} defaultValue={val}
-                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
-                  </div>
-                ))}
+              <div style={{background:"rgba(255,255,255,0.03)",border:"0.5px solid rgba(255,215,0,0.12)",borderRadius:10,overflow:"hidden",marginBottom:20}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)"}}>
+                  {[
+                    ["IMM","IMM",params?.IMM||553553,"$",""],
+                    ["Jornada semanal","jornadaSemanal",params?.jornadaSemanal||42,"","h/semana"],
+                    ["Tope HE mensual","topeHEMensual",params?.topeHEMensual||48,"","h/mes"],
+                    ["Tope gratificación","topeGratifIMM",params?.topeGratifIMM||4.75,"× IMM",""],
+                    ["Valor UF","valorUF",params?.valorUF||39700,"$",""],
+                    ["Valor UTM","valorUTM",params?.valorUTM||71506,"$",""],
+                  ].map(([label,key,val,pre,suf],i)=>(
+                    <div key={key} style={{padding:"12px 16px",borderRight:(i%3<2)?"0.5px solid rgba(255,215,0,0.1)":"none",borderBottom:(i<3)?"0.5px solid rgba(255,215,0,0.1)":"none"}}>
+                      <div style={{fontSize:10,color:"rgba(154,138,106,0.7)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>{label}</div>
+                      <div style={{display:"flex",alignItems:"baseline",gap:4}}>
+                        {pre&&<span style={{fontSize:11,color:"rgba(154,138,106,0.6)"}}>{pre}</span>}
+                        <input type="number" defaultValue={val} step={key==="topeGratifIMM"?"0.01":"1"}
+                          style={{border:"none",background:"transparent",fontSize:16,fontWeight:500,color:"#fff",padding:0,outline:"none",width:"100%",minWidth:0}}
+                          onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+                        {suf&&<span style={{fontSize:11,color:"rgba(154,138,106,0.6)",whiteSpace:"nowrap"}}>{suf}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              {/* ── Jornada ── */}
-              <h4 style={{color:"#9A8A6A",margin:"14px 0 6px",fontSize:12,textTransform:"uppercase",letterSpacing:1}}>Jornada y Asignaciones</h4>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {[
-                  ["Colación base ($)", "colacionBase", params?.colacionBase||87300],
-                  ["Movilización base ($)", "movilizacionBase", params?.movilizacionBase||87300],
-                ].map(([label, key, val]) => (
-                  <div key={key}>
-                    <label style={S.lbl}>{label}</label>
-                    <input type="number" style={S.inp} defaultValue={val}
-                      onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+              {/* ── Sección: Días Inhábiles ── */}
+              <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 10px"}}>
+                <span style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:"rgba(154,138,106,0.8)"}}>📅 Días inhábiles (sáb/dom/festivo)</span>
+                <div style={{flex:1,height:"0.5px",background:"rgba(255,215,0,0.15)"}}/>
+              </div>
+              <div style={{background:"rgba(255,255,255,0.03)",border:"0.5px solid rgba(255,215,0,0.12)",borderRadius:10,overflow:"hidden",marginBottom:20}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)"}}>
+                  {[
+                    ["Bono Supervisor/Coordinador","bonoDiaInhabilSupervisor",params?.bonoDiaInhabilSupervisor||75000,"$","","Por día trabajado"],
+                    ["Bono Auxiliar de Tránsito","bonoDiaInhabilAuxiliar",params?.bonoDiaInhabilAuxiliar||62500,"$","","Por día trabajado"],
+                    ["El bono cubre hasta","topeHorasInhabil",params?.topeHorasInhabil||10,"","horas","Exceso se paga como HE"],
+                    ["Viático contingencia","viaticoDiarioContingencia",params?.viaticoDiarioContingencia||50000,"$","","Por día, no imponible"],
+                  ].map(([label,key,val,pre,suf,hint],i)=>(
+                    <div key={key} style={{padding:"12px 16px",borderRight:(i%2===0)?"0.5px solid rgba(255,215,0,0.1)":"none",borderBottom:(i<2)?"0.5px solid rgba(255,215,0,0.1)":"none"}}>
+                      <div style={{fontSize:10,color:"rgba(154,138,106,0.7)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>{label}</div>
+                      <div style={{display:"flex",alignItems:"baseline",gap:4}}>
+                        {pre&&<span style={{fontSize:11,color:"rgba(154,138,106,0.6)"}}>{pre}</span>}
+                        <input type="number" defaultValue={val}
+                          style={{border:"none",background:"transparent",fontSize:16,fontWeight:500,color:"#fff",padding:0,outline:"none",width:"100%",minWidth:0}}
+                          onBlur={e=>setParams(p=>({...(p||PARAMS_DEFAULT),[key]:Number(e.target.value)}))}/>
+                        {suf&&<span style={{fontSize:11,color:"rgba(154,138,106,0.6)",whiteSpace:"nowrap"}}>{suf}</span>}
+                      </div>
+                      <div style={{fontSize:10,color:"rgba(154,138,106,0.5)",marginTop:3}}>{hint}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* ── Sección: Jornada ── */}
+              <div style={{display:"flex",alignItems:"center",gap:8,margin:"0 0 10px"}}>
+                <span style={{fontSize:11,fontWeight:500,textTransform:"uppercase",letterSpacing:"0.06em",color:"rgba(154,138,106,0.8)"}}>⏰ Jornada</span>
+                <div style={{flex:1,height:"0.5px",background:"rgba(255,215,0,0.15)"}}/>
+              </div>
+              <div style={{background:"rgba(255,255,255,0.03)",border:"0.5px solid rgba(255,215,0,0.12)",borderRadius:10,overflow:"hidden",marginBottom:20}}>
+                <div style={{padding:"12px 16px"}}>
+                  <div style={{fontSize:10,color:"rgba(154,138,106,0.7)",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>Ingreso anticipado hasta</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8}}>
+                    <input type="time"
+                      defaultValue={(()=>{const m=(params?.umbralEntradaAnticipada||450);return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;})()}
+                      style={{border:"none",background:"transparent",fontSize:16,fontWeight:500,color:"#fff",padding:0,outline:"none"}}
+                      onBlur={e=>{const[h,m]=e.target.value.split(':').map(Number);setParams(p=>({...(p||PARAMS_DEFAULT),umbralEntradaAnticipada:h*60+m}));}}/>
+                    <span style={{fontSize:11,color:"rgba(154,138,106,0.5)"}}>Marcas a esta hora o antes generan HE anticipada</span>
                   </div>
-                ))}
-                <div>
-                  <label style={S.lbl}>Entrada anticipada hasta</label>
-                  <input type="time" style={S.inp}
-                    defaultValue={(()=>{const m=(params?.umbralEntradaAnticipada||450);return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;})()}
-                    onBlur={e=>{const [h,m]=e.target.value.split(':').map(Number);setParams(p=>({...(p||PARAMS_DEFAULT),umbralEntradaAnticipada:h*60+m}));}}/>
-                  <span style={{fontSize:10,color:"#9A8A6A",marginTop:2,display:"block"}}>Entradas a esta hora o antes generan HE anticipada</span>
                 </div>
               </div>
               {/* ── Tabla Impuesto Único ── */}
