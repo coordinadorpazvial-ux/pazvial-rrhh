@@ -465,7 +465,12 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
         if (r.esDiaInabil) {
           diasInhabilesCount++;
           const topeInhabil = (paramsExtra && paramsExtra.topeHorasInhabil) || 10;
-          const heExtra = r.horasExtraAprobadas || 0;
+          // El bono cubre hasta topeInhabil horas — solo el diferencial sobre ese tope es HE
+          const toMin_ = t => { try { const [h,m]=t.split(':').map(Number); return h*60+m; } catch(e){return 0;} };
+          const horasReales = r.entrada && r.salida
+            ? Math.max(0, (toMin_(r.salida) - toMin_(r.entrada)) / 60)
+            : 0;
+          const heExtra = Math.max(0, Math.round((horasReales - topeInhabil) * 100) / 100);
           totalMinExtra += heExtra * 60;
         } else {
           const hBruto = r.horasExtraAprobadas !== undefined
