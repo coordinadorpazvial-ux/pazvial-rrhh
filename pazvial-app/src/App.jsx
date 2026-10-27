@@ -2724,23 +2724,31 @@ export default function App() {
       regsT.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); }).forEach(function(r) {
         const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida,!!r.esAdministrativo);
         const esp = esEspecial(r.fecha);
-        const he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
-          : esp ? (r.estado==="aprobado"?(h.extra||0):0)
-          : (()=>{
-              // Días normales: sumar HE entrada + HE salida según sus estados
-              // null + estado='aprobado' = aprobado globalmente
-              let heTotal = 0;
-              const entAp = r.estadoEntrada==="aprobado" || (r.estadoEntrada===null && r.estado==="aprobado");
-              const salAp = r.estadoSalida==="aprobado" || (r.estadoSalida===null && r.estado==="aprobado");
-              if (entAp) heTotal += (h.extraEntrada||0);
-              if (salAp) heTotal += (h.extraSalida||0);
-              if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
-              return heTotal;
-            })();
-        // Mostrar si tiene HE (aprobadas o pendientes)
-      const tieneHEPendiente = r.estadoEntrada==="pendiente" || r.estadoSalida==="pendiente" || (esp && r.estado==="pendiente");
-      // Días inhábiles sin diferencial HE no aparecen en el reporte
-      if (r.esDiaInabil && (r.horasExtraAprobadas||0) <= 0) return;
+        // Días inhábiles: solo el diferencial sobre el tope es HE
+        const topeInhabilRep = (typeof paramsExtra!=="undefined"&&paramsExtra?.topeHorasInhabil)||10;
+        const toMinR_ = t=>{try{const[hh,mm]=t.split(':').map(Number);return hh*60+mm;}catch(e){return 0;}};
+        let he;
+        if (esp && r.esDiaInabil) {
+          if (r.estado!=="aprobado") { he=0; }
+          else {
+            const horasRealesR = r.entrada&&r.salida ? Math.max(0,(toMinR_(r.salida)-toMinR_(r.entrada))/60) : 0;
+            he = Math.max(0, Math.round((horasRealesR-topeInhabilRep)*100)/100);
+          }
+        } else {
+          he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
+            : esp ? (r.estado==="aprobado"?(h.extra||0):0)
+            : (()=>{
+                let heTotal = 0;
+                const entAp = r.estadoEntrada==="aprobado" || (r.estadoEntrada===null && r.estado==="aprobado");
+                const salAp = r.estadoSalida==="aprobado" || (r.estadoSalida===null && r.estado==="aprobado");
+                if (entAp) heTotal += (h.extraEntrada||0);
+                if (salAp) heTotal += (h.extraSalida||0);
+                if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
+                return heTotal;
+              })();
+        }
+        const tieneHEPendiente = r.estadoEntrada==="pendiente" || r.estadoSalida==="pendiente" || (esp && r.estado==="pendiente");
+        if (r.esDiaInabil && he<=0) return;
       if (he <= 0 && !tieneHEPendiente) return;
       const heDisplay = he > 0 ? he : ((h.extraEntrada||0) + (h.extraSalida||0) + (esp?(h.extra||0):0));
       if (heDisplay <= 0) return;
