@@ -324,7 +324,7 @@ const PARAMS_DEFAULT = {
   movilizacionBase: 87300,
   IMM: 553553, topeGratifIMM: 4.75, topeAFPSaludUF: 90, topeAFCuf: 135.2,
   tasaAFP: 0.10, tasaSalud: 0.07, tasaAFCindefinido: 0.006, tasaAFCplazoFijo: 0.0,
-  valorUF: 39700, valorUTM: 71506,
+  valorUF: 39700, valorUTM: 72151, // UTM octubre 2026 (SII)
   afps: [
     { nombre:"Capital",   comision:0.0144 },
     { nombre:"Provida",   comision:0.0145 },
@@ -357,6 +357,7 @@ function calcularImpuesto(baseTributable, params) {
   const utm = p.valorUTM || 71506;
   const baseUTM = baseTributable / utm;
   const tabla = p.tablaImpuesto || PARAMS_DEFAULT.tablaImpuesto;
+  if (!(baseTributable > 0)) return 0;
   const tramo = tabla.find(t => baseUTM >= t.desde && baseUTM < t.hasta) || tabla[tabla.length-1];
   if (!tramo || tramo.factor === 0) return 0;
   return Math.max(0, Math.round(baseTributable * tramo.factor - tramo.rebaja * utm));
@@ -370,11 +371,24 @@ function getRemuneracionVigente(ficha, mes, anio) {
     .sort((a,b) => b.desde.localeCompare(a.desde));
   if (historial.length > 0) {
     const parseMonto = v => Number(String(v||"0").replace(/[^0-9]/g,""))||0;
+    // Si el registro vigente es el MÁS RECIENTE del historial, la ficha actual manda
+    // (al editar la ficha no se actualizaba el historial y se perdían colación/movilización).
+    const todos = [...(ficha.historialRemuneraciones||[])].sort((a,b)=>b.desde.localeCompare(a.desde));
+    const esActual = todos[0] && todos[0].id === historial[0].id;
+    if (esActual) {
+      const sF = parseMonto(ficha.sueldoPactado), cF = parseMonto(ficha.colacion), mF = parseMonto(ficha.movilizacion);
+      return {
+        sueldoPactado: sF || Number(historial[0].sueldo) || 0,
+        colacion:      cF || Number(historial[0].colacion) || 0,
+        movilizacion:  mF || Number(historial[0].movilizacion) || 0,
+        gratificacion: ficha.gratificacion !== undefined ? !!ficha.gratificacion : !!historial[0].gratificacion,
+      };
+    }
     return {
       sueldoPactado: historial[0].sueldo,
       // Si el historial no tiene colación/movilización, usar la de la ficha actual
-      colacion:      historial[0].colacion !== undefined ? Number(historial[0].colacion) : parseMonto(ficha.colacion),
-      movilizacion:  historial[0].movilizacion !== undefined ? Number(historial[0].movilizacion) : parseMonto(ficha.movilizacion),
+      colacion:      Number(historial[0].colacion) || parseMonto(ficha.colacion),
+      movilizacion:  Number(historial[0].movilizacion) || parseMonto(ficha.movilizacion),
       gratificacion: historial[0].gratificacion,
     };
   }
@@ -386,6 +400,59 @@ function getRemuneracionVigente(ficha, mes, anio) {
     movilizacion:  parseMonto(ficha.movilizacion),
     gratificacion: ficha.gratificacion||false,
   };
+}
+
+// ═══════════════════════════════════════════════════════════
+// HE APROBADAS DE UN REGISTRO — ÚNICA FUENTE DE VERDAD
+// La usan: liquidación, dashboard, hoja mensual, reporte HE y Ver Registros
+// ═══════════════════════════════════════════════════════════
+// Día inhábil AUTOMÁTICO: todo sábado, domingo o feriado trabajado se paga con bono
+// de día inhábil, salvo que se marque Contingencia o Administrativo, o que el admin
+// lo desmarque explícitamente (esDiaInabil === false).
+function esInhabilEf(r) {
+  return !!r && esEspecial(r.fecha) && !r.esContingencia && !r.esAdministrativo && r.esDiaInabil !== false;
+}
+function horasRealesRegistro(r) {
+  if (!r || !r.entrada || !r.salida) return 0;
+  const toMin = t => { const [h,m] = String(t).split(":").map(Number); return (h||0)*60+(m||0); };
+  let min = toMin(r.salida) - toMin(r.entrada);
+  if (min <= 0) min += 24*60; // cruza medianoche
+  return Math.round(min/60*100)/100;
+}
+function heAprobadasRegistro(r, params) {
+  const p = params || PARAMS_DEFAULT;
+  const out = { he:0, inhabil:false, contingencia:false, horasReales:horasRealesRegistro(r), tipo:"Normal" };
+  if (!r || !r.salida || r.esAusencia) return out;
+  if (esEspecial(r.fecha)) {
+    if (r.estado !== "aprobado") return out;
+    if (esInhabilEf(r)) {
+      // El bono de día inhábil cubre las primeras N horas (tope, por defecto 10).
+      // Solo el exceso sobre ese tope es hora extra.
+      const tope = Number(p.topeHorasInhabil) || 10;
+      out.inhabil = true;
+      out.tipo = "Día inhábil (bono)";
+      out.he = Math.max(0, Math.round((out.horasReales - tope)*100)/100);
+      return out;
+    }
+    out.contingencia = !!r.esContingencia;
+    out.tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : "Día especial (mín. 8h)";
+    out.he = r.horasExtraAprobadas !== undefined
+      ? Number(r.horasExtraAprobadas)||0
+      : calcularHoras(r.entrada, r.salida, r.fecha, undefined, undefined, !!r.esAdministrativo).extra;
+    return out;
+  }
+  // Día hábil: HE de entrada y de salida se aprueban por separado
+  const umbral = Number(p.umbralEntradaAnticipada) || 450;
+  const h = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null, false, false, umbral);
+  const entAp = r.estadoEntrada === "aprobado" || (r.estadoEntrada === null && r.estado === "aprobado");
+  const salAp = r.estadoSalida === "aprobado" || (r.estadoSalida === null && r.estado === "aprobado");
+  let he = 0;
+  if (entAp) he += (h.extraEntrada||0);
+  if (salAp) he += (h.extraSalida||0);
+  if ((r.segundoTurno||r.esNocturno) && r.estado === "aprobado") he += (h.extra||0);
+  out.tipo = r.segundoTurno ? "Segundo turno" : r.esNocturno ? "Nocturno" : "Normal";
+  out.he = Math.round(he*100)/100;
+  return out;
 }
 
 function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra, otrasAsgn) {
@@ -439,7 +506,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const ausencias = regsAusencias.filter(r => r.esAusencia || (!r.entrada && !r.salida)).length;
   // Valor día = (sueldo proporcional + gratificación) / días base
   // Calculamos gratificación provisional para el valor día
-  const IMM_tmp = 553553;
+  const IMM_tmp = (paramsExtra && paramsExtra.IMM) || 553553;
   const gratifProvisional = remVigente.gratificacion
     ? Math.min(Math.round(sueldoProporcional * 0.25), Math.round(IMM_tmp * 4.75 / 12))
     : 0;
@@ -455,47 +522,21 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
   const valorHoraOrdinaria = sueldoBase > 0 ? sueldoBase * 28 / (30 * 168) : 0;
   const valorHE = Math.round(valorHoraOrdinaria * 1.5); // recargo legal 50%
 
-  // ── Acumular HE del período ───────────────────────────────────────────────
+  // ── Acumular HE del período (helper único) ───────────────────────────────
   let totalMinExtra = 0;
   let totalViaticosContingencia = 0;
   let diasInhabilesCount = 0;
+  const detalleHE = [];
   regs.forEach(r => {
-    if (esEspecial(r.fecha)) {
-      if (r.estado === "aprobado") {
-        if (r.esDiaInabil) {
-          diasInhabilesCount++;
-          const topeInhabil = (paramsExtra && paramsExtra.topeHorasInhabil) || 10;
-          // El bono cubre hasta topeInhabil horas — solo el diferencial sobre ese tope es HE
-          const toMin_ = t => { try { const [h,m]=t.split(':').map(Number); return h*60+m; } catch(e){return 0;} };
-          const horasReales = r.entrada && r.salida
-            ? Math.max(0, (toMin_(r.salida) - toMin_(r.entrada)) / 60)
-            : 0;
-          const heExtra = Math.max(0, Math.round((horasReales - topeInhabil) * 100) / 100);
-          totalMinExtra += heExtra * 60;
-        } else {
-          const hBruto = r.horasExtraAprobadas !== undefined
-            ? r.horasExtraAprobadas
-            : calcularHoras(r.entrada,r.salida,r.fecha).extra;
-          totalMinExtra += hBruto * 60;
-          if (r.esContingencia) totalViaticosContingencia += ((paramsExtra && paramsExtra.viaticoDiarioContingencia) || 50000);
-        }
-      }
-    } else {
-      // Solo sumar HE cuando están aprobadas (entrada o salida)
-      const umbralParam = (paramsExtra && paramsExtra.umbralEntradaAnticipada) || 450;
-      const hBruto = calcularHoras(r.entrada, r.salida, r.fecha, r.estadoEntrada||null, r.estadoSalida||null, false, false, umbralParam);
-      // Lógica idéntica al reporte de HE
-      {
-        const entAp = r.estadoEntrada === 'aprobado' || (r.estadoEntrada === null && r.estado === 'aprobado');
-        const salAp = r.estadoSalida === 'aprobado' || (r.estadoSalida === null && r.estado === 'aprobado');
-        let heReg = 0;
-        if (entAp) heReg += (hBruto.extraEntrada||0);
-        if (salAp) heReg += (hBruto.extraSalida||0);
-        if ((r.segundoTurno||r.esNocturno) && r.estado === 'aprobado') heReg += (hBruto.extra||0);
-        totalMinExtra += heReg * 60;
-      }
+    const x = heAprobadasRegistro(r, paramsExtra);
+    totalMinExtra += x.he * 60;
+    if (x.inhabil) diasInhabilesCount++;
+    if (x.contingencia) totalViaticosContingencia += ((paramsExtra && paramsExtra.viaticoDiarioContingencia) || 50000);
+    if (x.he > 0 || x.inhabil || x.contingencia) {
+      detalleHE.push({ fecha:r.fecha, entrada:r.entrada, salida:r.salida, horasReales:x.horasReales, he:x.he, tipo:x.tipo });
     }
   });
+  detalleHE.sort((a,b)=>a.fecha.localeCompare(b.fecha));
   const horasExtra = +(totalMinExtra/60).toFixed(2);
 
   // ── Tope legal: 48 HE por período ────────────────────────────────────────
@@ -514,7 +555,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
 
   // ── Otras Asignaciones del período ──────────────────────────────────────
   const otrasDelMes       = (otrasAsgn||[]).filter(a => a.tId===trab.id && a.mes===mes && a.anio===anio);
-  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible && !a.yaPagado).reduce((s,a)=>s+Number(a.monto),0);
+  const otrasImponibles   = otrasDelMes.filter(a =>  a.imponible).reduce((s,a)=>s+Number(a.monto),0);
   const otrasNoImponibles = otrasDelMes.filter(a => !a.imponible).reduce((s,a)=>s+Number(a.monto),0); // incluye ya pagados (aparecen también como descuento)
   // Asignaciones ya pagadas → aparecen como descuento
   const otrasYaPagadas    = otrasDelMes.filter(a =>  a.yaPagado);
@@ -583,8 +624,38 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
     prevision_monto:prevision, totalDescLegales:totalDescLegalesConImp,
     anticipo:anticMes, ausencias, descuentoAusencias, totalOtrosDesc, totalDescuentos:totalDescuentosConImp, alcanceLiquido:alcanceLiquidoConImp, tributable, impUnico,
     otrasImponibles, otrasNoImponibles, otrasDelMes, otrasYaPagadas, descuentoYaPagado,
+    detalleHE, utmUsada: UTM, valorHE, pctAFPnum: pctAFP, tasaSegCesantia, tieneGratif: !!remVigente.gratificacion,
     cc:"001",
   };
+}
+
+// Recalcula totales, cotizaciones e IMPUESTO ÚNICO después de un ajuste manual
+function recomputarTotales(d, params, { recalcGratif = true } = {}) {
+  const p = params || PARAMS_DEFAULT;
+  const n = v => Number(v) || 0;
+  const r = { ...d };
+  if (recalcGratif) {
+    const IMM = n(p.IMM) || 553553;
+    const base = n(r.sueldoProporcional) + n(r.valorHHExtra) + n(r.otrasImponibles) + n(r.montoDiasInhabiles);
+    r.gratif = r.tieneGratif ? Math.min(Math.round(base * 0.25), Math.round(IMM * 4.75 / 12)) : n(r.gratif);
+  }
+  r.sueldoEfectivo   = n(r.sueldoProporcional);
+  r.totalImponible   = n(r.sueldoProporcional) + n(r.valorHHExtra) + n(r.gratif) + n(r.otrasImponibles) + n(r.montoDiasInhabiles);
+  r.totalNoImponible = n(r.colacion) + n(r.movilizacion) + n(r.viaticosContingencia) + n(r.viaticOper) + n(r.otrasNoImponibles);
+  r.totalHaberes     = r.totalImponible + r.totalNoImponible;
+  const pctAFP = n(r.pctAFPnum) || (parseFloat(r.pctAFP)||11.44)/100;
+  const tasaCes = r.tasaSegCesantia !== undefined ? n(r.tasaSegCesantia) : ((r.tipoContrato||"indefinido").toLowerCase()==="indefinido" ? 0.006 : 0);
+  r.prevision_monto = r.afpOblig = Math.round(r.totalImponible * pctAFP);
+  r.salud_monto     = Math.round(r.totalImponible * 0.07);
+  r.segCesantia     = Math.round(r.totalImponible * tasaCes);
+  r.tributable      = r.totalImponible - r.prevision_monto - r.salud_monto - r.segCesantia;
+  r.impUnico        = calcularImpuesto(r.tributable, p);
+  r.utmUsada        = n(p.valorUTM) || 71506;
+  r.totalDescLegales = r.prevision_monto + r.salud_monto + r.segCesantia + r.impUnico;
+  r.totalOtrosDesc   = n(r.anticipo) + n(r.descuentoAusencias) + n(r.descuentoYaPagado);
+  r.totalDescuentos  = r.totalDescLegales + r.totalOtrosDesc;
+  r.alcanceLiquido   = r.totalHaberes - r.totalDescuentos;
+  return r;
 }
 
 function diasHabilesEnMes(anio, mes) {
@@ -2235,7 +2306,7 @@ export default function App() {
   function aprobarExtra(id) {
     setRegistros(p => p.map(r => {
       if (r.id !== id) return r;
-      if (r.esDiaInabil) {
+      if (esInhabilEf(r)) {
         // Día inhábil: calcular HE diferencial sobre 10h
         const toMin = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
         const realesMin = r.entrada&&r.salida ? toMin(r.salida)-toMin(r.entrada) : 0;
@@ -2359,7 +2430,7 @@ export default function App() {
     if(!t){ setLiqMsg({tipo:"err",txt:"Trabajador no encontrado."}); return; }
     if(!t.ficha?.sueldoPactado){ setLiqMsg({tipo:"err",txt:"El trabajador no tiene sueldo pactado en su ficha."}); return; }
     try {
-      const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, null, otrasAsignaciones);
+      const datos = calcularLiquidacion(t, registros, anticipos, liqMes, liqAnio, params, otrasAsignaciones);
       setLiqPreview(datos);
     } catch(err) {
       console.error("Error calcularLiquidacion:", err);
@@ -2724,37 +2795,16 @@ export default function App() {
       regsT.sort(function(a,b){ return a.fecha.localeCompare(b.fecha); }).forEach(function(r) {
         const h = calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada,r.estadoSalida,!!r.esAdministrativo);
         const esp = esEspecial(r.fecha);
-        // Días inhábiles: solo el diferencial sobre el tope es HE
-        const topeInhabilRep = (typeof paramsExtra!=="undefined"&&paramsExtra?.topeHorasInhabil)||10;
-        const toMinR_ = t=>{try{const[hh,mm]=t.split(':').map(Number);return hh*60+mm;}catch(e){return 0;}};
-        let he;
-        if (esp && r.esDiaInabil) {
-          if (r.estado!=="aprobado") { he=0; }
-          else {
-            const horasRealesR = r.entrada&&r.salida ? Math.max(0,(toMinR_(r.salida)-toMinR_(r.entrada))/60) : 0;
-            he = Math.max(0, Math.round((horasRealesR-topeInhabilRep)*100)/100);
-          }
-        } else {
-          he = r.horasExtraAprobadas!==undefined ? r.horasExtraAprobadas
-            : esp ? (r.estado==="aprobado"?(h.extra||0):0)
-            : (()=>{
-                let heTotal = 0;
-                const entAp = r.estadoEntrada==="aprobado" || (r.estadoEntrada===null && r.estado==="aprobado");
-                const salAp = r.estadoSalida==="aprobado" || (r.estadoSalida===null && r.estado==="aprobado");
-                if (entAp) heTotal += (h.extraEntrada||0);
-                if (salAp) heTotal += (h.extraSalida||0);
-                if ((r.segundoTurno||r.esNocturno) && r.estado==="aprobado") heTotal += (h.extra||0);
-                return heTotal;
-              })();
-        }
+        // HE aprobadas desde el helper único (días inhábiles: solo el exceso sobre el tope)
+        const he = heAprobadasRegistro(r, params).he;
         const tieneHEPendiente = r.estadoEntrada==="pendiente" || r.estadoSalida==="pendiente" || (esp && r.estado==="pendiente");
-        if (r.esDiaInabil && he<=0) return;
+        if (esInhabilEf(r) && he<=0) return;
       if (he <= 0 && !tieneHEPendiente) return;
       const heDisplay = he > 0 ? he : ((h.extraEntrada||0) + (h.extraSalida||0) + (esp?(h.extra||0):0));
       if (heDisplay <= 0) return;
         const heParaFila = he > 0 ? he : heDisplay;
       const est = !tieneHEPendiente ? "Aprobada" : "Pendiente";
-        const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : r.esDiaInabil ? "Día inhábil" : esp ? "Día especial" : "Normal";
+        const tipo = r.esContingencia ? "Contingencia" : r.esAdministrativo ? "Administrativo" : esInhabilEf(r) ? "Día inhábil" : esp ? "Día especial" : "Normal";
         const bgColor = r.estado==="aprobado" ? "#f0fff4" : "#fffbf0";
         filasT.push("<tr style='background:"+bgColor+"'><td>"+fmtD(r.fecha)+"</td><td>"+r.entrada+"</td><td>"+r.salida+"</td><td style='color:"+(est==="Pendiente"?"#e67e22":"#27ae60")+";font-weight:bold'>"+heParaFila+"h</td><td>"+tipo+"</td><td style='color:"+(est==="Aprobada"?"#27ae60":"#e67e22")+"'>"+est+"</td></tr>");
         totalHE += he;
@@ -2843,18 +2893,10 @@ export default function App() {
         const esDom = diaSem===0;
         const h = reg&&reg.salida ? calcularHoras(reg.entrada,reg.salida,fecha) : null;
         // Solo contar horas extra aprobadas (con estados independientes para días normales)
-        const extraAprobada = h && h.extra > 0 && (
-          esEspecial(fecha) ? reg.estado==="aprobado"
-          : (reg.estadoEntrada==="aprobado" || reg.estadoSalida==="aprobado")
-        );
+        const heAp = reg ? heAprobadasRegistro(reg, params).he : 0;
+        const extraAprobada = heAp > 0;
         if(reg) totalDias++;
-        if(extraAprobada) {
-          // Usar calcularHoras con estados para obtener solo las HE realmente aprobadas
-          const hAprobada = esEspecial(fecha)
-            ? h
-            : calcularHoras(reg.entrada,reg.salida,fecha,reg.estadoEntrada||null,reg.estadoSalida||null);
-          totalExtra += hAprobada.extra;
-        }
+        totalExtra += heAp;
         const bgRow = esDom||esFer ? "#fff3cd" : esSabado(fecha) ? "#f8f9fa" : "#fff";
         const diaLabel = nombresDias[diaSem];
         // Observación: mostrar estado del registro si hay horas extra pendientes o rechazadas
@@ -2872,8 +2914,8 @@ export default function App() {
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${reg?reg.entrada:"—"}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">${reg&&reg.salida?reg.salida:"—"}</td>
           <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${h&&h.extra>0?"#c0392b":"#27ae60"}">${h?`${h.normales}h`:"—"}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${extraAprobada?"#e67e22":"#aaa"};font-weight:${extraAprobada?"bold":"normal"}">${extraAprobada?`${h.extra}h`:"—"}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:10px;color:${obsColor}">${obsExtra}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;color:${extraAprobada?"#e67e22":"#aaa"};font-weight:${extraAprobada?"bold":"normal"}">${extraAprobada?`${heAp}h`:"—"}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:10px;color:${obsColor}">${reg&&esInhabilEf(reg)&&reg.estado==="aprobado"?"Día inhábil (bono)":obsExtra}</td>
         </tr>`;
       });
 
@@ -3417,13 +3459,7 @@ export default function App() {
       const diasEsp  = regs.filter(r => esCompensable(r.fecha)).length; // solo domingo/feriado (generan compensatorio)
       const diasSab  = regs.filter(r => esSabado(r.fecha)).length; // sábados trabajados (solo horas extra, sin compensatorio)
       let extra = 0;
-      regs.forEach(r => {
-        if (esEspecial(r.fecha)) {
-          if (r.estado==="aprobado") extra += calcularHoras(r.entrada,r.salida,r.fecha).extra;
-        } else {
-          extra += calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null).extra;
-        }
-      });
+      regs.forEach(r => { extra += heAprobadasRegistro(r, params).he; });
       const comps = compensatorios.filter(c => c.tId===t.id);
       const habilMes = diasHabilesEnMes(dAnio, dMes);
       return {
@@ -4211,7 +4247,8 @@ export default function App() {
                         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
                           <div style={{ background:"rgba(15,13,8,0.7)", borderRadius:8, padding:"10px 14px" }}>
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>HABERES</div>
-                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${(d.sueldoBase||0).toLocaleString("es-CL")}</span></div>
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Sueldo Base</span><span>${(d.sueldoEfectivo||d.sueldoProporcional||d.sueldoBase||0).toLocaleString("es-CL")}</span></div>
+                            {d.montoDiasInhabiles>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Días inhábiles ({d.diasInhabilesCount})</span><span>${(d.montoDiasInhabiles||0).toLocaleString("es-CL")}</span></div>}
                             {d.valorHHExtra>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>HH Extra 50% ({d.horasExtra}h)</span><span>${(d.valorHHExtra||0).toLocaleString("es-CL")}</span></div>}
                             {d.gratif>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Gratificación Legal</span><span>${(d.gratif||0).toLocaleString("es-CL")}</span></div>}
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Imponible</span><span>${(d.totalImponible||0).toLocaleString("es-CL")}</span></div>
@@ -4223,6 +4260,8 @@ export default function App() {
                             <div style={{ color:"#9A8A6A", marginBottom:6, fontWeight:"bold" }}>DESCUENTOS</div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Previsión AFP ({d.pctAFP||"10"}%)</span><span>${(d.prevision_monto||0).toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between" }}><span>Salud (7%)</span><span>${(d.salud_monto||0).toLocaleString("es-CL")}</span></div>
+                            {d.segCesantia>0&&<div style={{ display:"flex", justifyContent:"space-between" }}><span>Seguro Cesantía</span><span>${(d.segCesantia||0).toLocaleString("es-CL")}</span></div>}
+                            <div style={{ display:"flex", justifyContent:"space-between" }}><span>Impuesto Único</span><span>${(d.impUnico||0).toLocaleString("es-CL")}</span></div>
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4 }}><span>Total Desc. Legales</span><span>${(d.totalDescLegales||0).toLocaleString("es-CL")}</span></div>
                             {d.anticipo>0&&<div style={{ display:"flex", justifyContent:"space-between", color:"#e74c3c" }}><span>Anticipo de Remuneración</span><span>${(d.anticipo||0).toLocaleString("es-CL")}</span></div>}
                             <div style={{ display:"flex", justifyContent:"space-between", fontWeight:"bold", borderTop:"1px solid rgba(255,255,255,0.1)", marginTop:4, paddingTop:4, color:"#e74c3c" }}><span>TOTAL DESCUENTOS</span><span>${(d.totalDescuentos||0).toLocaleString("es-CL")}</span></div>
@@ -4621,14 +4660,12 @@ export default function App() {
                                       const reales = r.entrada && r.salida ? +((toMin(r.salida)-toMin(r.entrada))/60).toFixed(1) : hBruto.extra;
                                       return reales + "h administrativo (horas reales)";
                                     })()
-                                  : r.esDiaInabil
+                                  : esInhabilEf(r)
                                     ? (()=>{
                                         const toMin2 = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
-                                        const realesMin = r.entrada&&r.salida ? toMin2(r.salida)-toMin2(r.entrada) : 0;
-                                        const realesH = +(realesMin/60).toFixed(2);
-                                        const heExtra = Math.max(0, realesH - 10);
+                                        const heExtra = heAprobadasRegistro({...r,estado:"aprobado"}, params).he;
                                         const cargo = t?.ficha?.cargo||"";
-                                        const val = valorDiaInabil(cargo);
+                                        const val = valorDiaInabil(cargo, params);
                                         return `📅 Día inhábil $${val.toLocaleString("es-CL")}${heExtra>0?` + ${heExtra}h HE`:""}`;
                                       })()
                                     : `${hBruto.extra}h día especial (mín. 8h)`}
@@ -4636,18 +4673,18 @@ export default function App() {
                             {r.estado==="pendiente" && (
                               <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
                                 {!r.esContingencia && !r.esAdministrativo && (
-                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:true,esAdministrativo:false}:x))}
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:true,esAdministrativo:false,_updatedAt:Date.now()}:x))}
                                     style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(230,126,34,0.3)",color:"#e67e22",border:"1px solid #e67e22"}}>
                                     ⚠️ Contingencia
                                   </button>
                                 )}
                                 {!r.esAdministrativo && !r.esContingencia && (
-                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esAdministrativo:true,esContingencia:false}:x))}
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esAdministrativo:true,esContingencia:false,_updatedAt:Date.now()}:x))}
                                     style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(52,152,219,0.3)",color:"#3498db",border:"1px solid #3498db"}}>
                                     🖥 Administrativo
                                   </button>
                                 )}
-                                {!r.esContingencia && !r.esAdministrativo && !r.esDiaInabil && (
+                                {!r.esContingencia && !r.esAdministrativo && !esInhabilEf(r) && (
                                   <button onClick={()=>{
                                     const cargo = t?.ficha?.cargo || "";
                                     const valor = valorDiaInabil(cargo);
@@ -4657,8 +4694,10 @@ export default function App() {
                                     📅 Día Inhábil
                                   </button>
                                 )}
-                                {(r.esContingencia||r.esAdministrativo||r.esDiaInabil) && (
-                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:false,esAdministrativo:false,esDiaInabil:false,valorDiaInabil:undefined,_updatedAt:Date.now()}:x))}
+                                {(r.esContingencia||r.esAdministrativo||esInhabilEf(r)) && (
+                                  <button onClick={()=>setRegistros(p=>p.map(x=>x.id===r.id?{...x,esContingencia:false,esAdministrativo:false,
+                                    // Quitar contingencia/administrativo → vuelve a inhábil automático; quitar inhábil → mín. 8h HE
+                                    esDiaInabil:(x.esContingencia||x.esAdministrativo)?undefined:false,valorDiaInabil:undefined,_updatedAt:Date.now()}:x))}
                                     style={{...S.btn,fontSize:10,padding:"2px 6px",background:"rgba(150,150,150,0.2)",color:"#aaa"}}>
                                     ✕ Quitar
                                   </button>
@@ -4671,7 +4710,7 @@ export default function App() {
                               <span style={{color:"#27ae60",fontSize:11}}>✓ Aprobado</span>
                               <button onClick={()=>revertirExtra(r.id)} title="Revertir"
                                 style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
-                              {!r.esDiaInabil && (
+                              {!esInhabilEf(r) && (
                                 <button onClick={()=>{
                                   const cargo = t?.ficha?.cargo || "";
                                   const valor = valorDiaInabil(cargo);
@@ -4691,7 +4730,7 @@ export default function App() {
                                   📅 Inhábil
                                 </button>
                               )}
-                              {r.esDiaInabil && (
+                              {esInhabilEf(r) && (
                                 <button onClick={()=>{
                                   const nuevosReg = registros.map(x=>x.id===r.id?{...x,esDiaInabil:false,valorDiaInabil:undefined,horasExtraAprobadas:undefined,_updatedAt:Date.now()}:x);
                                   setRegistros(nuevosReg);
@@ -4984,8 +5023,8 @@ export default function App() {
                                   ? <input type="time" style={{...S.input,padding:"4px 8px",fontSize:12,width:90}} value={regEditSal} onChange={e=>setRegEditSal(e.target.value)}/>
                                   : r.salida||<span style={{color:"#aaa"}}>—</span>}
                               </td>
-                              <td style={{...S.td,color:((r.horasExtraAprobadas!==undefined?r.horasExtraAprobadas:h?.extra)||0)>0&&r.estado==="aprobado"?"#FFD700":"#aaa"}}>
-                                {h?(()=>{ const he=(r.horasExtraAprobadas!==undefined&&r.estado==="aprobado")?r.horasExtraAprobadas:h.extra; return `${he}h${r.estado!=="aprobado"&&he>0?" ⏳":""}`; })() : "—"}
+                              <td style={{...S.td,color:heAprobadasRegistro(r,params).he>0?"#FFD700":"#aaa"}}>
+                                {h?(()=>{ const ap=heAprobadasRegistro(r,params).he; if(ap>0) return `${ap}h${esInhabilEf(r)?" (+bono)":""}`; if(esInhabilEf(r)&&r.estado==="aprobado") return "0h (bono)"; return h.extra>0?`${h.extra}h ⏳`:"—"; })() : "—"}
                               </td>
                               <td style={S.td}>
                                 <span style={S.bdg(
@@ -5253,14 +5292,7 @@ export default function App() {
                     const regsDelMes=regsT.filter(r=>{const d=new Date(r.fecha+"T12:00:00");return d.getMonth()===hojaAsistMes&&d.getFullYear()===hojaAsistAnio;});
                     let totalExt=0;
                     // Solo sumar horas extra aprobadas (con estados independientes para días normales)
-                    regsDelMes.forEach(r=>{
-                      if(!r.salida) return;
-                      if(esEspecial(r.fecha)){
-                        if(r.estado==="aprobado") totalExt+=calcularHoras(r.entrada,r.salida,r.fecha).extra;
-                      } else {
-                        totalExt+=calcularHoras(r.entrada,r.salida,r.fecha,r.estadoEntrada||null,r.estadoSalida||null).extra;
-                      }
-                    });
+                    regsDelMes.forEach(r=>{ totalExt += heAprobadasRegistro(r, params).he; });
                     return (
                       <div key={t.id} style={{...S.card,marginTop:12,padding:14}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexWrap:"wrap",gap:8}}>
@@ -5280,10 +5312,8 @@ export default function App() {
                                 const reg=regsT.find(r=>r.fecha===fecha);
                                 const diaN=new Date(fecha+"T12:00:00").getDay();
                                 const h=reg&&reg.salida?calcularHoras(reg.entrada,reg.salida,fecha):null;
-                                const extraAprobada = h && h.extra > 0 && (
-                                  esEspecial(fecha) ? reg.estado==="aprobado"
-                                  : (reg.estadoEntrada==="aprobado"||reg.estadoSalida==="aprobado")
-                                );
+                                const heAp = reg ? heAprobadasRegistro(reg, params).he : 0;
+                                const extraAprobada = heAp > 0;
                                 const bgC=esDomingo(fecha)||esFeriado(fecha)?"rgba(255,215,0,0.08)":diaN===6?"rgba(255,255,255,0.03)":"transparent";
                                 const dias=["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
                                 const obsColor=h&&h.extra>0&&reg.estado==="rechazado"?"#e74c3c"
@@ -5300,7 +5330,7 @@ export default function App() {
                                     <td style={{...S.td,textAlign:"center",color:reg?.entradaAnticipada?"#e67e22":"inherit"}}>{reg?reg.entrada:"—"}</td>
                                     <td style={{...S.td,textAlign:"center"}}>{reg&&reg.salida?reg.salida:"—"}</td>
                                     <td style={{...S.td,textAlign:"center",color:h?"#27ae60":"#aaa"}}>{h?`${h.normales}h`:"—"}</td>
-                                    <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${h.extra}h`:"—"}</td>
+                                    <td style={{...S.td,textAlign:"center",color:extraAprobada?"#FFD700":"#aaa",fontWeight:extraAprobada?"bold":"normal"}}>{extraAprobada?`${heAp}h`:"—"}</td>
                                     <td style={{...S.td,fontSize:10,color:obsColor}}>{obsLabel}</td>
                                   </tr>
                                 );
@@ -5679,14 +5709,9 @@ export default function App() {
                       <button onClick={()=>{
                         const dias = prompt("Modificar días base de liquidación (actual: "+(liqPreview.diasTrabProporcional||30)+"):", liqPreview.diasTrabProporcional||30);
                         if(!dias||isNaN(Number(dias))) return;
-                        const d = Number(dias);
-                        const factor = d/30;
-                        const nuevoSueldo = Math.round((liqPreview.sueldoBase||liqPreview.sueldoProporcional) * factor);
-                        setLiqPreview(p=>({...p, diasTrabProporcional:d, sueldoProporcional:nuevoSueldo,
-                          totalImponible: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0),
-                          totalHaberes: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0) + (p.totalNoImponible||0),
-                          alcanceLiquido: nuevoSueldo + (p.valorHHExtra||0) + (p.gratif||0) + (p.totalNoImponible||0) - (p.totalDescuentos||0),
-                        }));
+                        const d = Math.max(0, Math.min(30, Number(dias)));
+                        setLiqPreview(p=>recomputarTotales({...p, diasTrabProporcional:d,
+                          sueldoProporcional: Math.round((p.sueldoBase||0) * d / 30)}, params));
                       }} style={{...S.btn, fontSize:11, padding:"6px 10px"}}>✏️ Ajustar días</button>
                       <button onClick={()=>{
                         const campos = [
@@ -5697,37 +5722,16 @@ export default function App() {
                           {k:"movilizacion",  label:"Asig. Movilización",      val:liqPreview.movilizacion||0},
                           {k:"anticipo",      label:"Anticipo",                val:liqPreview.anticipo||0},
                         ];
-                        const campo = campos.find(c=>c.k===prompt(
+                        const resp = prompt(
                           "¿Qué valor deseas ajustar?\n"+campos.map((c,i)=>`${i+1}. ${c.label}: $${c.val.toLocaleString("es-CL")}`).join("\n")+"\n\nEscribe el número:",
                           "1"
-                        )-1+"" || campos[0].k);
-                        if(!campo) return;
+                        );
+                        if(resp===null) return;
+                        const campo = campos[Number(resp)-1];
+                        if(!campo){ alert("Número inválido."); return; }
                         const nuevo = Number(prompt(`Nuevo valor para ${campo.label}:`, campo.val));
                         if(isNaN(nuevo)||nuevo<0) return;
-                        const diff = nuevo - (liqPreview[campo.k]||0);
-                        const esImponible = ["valorHHExtra","gratif"].includes(campo.k);
-                        const esNoImponible = ["viaticOper","colacion","movilizacion"].includes(campo.k);
-                        const esDescuento = ["anticipo"].includes(campo.k);
-                        setLiqPreview(p=>{
-                          const np = {...p, [campo.k]: nuevo};
-                          if(esImponible){
-                            np.totalImponible = (p.totalImponible||0) + diff;
-                            np.totalHaberes   = (p.totalHaberes||0)   + diff;
-                            np.prevision_monto= Math.round(np.totalImponible * (parseFloat(p.pctAFP)||10.46)/100);
-                            np.salud_monto    = Math.round(np.totalImponible * 0.07);
-                            np.segCesantia    = p.tipoContrato==="indefinido" ? Math.round(np.totalImponible*0.006) : 0;
-                            np.totalDescLegales = np.prevision_monto + np.salud_monto + np.segCesantia;
-                            np.totalDescuentos  = np.totalDescLegales + (p.totalOtrosDesc||0);
-                          } else if(esNoImponible){
-                            np.totalNoImponible = (p.totalNoImponible||0) + diff;
-                            np.totalHaberes     = (p.totalHaberes||0)     + diff;
-                          } else if(esDescuento){
-                            np.totalOtrosDesc  = (p.totalOtrosDesc||0)  + diff;
-                            np.totalDescuentos = (p.totalDescuentos||0) + diff;
-                          }
-                          np.alcanceLiquido = (np.totalHaberes||0) - (np.totalDescuentos||0);
-                          return np;
-                        });
+                        setLiqPreview(p=>recomputarTotales({...p, [campo.k]: nuevo}, params, { recalcGratif: campo.k!=="gratif" }));
                       }} style={{...S.btn, fontSize:11, padding:"6px 10px", background:"#8e44ad"}}>🔧 Ajuste manual</button>
                     </div>
                   </div>
@@ -5744,7 +5748,7 @@ export default function App() {
                         ...(liqPreview.viaticosContingencia>0?[["⚠️ Viático Contingencia", liqPreview.viaticosContingencia]]:[]),
                         ...(liqPreview.colacion>0?[["Asig. Colación", liqPreview.colacion]]:[]),
                         ...(liqPreview.movilizacion>0?[["Asig. Movilización", liqPreview.movilizacion]]:[]),
-                        ...(liqPreview.otrasDelMes||[]).filter(a=>a.imponible&&!a.yaPagado).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
+                        ...(liqPreview.otrasDelMes||[]).filter(a=>a.imponible).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
                         ...((liqPreview.otrasDelMes||[]).length===0&&(liqPreview.otrasImponibles||0)>0?[["Otras asign. (imponible)", liqPreview.otrasImponibles]]:[]),
                         ...(liqPreview.otrasDelMes||[]).filter(a=>!a.imponible).map(a=>[a.concepto||"Otra asignación", Number(a.monto)]),
                         ["Total No Imponible", liqPreview.totalNoImponible, true],
@@ -5761,11 +5765,11 @@ export default function App() {
                         [`Previsión AFP (${liqPreview.pctAFP}%)`, liqPreview.prevision_monto],
                         ["Salud (7%)", liqPreview.salud_monto],
                         ["Seguro Cesantía", liqPreview.segCesantia],
+                        [`Impuesto Único 2ª Cat.${(liqPreview.impUnico||0)===0?" (exento)":""}`, liqPreview.impUnico||0],
                         ["Total Desc. Legales", liqPreview.totalDescLegales, true],
                         ...(liqPreview.descuentoAusencias>0?[["Ausencia Injustificada ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#c0392b"]]:[]),
                         ...(liqPreview.descuentoYaPagado>0?(liqPreview.otrasYaPagadas||[]).map(a=>[a.concepto||"Asignación ya pagada", Number(a.monto), false, "#e74c3c"]):[]),
                         ...(liqPreview.anticipo>0?[["Anticipo", liqPreview.anticipo, false, "#e74c3c"]]:[]),
-                        ...(liqPreview.descuentoAusencias>0?[["Desc. ausencias ("+liqPreview.ausencias+" día(s))", liqPreview.descuentoAusencias, false, "#e74c3c"]]:[]),
                         ["Total Otros Desc.", liqPreview.totalOtrosDesc, true],
                         ["TOTAL DESCUENTOS", liqPreview.totalDescuentos, true, "#e74c3c"],
                       ].map(([l,v,b,c])=>(
@@ -5775,6 +5779,30 @@ export default function App() {
                       ))}
                     </div>
                   </div>
+                  <div style={{ fontSize:11, color:"#9A8A6A", marginTop:8 }}>
+                    Base tributable: <strong style={{color:"#fff"}}>${(liqPreview.tributable||0).toLocaleString("es-CL")}</strong>
+                    {" "}= {((liqPreview.tributable||0)/(liqPreview.utmUsada||params?.valorUTM||71506)).toFixed(2)} UTM
+                    {" "}(UTM usada: ${(liqPreview.utmUsada||params?.valorUTM||71506).toLocaleString("es-CL")} — exento hasta 13,5 UTM).
+                    {" "}Valor HE: ${(liqPreview.valorHE||0).toLocaleString("es-CL")}/h.
+                  </div>
+                  {(liqPreview.detalleHE||[]).length>0 && (
+                    <details style={{ marginTop:8, fontSize:12 }}>
+                      <summary style={{ cursor:"pointer", color:"#C9A84C" }}>🔍 Detalle de HE y días inhábiles ({liqPreview.detalleHE.length})</summary>
+                      <table style={{ ...S.tbl, marginTop:6 }}>
+                        <thead><tr>{["Fecha","Entrada","Salida","Horas reales","HE pagadas","Tipo"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                        <tbody>{liqPreview.detalleHE.map((x,i)=>(
+                          <tr key={i}>
+                            <td style={S.td}>{fmtFecha(x.fecha,true)}</td>
+                            <td style={S.td}>{x.entrada}</td>
+                            <td style={S.td}>{x.salida}</td>
+                            <td style={S.td}>{x.horasReales}h</td>
+                            <td style={{...S.td,color:x.he>0?"#FFD700":"#aaa",fontWeight:"bold"}}>{x.he}h</td>
+                            <td style={S.td}>{x.tipo}</td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </details>
+                  )}
                   <div style={{ background:"rgba(30,107,46,0.4)", border:"1px solid #27ae60", borderRadius:8, padding:"12px 18px", marginTop:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span style={{ color:"#aaffcc", fontWeight:"bold", fontSize:14 }}>ALCANCE LÍQUIDO</span>
                     <span style={{ color:"#27ae60", fontWeight:"bold", fontSize:22 }}>${liqPreview.alcanceLiquido.toLocaleString("es-CL")}</span>
@@ -5817,7 +5845,7 @@ export default function App() {
 
 Se actualizará con las fórmulas corregidas (gratificación, HE, seguro cesantía).
 La firma existente se conservará.`)) return;
-                                      const nuevaDatos = calcularLiquidacion(t, registros, anticipos, liq.mes, liq.anio, null, otrasAsignaciones);
+                                      const nuevaDatos = calcularLiquidacion(t, registros, anticipos, liq.mes, liq.anio, params, otrasAsignaciones);
                                       setLiquidaciones(p=>p.map(x=>x.id===liq.id ? {
                                         ...x,
                                         datos: nuevaDatos,
