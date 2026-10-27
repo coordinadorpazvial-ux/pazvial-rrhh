@@ -139,7 +139,7 @@ function esDiaContingencia(fecha, contingencias) {
   return contingencias.some(c => fecha >= c.desde && fecha <= c.hasta);
 }
 
-function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinMinimo=false, esNocturno=false) {
+function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinMinimo=false, esNocturno=false, umbralHE=450) {
   // estadoEntrada / estadoSalida: "pendiente"|"aprobado"|"rechazado"|null|undefined
   // Si no se pasan (undefined), se comporta como antes (compatibilidad total)
   if (!entrada || !salida) return { normales: 0, extra: 0, extraEntrada: 0, extraSalida: 0 };
@@ -166,7 +166,7 @@ function calcularHoras(entrada, salida, fecha, estadoEntrada, estadoSalida, sinM
 
   const fin = esViernes(fecha) ? 840 : 1080; // 14:00 o 18:00 en minutos
   const INICIO = 480; // 08:00 en minutos
-  const UMBRAL_ANTICIP = umbral; // desde Parámetros del Sistema (default 450 = 07:30)
+  const UMBRAL_ANTICIP = umbralHE; // desde Parámetros del Sistema (default 450 = 07:30)
 
   const minEntrada = toMin(entrada);
   const minSalida  = toMin(salida);
