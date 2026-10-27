@@ -373,8 +373,8 @@ function getRemuneracionVigente(ficha, mes, anio) {
     return {
       sueldoPactado: historial[0].sueldo,
       // Si el historial no tiene colación/movilización, usar la de la ficha actual
-      colacion:      Number(historial[0].colacion) || parseMonto(ficha.colacion),
-      movilizacion:  Number(historial[0].movilizacion) || parseMonto(ficha.movilizacion),
+      colacion:      historial[0].colacion !== undefined ? Number(historial[0].colacion) : parseMonto(ficha.colacion),
+      movilizacion:  historial[0].movilizacion !== undefined ? Number(historial[0].movilizacion) : parseMonto(ficha.movilizacion),
       gratificacion: historial[0].gratificacion,
     };
   }
@@ -464,6 +464,7 @@ function calcularLiquidacion(trab, registros, anticipos, mes, anio, paramsExtra,
       if (r.estado === "aprobado") {
         if (r.esDiaInabil) {
           diasInhabilesCount++;
+          const topeInhabil = (paramsExtra && paramsExtra.topeHorasInhabil) || 10;
           const heExtra = r.horasExtraAprobadas || 0;
           totalMinExtra += heExtra * 60;
         } else {
@@ -4564,25 +4565,28 @@ export default function App() {
 
                       {/* ── Columna HE Entrada ── */}
                       <td style={S.td}>
-                        {esDiaEsp ? <span style={{color:"#aaa"}}>—</span>
-                        : (r.estadoEntrada==="pendiente" || (!r.estadoEntrada && r.entrada && toMinBandeja(r.entrada) <= ((params?.umbralEntradaAnticipada)||450)) && r.estadoEntrada!=="aprobado" && r.estadoEntrada!=="rechazado" ? (
-                          <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
-                            <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>
-                              ⏱ {hBruto.extraEntrada}h anticipadas
-                            </span>
-                            <div style={{display:"flex",gap:4}}>
-                              <button onClick={()=>aprobarHEEntrada(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
-                              <button onClick={()=>setMotivoModal({tipo:"heEntrada",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
+                        {(()=>{
+                          if (esDiaEsp) return <span style={{color:"#aaa"}}>—</span>;
+                          const esPendEnt = (r.estadoEntrada==="pendiente" || (!r.estadoEntrada && r.entrada && toMinBandeja(r.entrada) <= ((params?.umbralEntradaAnticipada)||450))) && r.estadoEntrada!=="aprobado" && r.estadoEntrada!=="rechazado";
+                          if (esPendEnt) return (
+                            <div style={{display:"flex",flexDirection:"column",gap:4,minWidth:160}}>
+                              <span style={{color:"#e67e22",fontSize:11,fontWeight:"bold"}}>⏱ {hBruto.extraEntrada}h anticipadas</span>
+                              <div style={{display:"flex",gap:4}}>
+                                <button onClick={()=>aprobarHEEntrada(r.id)} style={{...S.btnG,fontSize:10,padding:"4px 6px",minHeight:32}}>✓ Apr.</button>
+                                <button onClick={()=>setMotivoModal({tipo:"heEntrada",id:r.id,motivo:""})} style={{...S.btnD,fontSize:10,padding:"4px 6px",minHeight:32}}>✗ Rec.</button>
+                              </div>
                             </div>
-                          </div>
-                        ) : r.estadoEntrada==="aprobado" ? (
-                          <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
-                            <button onClick={()=>revertirHEEntrada(r.id)} title="Revertir aprobación"
-                              style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
-                          </div>
-                        ) : r.estadoEntrada==="rechazado" ? (
-                          <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>
-                        ) : (<span style={{color:"#aaa"}}>—</span>)}
+                          );
+                          if (r.estadoEntrada==="aprobado") return (
+                            <div style={{display:"flex",alignItems:"center",gap:4}}>
+                              <span style={{color:"#27ae60",fontSize:11}}>✓ {hBruto.extraEntrada}h aprobadas</span>
+                              <button onClick={()=>revertirHEEntrada(r.id)} title="Revertir aprobación"
+                                style={{...S.btn,fontSize:9,padding:"1px 5px",background:"rgba(230,126,34,0.2)",color:"#e67e22",border:"1px solid rgba(230,126,34,0.4)"}}>↩</button>
+                            </div>
+                          );
+                          if (r.estadoEntrada==="rechazado") return <span style={{color:"#e74c3c",fontSize:11}}>✗ Rechazada</span>;
+                          return <span style={{color:"#aaa"}}>—</span>;
+                        })()}
                       </td>
 
                       {/* ── Columna HE Salida ── */}
